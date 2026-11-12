@@ -209,3 +209,41 @@ def test_bullet_with_several_spaces_and_bold():
             text="x",
         )
     ]
+
+
+@pytest.mark.parametrize(
+    argnames="line",
+    argvalues=[
+        "**(0:02) x**",
+        "**(0:02)** x",
+        "1. (0:02) x",
+        "12) (0:02) x",
+        "• (0:02) x",
+        "– (0:02) x",
+        "— (0:02) x",
+    ],
+)
+def test_bold_and_list_prefixes(line):
+    assert parse_answer(text=line) == [
+        ParsedLine(
+            start=2.0,
+            end=None,
+            text="x",
+        )
+    ]
+
+
+def test_crlf_input():
+    text = "(0:02-0:04) a\r\n(0:04-0:06) b\r\n"
+    assert [p.text for p in parse_answer(text=text)] == ["a", "b"]
+
+
+def test_mid_line_timecode_does_not_start_cue():
+    text = "(0:02) see you at (0:30) ok\ncontinues (0:40) here"
+    assert parse_answer(text=text) == [
+        ParsedLine(
+            start=2.0,
+            end=None,
+            text="see you at (0:30) ok continues (0:40) here",
+        )
+    ]

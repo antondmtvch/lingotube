@@ -3,13 +3,14 @@
 import re
 from dataclasses import dataclass
 
-_TIME = r"(\d{1,3}:\d{2}(?::\d{2})?)"
+_TIME = r"\d{1,3}:\d{2}(?::\d{2})?"
 _CUE = re.compile(
-    pattern=r"^(?:[-*•]\s++)?\**+\s*+[(\[]\s*"
+    pattern=r"^(?:(?:[-*•–—]|\d{1,3}[.)])\s++)?(?P<bold>\**+)\s*+[(\[]\s*"
+    + "(?P<start>"
     + _TIME
-    + r"(?:\s*[-–—]\s*"
+    + r")(?:\s*[-–—]\s*(?P<end>"
     + _TIME
-    + r")?\s*[)\]]\s*\**\s*(.*)$"
+    + r"))?\s*[)\]]\s*\**\s*(?P<text>.*)$"
 )
 
 
@@ -42,12 +43,15 @@ def parse_answer(text: str) -> list[ParsedLine]:
         line = raw.strip()
         match = _CUE.match(string=line)
         if match:
-            start = _seconds(stamp=match.group(1))
-            end = _seconds(stamp=match.group(2)) if match.group(2) else None
-            if start is not None and (end is not None or not match.group(2)):
+            start = _seconds(stamp=match.group("start"))
+            end = _seconds(stamp=match.group("end")) if match.group("end") else None
+            if start is not None and (end is not None or not match.group("end")):
                 if end is not None and end < start:
                     end = None  # конец вычислит fix_ends
-                cues.append([start, end, match.group(3).strip()])
+                body = match.group("text").strip()
+                if match.group("bold"):
+                    body = body.rstrip("*").strip()  # "**(0:02) x**": closing bold
+                cues.append([start, end, body])
                 gap = False
                 continue
         if not cues:
