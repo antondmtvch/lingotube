@@ -1,5 +1,6 @@
 import asyncio
 import dataclasses
+import os
 
 from lingotube.cache import Cache, CacheKey
 
@@ -157,3 +158,59 @@ async def test_cache_never_contains_secrets(tmp_path):
     for p in tmp_path.rglob(pattern="*"):
         if p.is_file():
             assert "SAPISID" not in p.read_text(encoding="utf-8")
+
+
+NOW = 1_800_000_000.0
+DAY = 86_400.0
+
+
+def _touch(
+    path,
+    age: float,
+) -> None:
+    path.write_text(
+        data="x",
+        encoding="utf-8",
+    )
+    os.utime(
+        path,
+        (NOW - age, NOW - age),
+    )
+
+
+async def test_stale_temp_files_are_removed_on_first_use(tmp_path):
+    stale = tmp_path / ".tmp-old.part"
+    fresh = tmp_path / ".tmp-new.part"
+    old_result = tmp_path / ("a" * 64 + ".json")
+    _touch(
+        path=stale,
+        age=2 * DAY,
+    )
+    _touch(
+        path=fresh,
+        age=DAY / 2,
+    )
+    _touch(
+        path=old_result,
+        age=30 * DAY,
+    )
+    cache = Cache(
+        root=tmp_path,
+        clock=lambda: NOW,
+    )
+    assert await cache.get(key=KEY) is None
+    assert not stale.exists()
+    assert fresh.exists() and old_result.exists()
+
+
+async def test_stale_temp_cleanup_is_best_effort(tmp_path):
+    cache = Cache(
+        root=tmp_path / "missing",
+        clock=lambda: NOW,
+    )
+    assert await cache.get(key=KEY) is None  # no directory yet: no error
+    await cache.put(
+        key=KEY,
+        value={"x": 1},
+    )
+    assert await cache.get(key=KEY) == {"x": 1}

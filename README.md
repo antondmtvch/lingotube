@@ -203,6 +203,8 @@ export LINGOTUBE_API_KEY="…"   # bash / zsh
 секундах, по умолчанию 300), `min_interval` (пауза между запросами к чату в секундах,
 по умолчанию 5), `max_retries` (число повторов, по умолчанию 2). Переменные окружения
 `LINGOTUBE_LANG` и `LINGOTUBE_COOKIES_FILE` переопределяют `lang` и `cookies_file`.
+Относительный путь `cookies_file` в `settings.toml` отсчитывается от папки файла настроек
+(значение из `LINGOTUBE_COOKIES_FILE` — от текущей папки).
 
 ### Режим «агент»
 

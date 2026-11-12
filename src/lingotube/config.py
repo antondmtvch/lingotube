@@ -102,11 +102,17 @@ def _check(
     }[typ]
     if not ok:
         raise ValidationError(message=f"Setting '{where}{name}' must be of type {typ}")
-    if typ == "float" and not math.isfinite(value):  # type: ignore[arg-type]
-        raise ValidationError(
-            message=f"Setting '{where}{name}' must be a finite number"
-        )
-    return float(value) if typ == "float" else value  # type: ignore[arg-type]
+    if typ == "float":
+        try:
+            number = float(value)  # type: ignore[arg-type]
+        except OverflowError:  # a TOML integer too large for a float
+            number = math.inf
+        if not math.isfinite(number):
+            raise ValidationError(
+                message=f"Setting '{where}{name}' must be a finite number"
+            )
+        return number
+    return value
 
 
 _MIN = {
@@ -214,7 +220,14 @@ def load_settings(
         values.get("cookies_file"),
         str,
     ):
-        values["cookies_file"] = Path(values["cookies_file"])
+        cookies_file = Path(values["cookies_file"])
+        if (
+            path is not None
+            and not (cookies_file.is_absolute() or cookies_file.root)
+            and env.get(ENV_COOKIES_FILE, "").strip() == ""
+        ):
+            cookies_file = path.parent / cookies_file  # relative to the settings file
+        values["cookies_file"] = cookies_file
     return Settings(**values)  # type: ignore[arg-type]
 
 

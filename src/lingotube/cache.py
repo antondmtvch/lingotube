@@ -8,6 +8,8 @@ import hashlib
 import json
 import os
 import tempfile
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -37,14 +39,45 @@ class CacheKey:
         return hashlib.sha256(data=raw.encode("ascii")).hexdigest()
 
 
+STALE_TEMP_AGE = 86_400.0  # seconds: leftover temp files older than this are removed
+
+
 class Cache:
-    def __init__(self, root: Path) -> None:
+    def __init__(
+        self,
+        root: Path,
+        clock: Callable[[], float] = time.time,
+    ) -> None:
         self._root = root
+        self._clock = clock
+        self._swept = False
+
+    async def _sweep_once(self) -> None:
+        """Best effort, once per instance: remove temp files left by crashed writes."""
+        if self._swept:
+            return
+        self._swept = True
+        await asyncio.to_thread(
+            self._sweep,
+            self._clock(),
+        )
+
+    def _sweep(self, now: float) -> None:
+        try:
+            for path in self._root.glob(pattern=".tmp-*.part"):
+                try:
+                    if now - path.stat().st_mtime > STALE_TEMP_AGE:
+                        path.unlink()
+                except OSError:
+                    continue
+        except OSError:
+            return
 
     def _path(self, key: CacheKey) -> Path:
         return self._root / f"{key.digest()}.json"
 
     async def get(self, key: CacheKey) -> dict | None:
+        await self._sweep_once()
         return await asyncio.to_thread(
             self._read,
             self._path(key=key),
@@ -55,6 +88,7 @@ class Cache:
         key: CacheKey,
         value: dict,
     ) -> None:
+        await self._sweep_once()
         await asyncio.to_thread(
             self._write,
             self._path(key=key),

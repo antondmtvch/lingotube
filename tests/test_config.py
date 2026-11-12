@@ -175,23 +175,33 @@ def test_default_paths_creates_nothing():
 
 
 @pytest.mark.parametrize(
-    argnames="text,key",
+    argnames="text,key,phrase",
     argvalues=[
-        ("chunk_seconds = 0", "chunk_seconds"),
-        ("chunk_seconds = -5", "chunk_seconds"),
-        ("min_interval = -1", "min_interval"),
-        ("min_interval = nan", "min_interval"),
-        ("min_interval = inf", "min_interval"),
-        ("max_retries = -1", "max_retries"),
-        ("format = 'pdf'", "format"),
-        ("[translator]\nbase_url='u'\nmodel='m'\nbatch_size = 0", "batch_size"),
-        ("[translator]\nbase_url='u'\nmodel='m'\nbatch_size = -3", "batch_size"),
+        ("chunk_seconds = 0", "chunk_seconds", "greater than 0"),
+        ("chunk_seconds = -5", "chunk_seconds", "greater than 0"),
+        ("min_interval = -1", "min_interval", "at least 0"),
+        ("min_interval = nan", "min_interval", "finite"),
+        ("min_interval = inf", "min_interval", "finite"),
+        ("min_interval = 1" + "0" * 400, "min_interval", "finite"),
+        ("max_retries = -1", "max_retries", "at least 0"),
+        ("format = 'pdf'", "format", "one of"),
+        (
+            "[translator]\nbase_url='u'\nmodel='m'\nbatch_size = 0",
+            "batch_size",
+            "greater than 0",
+        ),
+        (
+            "[translator]\nbase_url='u'\nmodel='m'\nbatch_size = -3",
+            "batch_size",
+            "greater than 0",
+        ),
     ],
 )
 def test_out_of_range_values_rejected(
     tmp_path,
     text,
     key,
+    phrase,
 ):
     f = tmp_path / "s.toml"
     f.write_text(
@@ -206,17 +216,42 @@ def test_out_of_range_values_rejected(
             path=f,
             env={},
         )
-    assert (
-        not any(
-            c.isdigit()
-            for c in str(ei.value).replace(
-                key,
-                "",
-            )
-        )
-        or "greater than 0" in str(ei.value)
-        or "at least 0" in str(ei.value)
+    assert phrase in str(ei.value)
+
+
+def test_relative_cookies_file_is_resolved_against_settings_dir(tmp_path):
+    f = tmp_path / "conf" / "s.toml"
+    f.parent.mkdir()
+    f.write_text(
+        data="cookies_file = 'sub/c.txt'\n",
+        encoding="utf-8",
     )
+    s = load_settings(
+        path=f,
+        env={},
+    )
+    assert s.cookies_file == tmp_path / "conf" / "sub" / "c.txt"
+
+
+def test_absolute_cookies_file_and_env_value_are_kept(tmp_path):
+    f = tmp_path / "s.toml"
+    absolute = tmp_path / "abs.txt"
+    f.write_text(
+        data=f"cookies_file = '{absolute.as_posix()}'\n",
+        encoding="utf-8",
+    )
+    assert (
+        load_settings(
+            path=f,
+            env={},
+        ).cookies_file
+        == absolute
+    )
+    s = load_settings(
+        path=f,
+        env={"LINGOTUBE_COOKIES_FILE": "rel.txt"},
+    )
+    assert s.cookies_file == Path("rel.txt")  # env: relative to the cwd, as typed
 
 
 def test_boundary_values_and_formats_accepted(tmp_path):
