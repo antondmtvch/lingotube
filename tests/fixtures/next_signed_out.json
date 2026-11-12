@@ -1,0 +1,43 @@
+{
+  "responseContext": {
+    "mainAppWebResponseContext": {
+      "loggedOut": true
+    }
+  },
+  "contents": {
+    "twoColumnWatchNextResults": {
+      "results": {
+        "results": {
+          "contents": [
+            {
+              "videoPrimaryInfoRenderer": {
+                "videoActions": {
+                  "menuRenderer": {
+                    "flexibleItems": [
+                      {
+                        "menuFlexibleItemRenderer": {
+                          "menuItem": {}
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "topbar": {
+    "desktopTopbarRenderer": {
+      "topbarButtons": [
+        {
+          "buttonRenderer": {
+            "targetId": "topbar-signin"
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,109 @@
+{
+  "responseContext": {
+    "mainAppWebResponseContext": {
+      "loggedOut": false
+    }
+  },
+  "onResponseReceivedCommand": {
+    "clickTrackingParams": "FAKE_CTP_2",
+    "listMutationCommand": {
+      "operations": {
+        "operations": [
+          {
+            "insertItemSectionContent": {
+              "contents": [
+                {
+                  "youChatItemViewModel": {
+                    "id": "fake-answer-1",
+                    "text": {
+                      "content": "Вот полная транскрипция видео с таймкодами:\n\n(0:02) Всем привет, это тестовое видео.\n(0:05) [music]\n(0:09) Сегодня мы проверим разбор ответа.\n(0:14) Здесь идёт вторая мысль.\n(0:20) А это почти последняя реплика.\n(0:26) Спасибо, что смотрели, пока!",
+                      "commandRuns": [
+                        {
+                          "startIndex": 53,
+                          "length": 6,
+                          "onTap": {
+                            "innertubeCommand": {
+                              "watchEndpoint": {
+                                "videoId": "dQw4w9WgXcQ",
+                                "startTimeSeconds": 2
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "chatItemViewModel": {
+                    "targetId": "fake-disclaimer",
+                    "content": {
+                      "disclaimerItemViewModel": {
+                        "linkfiedText": {
+                          "content": "Выдуманное примечание о точности ответов."
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "youChatItemViewModel": {
+                    "id": "fake-chips",
+                    "chipsData": {
+                      "chipData": [
+                        {
+                          "id": "fake-chip-1",
+                          "text": {
+                            "content": "Выдуманный предложенный вопрос номер один?"
+                          },
+                          "continuation": "FAKE_CONTINUATION_2"
+                        },
+                        {
+                          "id": "fake-chip-2",
+                          "text": {
+                            "content": "Выдуманный предложенный вопрос номер два?"
+                          },
+                          "continuation": "FAKE_CONTINUATION_3"
+                        }
+                      ]
+                    }
+                  }
+                }
+              ],
+              "insertByPositionInSection": {
+                "sectionTargetId": "fake-section",
+                "position": "POSITION_END"
+              }
+            }
+          },
+          {
+            "removeItem": {
+              "removeByTargetId": {
+                "targetIds": [
+                  "fake-pending"
+                ]
+              },
+              "sectionTargetId": "fake-section"
+            }
+          }
+        ]
+      }
+    }
+  },
+  "frameworkUpdates": {
+    "entityBatchUpdate": {
+      "mutations": [
+        {
+          "entityKey": "FAKE_ENTITY_1",
+          "type": "ENTITY_MUTATION_TYPE_REPLACE",
+          "payload": {
+            "stringEntity": {
+              "key": "FAKE_ENTITY_1",
+              "value": "Text copied to clipboard"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

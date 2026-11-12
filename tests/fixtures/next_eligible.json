@@ -1,0 +1,57 @@
+{
+  "responseContext": {
+    "mainAppWebResponseContext": {
+      "loggedOut": false
+    }
+  },
+  "contents": {
+    "twoColumnWatchNextResults": {
+      "results": {
+        "results": {
+          "contents": [
+            {
+              "videoPrimaryInfoRenderer": {
+                "videoActions": {
+                  "menuRenderer": {
+                    "flexibleItems": [
+                      {
+                        "menuFlexibleItemRenderer": {
+                          "menuItem": {
+                            "menuServiceItemRenderer": {
+                              "serviceEndpoint": {
+                                "showEngagementPanelEndpoint": {
+                                  "engagementPanel": {
+                                    "engagementPanelSectionListRenderer": {
+                                      "panelIdentifier": "PAyouchat",
+                                      "footer": {
+                                        "chatInputViewModel": {
+                                          "sendUserQueryCommand": {
+                                            "innertubeCommand": {
+                                              "clickTrackingParams": "FAKE_CTP_1",
+                                              "continuationCommand": {
+                                                "token": "FAKE_CONTINUATION_1",
+                                                "request": "CONTINUATION_REQUEST_TYPE_GET_PANEL"
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}
