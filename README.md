@@ -28,7 +28,7 @@ uv tool install .
 Или сразу из репозитория:
 
 ```sh
-uv tool install git+https://github.com/<владелец>/lingotube
+uv tool install git+https://github.com/antondmtvch/lingotube
 ```
 
 После установки в системе появится команда `lingotube`. Обновить её можно командой
