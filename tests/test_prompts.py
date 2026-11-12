@@ -2,7 +2,9 @@ from importlib import resources
 
 import pytest
 
+from lingotube.parsing import ParsedLine, parse_answer
 from lingotube.prompts import PROMPT_VERSION, load_prompt
+from lingotube.translate.openai_compat import _parse
 
 NAMES = ("transcript", "transcript_translated", "summary", "translate_batch")
 
@@ -110,3 +112,48 @@ def test_files_are_package_data(name):
 
 def test_format_doc_is_package_data():
     assert (resources.files("lingotube") / "prompts" / "FORMAT.md").is_file()
+
+
+@pytest.mark.parametrize(
+    argnames="name",
+    argvalues=["transcript", "transcript_translated"],
+)
+def test_requested_timecode_format_parses(name):
+    """The sample answer follows the prompt: (м:сс) text, (ч:мм:сс) after one hour."""
+    prompt = load_prompt(
+        name=name,
+        start="0:00",
+        end="1:10:00",
+        language="Russian",
+    )
+    assert "(м:сс) текст" in prompt and "(ч:мм:сс)" in prompt
+    answer = "(0:14) Всем привет.\n(59:59) Конец часа.\n(1:00:05) Второй час."
+    assert parse_answer(text=answer) == [
+        ParsedLine(
+            start=14.0,
+            end=None,
+            text="Всем привет.",
+        ),
+        ParsedLine(
+            start=3599.0,
+            end=None,
+            text="Конец часа.",
+        ),
+        ParsedLine(
+            start=3605.0,
+            end=None,
+            text="Второй час.",
+        ),
+    ]
+
+
+def test_translate_batch_requested_format_parses():
+    prompt = load_prompt(
+        name="translate_batch",
+        language="German",
+    )
+    assert "номер<TAB>перевод" in prompt
+    assert _parse(
+        answer="1\tHallo, Welt\n2\tBis bald",
+        count=2,
+    ) == ["Hallo, Welt", "Bis bald"]
