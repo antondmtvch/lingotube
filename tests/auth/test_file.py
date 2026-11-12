@@ -118,3 +118,24 @@ async def test_file_world_readable_warns(tmp_path):
         warn=msgs.append,
     ).load()
     assert len(msgs) == 1
+
+
+async def test_cookie_with_control_characters_is_dropped(tmp_path):
+    p = tmp_path / "c.txt"
+    p.write_text(
+        data=H
+        + row(
+            domain=".youtube.com",
+            name="SAPISID",
+            value="a",
+        )
+        + row(
+            domain=".youtube.com",
+            name="SID",
+            value="ab\x01cd",
+        ),
+        encoding="utf-8",
+    )
+    creds = await FileCookieSource(path=p).load()
+    assert "SID" not in creds.cookies
+    assert "ab" not in repr(creds) and "cd" not in repr(creds)

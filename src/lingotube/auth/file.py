@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+import re
 import stat
 from collections.abc import Callable
 from pathlib import Path
@@ -10,6 +11,7 @@ from lingotube.auth.base import EXPORT_HINT, Credentials, is_allowed_domain
 from lingotube.errors import AuthError
 
 _HTTP_ONLY = "#HttpOnly_"
+_CONTROL = re.compile(pattern=r"[--]")
 
 
 def _parse(text: str) -> dict[str, str]:
@@ -24,6 +26,8 @@ def _parse(text: str) -> dict[str, str]:
         if len(parts) != 7:
             continue
         domain, name, value = parts[0], parts[5], parts[6]
+        if _CONTROL.search(string=name + value):
+            continue  # would break HTTP headers; never echo the value
         if name and is_allowed_domain(domain=domain):
             cookies[name] = value
     return cookies
