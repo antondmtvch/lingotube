@@ -14,6 +14,8 @@ OK = [
     ("  https://youtu.be/dQw4w9WgXcQ  ", "dQw4w9WgXcQ"),
     ("-n5MqamatXE", "-n5MqamatXE"),
     ("https://www.youtube.com/watch?v=-n5MqamatXE", "-n5MqamatXE"),
+    ("https://www.youtube.com/watch/?v=dQw4w9WgXcQ", "dQw4w9WgXcQ"),
+    ("https://music.youtube.com/watch?v=dQw4w9WgXcQ", "dQw4w9WgXcQ"),
 ]
 BAD = [
     "",
@@ -21,6 +23,12 @@ BAD = [
     "https://example.com/watch?v=dQw4w9WgXcQ",
     "https://www.youtube.com/watch?v=short",
     "https://www.youtube.com/playlist?list=PLx",
+    "https://youtube.com.evil.com/watch?v=dQw4w9WgXcQ",
+    "https://evilyoutube.com/watch?v=dQw4w9WgXcQ",
+    "https://user@youtube.com@evil.com/watch?v=dQw4w9WgXcQ",
+    "ftp://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    "dQw4w9WgXcQx",
+    "https://www.youtube.com/watch?v=dQw4w9WgXcQx",
 ]
 
 

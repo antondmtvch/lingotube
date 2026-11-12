@@ -34,7 +34,7 @@ def parse_video_id(value: str) -> str:
     if host == _SHORT_HOST:
         candidate = parts[0] if parts else None
     elif host in _HOSTS:
-        if url.path == "/watch":
+        if url.path.rstrip("/") == "/watch":
             vals = parse_qs(qs=url.query).get("v")
             candidate = vals[0] if vals else None
         elif len(parts) >= 2 and parts[0] in _PATH_PREFIXES:

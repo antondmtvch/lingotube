@@ -1,5 +1,6 @@
 """Domain models. Transcript JSON format: spec section 8."""
 
+import math
 from dataclasses import dataclass
 from typing import Any
 
@@ -39,12 +40,16 @@ def _is_int(v: object) -> bool:
 
 
 def _is_num(v: object) -> bool:
-    return isinstance(
-        v,
-        int | float,
-    ) and not isinstance(
-        v,
-        bool,
+    return (
+        isinstance(
+            v,
+            int | float,
+        )
+        and not isinstance(
+            v,
+            bool,
+        )
+        and (isinstance(v, int) or math.isfinite(v))
     )
 
 

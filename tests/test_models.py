@@ -56,6 +56,16 @@ def test_to_dict_keys():
         {**make().to_dict(), "cues": [{"id": 1, "start": 0, "end": "1", "text": "a"}]},
         {**make().to_dict(), "cues": [{"id": 1, "start": 0, "end": 1, "text": 5}]},
         {**make().to_dict(), "cues": ["x"]},
+        {**make().to_dict(), "duration": float("nan")},
+        {**make().to_dict(), "duration": float("inf")},
+        {
+            **make().to_dict(),
+            "cues": [{"id": 1, "start": float("nan"), "end": 1, "text": "a"}],
+        },
+        {
+            **make().to_dict(),
+            "cues": [{"id": 1, "start": 0, "end": float("inf"), "text": "a"}],
+        },
     ],
 )
 def test_from_dict_invalid(bad):
