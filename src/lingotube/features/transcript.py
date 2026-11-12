@@ -378,7 +378,15 @@ class TranscriptFeature:
     ) -> list[ParsedLine]:
         """Asks once for each long inner silence (the chat sometimes skips speech inside a range)."""
         bounds = [start] + [x.start for x in lines] + [end]
-        gaps = [(a, b) for a, b in zip(bounds, bounds[1:]) if b - a > GAP_REREQUEST]
+        gaps = [
+            (a, b)
+            for a, b in zip(
+                bounds,
+                bounds[1:],
+                strict=False,
+            )
+            if b - a > GAP_REREQUEST
+        ]
         gaps = sorted(
             sorted(
                 gaps,
@@ -386,17 +394,17 @@ class TranscriptFeature:
             )[:MAX_GAP_REREQUESTS]
         )
         found: list[ParsedLine] = []
+        seen: set[tuple[float, str]] = set()
         for a, b in gaps:
-            found.extend(
-                x
-                for x in await self._ask_range(
-                    session=session,
-                    start=a,
-                    end=b,
-                    language=language,
-                )
-                if a < x.start < b
-            )
+            for x in await self._ask_range(
+                session=session,
+                start=a,
+                end=b,
+                language=language,
+            ):
+                if a < x.start < b and (x.start, x.text) not in seen:
+                    seen.add((x.start, x.text))
+                    found.append(x)
         if not found:
             return lines
         return sorted(

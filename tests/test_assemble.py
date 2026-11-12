@@ -447,3 +447,60 @@ def test_fix_ends_same_start_unmerged_never_degenerate():
     )
     assert all(c.end > c.start for c in out)
     assert out[0].end == 11.5 and out[1].end == 11.5
+
+
+def test_plan_ranges_merges_sub_second_tail_into_previous():
+    assert plan_ranges(
+        duration=600.5,
+        chunk_seconds=300,
+    ) == [(0, 300), (300, 600.5)]
+    assert plan_ranges(
+        duration=601.0,
+        chunk_seconds=300,
+    ) == [(0, 300), (300, 600), (600, 601.0)]
+
+
+def test_is_truncated_does_not_assume_sorted_lines():
+    lines = [
+        ParsedLine(
+            start=400,
+            end=402,
+            text="b",
+        ),
+        ParsedLine(
+            start=10,
+            end=12,
+            text="a",
+        ),
+    ]
+    assert (
+        is_truncated(
+            lines=lines,
+            range_end=450,
+        )
+        is False
+    )
+
+
+def test_completeness_does_not_assume_sorted_cues():
+    cues = [
+        Cue(
+            id=2,
+            start=50.0,
+            end=60.0,
+            text="b",
+        ),
+        Cue(
+            id=1,
+            start=0.0,
+            end=10.0,
+            text="a",
+        ),
+    ]
+    result = check_completeness(
+        cues=cues,
+        duration=120.0,
+    )
+    assert result.complete is True
+    assert result.last_end == 60.0
+    assert result.gaps == ()

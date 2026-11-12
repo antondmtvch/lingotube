@@ -13,6 +13,7 @@ from lingotube.features.transcript import (
     TranscriptResult,
 )
 from lingotube.models import VideoInfo
+from lingotube.parsing import ParsedLine
 from lingotube.prompts import PROMPT_VERSION
 
 VID = "vid123"
@@ -782,7 +783,6 @@ async def test_ends_fixed_and_ids_sequential(tmp_path):
 
 
 def holey(
-    first: str,
     gaps: list[tuple[int, int]],
     reply=None,
 ):
@@ -812,7 +812,6 @@ async def test_inner_gap_is_asked_again_with_gap_bounds(tmp_path):
     client = FakeAskClient(
         info=info(duration=300),
         answer=holey(
-            first="",
             gaps=[(90, 200)],
             reply=lambda a, b: body(
                 start=a,
@@ -838,7 +837,6 @@ async def test_inner_gap_stays_when_second_request_brings_nothing(tmp_path):
     client = FakeAskClient(
         info=info(duration=300),
         answer=holey(
-            first="",
             gaps=[(90, 200)],
             reply=lambda a, b: "Нет речи.",
         ),
@@ -856,7 +854,6 @@ async def test_gap_requests_are_limited_per_range(tmp_path):
     client = FakeAskClient(
         info=info(duration=300),
         answer=holey(
-            first="",
             gaps=gaps,
             reply=lambda a, b: "",
         ),
@@ -873,7 +870,6 @@ async def test_small_gap_is_not_asked_again(tmp_path):
     client = FakeAskClient(
         info=info(duration=300),
         answer=holey(
-            first="",
             gaps=[(90, 130)],
             reply=lambda a, b: "",
         ),
@@ -959,20 +955,91 @@ async def test_cached_part_with_gaps_checked_is_not_asked(tmp_path):
     assert client.prompts == []
 
 
-async def test_remaining_61s_gap_is_reported(tmp_path):
+@pytest.mark.parametrize(
+    argnames=("resume", "gaps"),
+    argvalues=[
+        (163, ((101.5, 163.0),)),  # 61.5 s of silence after the 1.5 s cue: reported
+        (161, ()),  # 59.5 s: below the 60 s warning threshold
+    ],
+)
+async def test_remaining_gap_over_60s_is_reported(
+    tmp_path,
+    resume,
+    gaps,
+):
+    starts = [*range(0, 101, 10), *range(resume, 300, 10)]
+
+    def answer(prompt: str) -> str:
+        if requested(prompt=prompt) == (0, 300):
+            return "\n".join(f"({stamp(t=t)}) реплика {t}" for t in starts)
+        return ""
+
     client = FakeAskClient(
         info=info(duration=300),
-        answer=holey(
-            first="",
-            gaps=[(100, 170)],  # реплики 100 и 170: пустота 70 с
-            reply=lambda a, b: "",
-        ),
+        answer=answer,
     )
     result = await feature(
         client=client,
         tmp_path=tmp_path,
     ).run(video_id=VID)
-    assert any(b - a > 60 for a, b in result.completeness.gaps)
+    assert result.completeness.gaps == gaps
+
+
+async def test_largest_gaps_are_chosen_when_over_the_limit(tmp_path):
+    starts = [0, 50, 110, 180, 260, 350, *range(360, 600, 10)]
+    # gaps 50, 60, 70, 80, 90: all above GAP_REREQUEST, the smallest is (0, 50)
+
+    def answer(prompt: str) -> str:
+        if requested(prompt=prompt) == (0, 600):
+            return "\n".join(f"({stamp(t=t)}) реплика {t}" for t in starts)
+        return ""
+
+    client = FakeAskClient(
+        info=info(duration=600),
+        answer=answer,
+    )
+    await feature(
+        client=client,
+        tmp_path=tmp_path,
+        chunk=600,
+    ).run(video_id=VID)
+    asked = sorted(requested(prompt=p) for p in client.prompts[1:])
+    assert MAX_GAP_REREQUESTS == 4
+    assert asked == [(50, 110), (110, 180), (180, 260), (260, 350)]
+
+
+async def test_fill_gaps_dedupes_found_lines_by_start_and_text(tmp_path):
+    client = FakeAskClient(
+        info=info(duration=300),
+        answer=lambda p: "(0:50) a\n(0:50) a\n(0:50) b",
+    )
+    session = await client.open(video_id=VID)
+    parsed = [
+        ParsedLine(
+            start=0.0,
+            end=None,
+            text="x",
+        ),
+        ParsedLine(
+            start=100.0,
+            end=None,
+            text="y",
+        ),
+    ]
+    out = await feature(
+        client=client,
+        tmp_path=tmp_path,
+    )._fill_gaps(
+        session=session,
+        lines=parsed,
+        start=0.0,
+        end=150.0,
+        language=None,
+    )
+    assert [(x.start, x.text) for x in out if x.start == 50.0] == [
+        (50.0, "a"),
+        (50.0, "b"),
+    ]
 
 
 class FailingWriteCache(Cache):

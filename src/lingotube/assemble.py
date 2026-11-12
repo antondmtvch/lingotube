@@ -7,6 +7,7 @@ from lingotube.models import Cue
 from lingotube.parsing import ParsedLine
 
 _SEAM_WINDOW = 2.0
+_MIN_TAIL = 1.0  # a shorter last range is merged into the previous one
 
 
 def plan_ranges(
@@ -27,6 +28,12 @@ def plan_ranges(
             )
         )
         start += chunk_seconds
+    if len(ranges) > 1 and ranges[-1][1] - ranges[-1][0] < _MIN_TAIL:
+        tail = ranges.pop()
+        ranges[-1] = (
+            ranges[-1][0],
+            tail[1],
+        )
     return ranges
 
 
@@ -38,8 +45,7 @@ def is_truncated(
     """Ответ оборван: последняя реплика заканчивается заметно раньше конца запрошенного отрезка."""
     if not lines:
         return True
-    last = lines[-1]
-    reached = last.end if last.end is not None else last.start
+    reached = max(line.end if line.end is not None else line.start for line in lines)
     return reached < range_end - tolerance
 
 
@@ -183,7 +189,10 @@ def check_completeness(
         )
     gaps: list[tuple[float, float]] = []
     reached = 0.0
-    for cue in cues:
+    for cue in sorted(
+        cues,
+        key=lambda c: c.start,
+    ):
         if cue.start - reached > gap_warn:
             gaps.append((reached, cue.start))
         reached = max(
