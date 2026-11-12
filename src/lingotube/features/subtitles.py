@@ -9,7 +9,7 @@
 from dataclasses import replace
 
 from lingotube.assemble import check_completeness
-from lingotube.cache import Cache, CacheKey
+from lingotube.cache import Cache, CacheKey, put_best_effort
 from lingotube.errors import ValidationError
 from lingotube.features.transcript import TranscriptFeature, TranscriptResult
 from lingotube.models import Transcript
@@ -96,7 +96,8 @@ class SubtitlesFeature:
             warnings=original.warnings,
         )
         if original.completeness.complete:
-            await self._cache.put(
+            failed = await put_best_effort(
+                cache=self._cache,
                 key=key,
                 value={
                     "complete": True,
@@ -104,6 +105,11 @@ class SubtitlesFeature:
                     "transcript": transcript.to_dict(),
                 },
             )
+            if failed is not None:
+                result = replace(
+                    result,
+                    warnings=result.warnings + (failed,),
+                )
         return result
 
 

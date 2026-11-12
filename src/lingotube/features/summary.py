@@ -1,7 +1,9 @@
 """Capability «summary»: one chat request for a video summary in the given language, cached."""
 
+from collections.abc import Callable
+
 from lingotube.ask.client import AskClient
-from lingotube.cache import Cache, CacheKey
+from lingotube.cache import Cache, CacheKey, put_best_effort
 from lingotube.errors import ChatUnavailableError
 from lingotube.prompts import PROMPT_VERSION, load_prompt
 
@@ -14,9 +16,11 @@ class SummaryFeature:
         self,
         ask: AskClient,
         cache: Cache,
+        warn: Callable[[str], None] = lambda message: None,
     ) -> None:
         self._ask = ask
         self._cache = cache
+        self._warn = warn
 
     async def run(
         self,
@@ -57,10 +61,13 @@ class SummaryFeature:
                 message="Чат вернул пустой ответ вместо краткого содержания.",
                 hint="Повторите запрос позже.",
             )
-        await self._cache.put(
+        failed = await put_best_effort(
+            cache=self._cache,
             key=key,
             value={"text": text},
         )
+        if failed is not None:
+            self._warn(failed)
         return text
 
 

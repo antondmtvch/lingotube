@@ -973,3 +973,27 @@ async def test_remaining_61s_gap_is_reported(tmp_path):
         tmp_path=tmp_path,
     ).run(video_id=VID)
     assert any(b - a > 60 for a, b in result.completeness.gaps)
+
+
+class FailingWriteCache(Cache):
+    async def put(
+        self,
+        key,
+        value,
+    ) -> None:
+        raise PermissionError("denied: /secret/path")
+
+
+async def test_cache_write_failure_keeps_result_and_warns(tmp_path):
+    client = FakeAskClient(
+        info=info(duration=300),
+        answer=full,
+    )
+    result = await TranscriptFeature(
+        ask=client,
+        cache=FailingWriteCache(root=tmp_path / "cache"),
+        settings=Settings(),
+    ).run(video_id=VID)
+    assert len(result.transcript.cues) == 30
+    assert "не удалось сохранить в кэш: PermissionError" in result.warnings
+    assert all("secret" not in w for w in result.warnings)

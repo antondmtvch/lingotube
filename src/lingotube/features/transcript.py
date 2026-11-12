@@ -14,7 +14,7 @@ Flow (spec §6, §7, §16):
 
 import math
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from lingotube.ask.client import AskClient, AskSession
@@ -26,7 +26,7 @@ from lingotube.assemble import (
     merge,
     plan_ranges,
 )
-from lingotube.cache import Cache, CacheKey
+from lingotube.cache import Cache, CacheKey, put_best_effort
 from lingotube.config import Settings
 from lingotube.errors import ChatUnavailableError, ValidationError
 from lingotube.models import Transcript
@@ -186,6 +186,7 @@ class TranscriptFeature:
         )
         chunks: list[Sequence[ParsedLine]] = []
         warnings: list[str] = []
+        cache_warnings: list[str] = []
         for index, (start, end) in enumerate(ranges):
             is_last = index == len(ranges) - 1
             part_key = CacheKey(
@@ -214,10 +215,13 @@ class TranscriptFeature:
                     prior=prior,
                     is_last=is_last,
                 )
-                await self._cache.put(
+                failed = await put_best_effort(
+                    cache=self._cache,
                     key=part_key,
                     value=_dump_part(part=prior),
                 )
+                if failed is not None and failed not in cache_warnings:
+                    cache_warnings.append(failed)
             if prior.truncated and not prior.exhausted:
                 # re-request budget ran out while the chat was still progressing; an exhausted
                 # part (no further speech from the chat) is left to the completeness warnings
@@ -263,7 +267,8 @@ class TranscriptFeature:
             completeness=completeness,
             warnings=tuple(warnings),
         )
-        await self._cache.put(
+        failed = await put_best_effort(
+            cache=self._cache,
             key=final_key,
             value={
                 "complete": completeness.complete,
@@ -271,6 +276,13 @@ class TranscriptFeature:
                 "transcript": transcript.to_dict(),
             },
         )
+        if failed is not None and failed not in cache_warnings:
+            cache_warnings.append(failed)
+        if cache_warnings:
+            result = replace(
+                result,
+                warnings=result.warnings + tuple(cache_warnings),
+            )
         return result
 
     async def _collect(

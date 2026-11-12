@@ -116,3 +116,20 @@ class Cache:
                 os.unlink(path=tmp)
             except FileNotFoundError:
                 pass
+
+
+async def put_best_effort(
+    cache: Cache,
+    key: CacheKey,
+    value: dict,
+) -> str | None:
+    """Cache writes must not lose a result already obtained: returns a warning
+    (error type only, no paths) instead of raising."""
+    try:
+        await cache.put(
+            key=key,
+            value=value,
+        )
+    except OSError as e:
+        return f"не удалось сохранить в кэш: {type(e).__name__}"
+    return None

@@ -232,3 +232,24 @@ async def test_unknown_original_language_is_translated(tmp_path):
     )
     assert tl.calls == ["ru"]
     assert res.transcript.cues[0].text == "[ru] hello"
+
+
+async def test_cache_write_failure_keeps_result_and_warns(tmp_path):
+    class FailingWriteCache(Cache):
+        async def put(
+            self,
+            key,
+            value,
+        ) -> None:
+            raise PermissionError("denied")
+
+    feature = SubtitlesFeature(
+        transcripts=FakeTranscripts(),
+        translator=FakeTranslator(),
+        cache=FailingWriteCache(root=tmp_path / "cache"),
+    )
+    result = await feature.run(
+        video_id=VID,
+        language="ru",
+    )
+    assert "не удалось сохранить в кэш: PermissionError" in result.warnings

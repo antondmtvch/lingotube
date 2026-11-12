@@ -248,6 +248,7 @@ class Container(containers.DeclarativeContainer):
         SummaryFeature,
         ask=ask_client,
         cache=cache,
+        warn=warn,
     )
     build_feature = providers.Factory(
         BuildFeature,

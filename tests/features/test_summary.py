@@ -120,3 +120,31 @@ async def test_summary_empty_answer_is_error(
         prompt_version=PROMPT_VERSION,
     )
     assert await Cache(root=tmp_path / "cache").get(key=key) is None
+
+
+async def test_cache_write_failure_keeps_text_and_warns(tmp_path):
+    class FailingWriteCache(Cache):
+        async def put(
+            self,
+            key,
+            value,
+        ) -> None:
+            raise OSError("disk full /secret")
+
+    warnings: list[str] = []
+    feature = SummaryFeature(
+        ask=FakeAskClient(
+            info=INFO,
+            answer=lambda p: "итог",
+        ),
+        cache=FailingWriteCache(root=tmp_path / "cache"),
+        warn=warnings.append,
+    )
+    assert (
+        await feature.run(
+            video_id=VID,
+            language="русский",
+        )
+        == "итог"
+    )
+    assert warnings == ["не удалось сохранить в кэш: OSError"]
