@@ -38,7 +38,7 @@ def test_validate_missing_ids_lists_them():
     d["cues"] = [c for c in d["cues"] if c["id"] not in (3, 7)]
     with pytest.raises(ValidationError) as e:
         validate_translation(original(), d, "ru")
-    assert "3" in e.value.message and "7" in e.value.message
+    assert "отсутствуют id: 3, 7" in e.value.message
 
 
 def test_validate_extra_or_duplicate_ids():
@@ -47,7 +47,8 @@ def test_validate_extra_or_duplicate_ids():
     d["cues"].append({"id": 2, "start": 1, "end": 2, "text": "x"})
     with pytest.raises(ValidationError) as e:
         validate_translation(original(), d, "ru")
-    assert "42" in e.value.message and "2" in e.value.message
+    assert "лишние id: 42" in e.value.message
+    assert "повторяются id: 2" in e.value.message
 
 
 def test_validate_empty_text():
@@ -55,7 +56,7 @@ def test_validate_empty_text():
     d["cues"][4]["text"] = "  "
     with pytest.raises(ValidationError) as e:
         validate_translation(original(), d, "ru")
-    assert "5" in e.value.message
+    assert "пустой текст у id: 5" in e.value.message
 
 
 def test_validate_collects_all_problems_sorted():
@@ -65,7 +66,8 @@ def test_validate_collects_all_problems_sorted():
     with pytest.raises(ValidationError) as e:
         validate_translation(original(), d, "ru")
     msg = e.value.message
-    assert "3, 7" in msg and "1" in msg
+    assert "отсутствуют id: 3, 7" in msg
+    assert "пустой текст у id: 1" in msg
 
 
 def test_validate_wrong_video_id():
@@ -96,3 +98,34 @@ async def test_build_stores_translation_in_cache(tmp_path):
     assert result.language == "ru"
     stored = await cache.get(CacheKey(VID, "subtitles", "ru", "agent", PROMPT_VERSION))
     assert stored == result.to_dict()
+
+
+def test_validate_many_missing_ids_is_capped():
+    big = original(2000)
+    d = translated(big)
+    d["cues"] = []
+    with pytest.raises(ValidationError) as e:
+        validate_translation(big, d, "ru")
+    assert len(e.value.message) < 300
+    assert "… и ещё 1980" in e.value.message
+
+
+async def test_build_accepts_incomplete_cached_original(tmp_path):
+    cache = Cache(tmp_path / "cache")
+    await cache.put(
+        CacheKey(VID, "transcript", "orig", "chat", PROMPT_VERSION),
+        {"complete": False, "warnings": [], "transcript": original().to_dict()},
+    )
+    result = await BuildFeature(cache).run(VID, "ru", translated())
+    assert result.language == "ru"
+
+
+async def test_build_malformed_cached_original_is_missing(tmp_path):
+    cache = Cache(tmp_path / "cache")
+    await cache.put(
+        CacheKey(VID, "transcript", "orig", "chat", PROMPT_VERSION),
+        {"complete": True, "transcript": {"cues": 1}},
+    )
+    with pytest.raises(ValidationError) as e:
+        await BuildFeature(cache).run(VID, "ru", translated())
+    assert "lingotube transcript" in (e.value.hint or "")

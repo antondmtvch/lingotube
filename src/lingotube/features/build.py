@@ -4,15 +4,20 @@ from dataclasses import replace
 from typing import Any
 
 from lingotube.cache import Cache, CacheKey
+from lingotube.features.transcript import load_cached_transcript
 from lingotube.errors import ValidationError
 from lingotube.models import Cue, Transcript
 from lingotube.prompts import PROMPT_VERSION
 
-ORIG_MODE = "chat"
+MAX_IDS = 20
 
 
 def _ids(ids: list[int]) -> str:
-    return ", ".join(str(i) for i in sorted(ids))
+    ordered = sorted(ids)
+    text = ", ".join(str(i) for i in ordered[:MAX_IDS])
+    if len(ordered) > MAX_IDS:
+        text += f" … и ещё {len(ordered) - MAX_IDS}"
+    return text
 
 
 def validate_translation(original: Transcript, translated: dict[str, Any], language: str) -> Transcript:
@@ -61,14 +66,7 @@ class BuildFeature:
         self._cache = cache
 
     async def run(self, video_id: str, language: str, translated: dict[str, Any]) -> Transcript:
-        orig_key = CacheKey(video_id, "transcript", "orig", ORIG_MODE, PROMPT_VERSION)
-        data = await self._cache.get(orig_key)
-        original: Transcript | None = None
-        if data is not None:
-            try:
-                original = Transcript.from_dict(data.get("transcript"))  # type: ignore[arg-type]
-            except ValidationError:
-                original = None
+        original = await load_cached_transcript(self._cache, video_id, require_complete=False)
         if original is None:
             raise ValidationError(
                 "Оригинальная транскрипция этого видео не найдена в кэше.",

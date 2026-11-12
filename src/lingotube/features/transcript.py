@@ -53,6 +53,24 @@ class _Part:
     exhausted: bool = False  # the chat had nothing more to add: never re-asked on later runs
 
 
+def transcript_key(video_id: str, lang_key: str = "orig") -> CacheKey:
+    """Cache key of the final transcript (`lang_key` "orig" = original language)."""
+    return CacheKey(video_id, KIND_FINAL, lang_key, MODE, PROMPT_VERSION)
+
+
+async def load_cached_transcript(
+    cache: Cache, video_id: str, lang_key: str = "orig", *, require_complete: bool
+) -> Transcript | None:
+    """Cached final transcript, or None if absent/malformed (or incomplete when required)."""
+    data = await cache.get(transcript_key(video_id, lang_key))
+    if data is None or (require_complete and data.get("complete") is not True):
+        return None
+    try:
+        return Transcript.from_dict(data.get("transcript"))  # type: ignore[arg-type]
+    except ValidationError:
+        return None
+
+
 def format_time(seconds: float, *, ceil: bool = False) -> str:
     """`m:ss` below one hour, `h:mm:ss` from one hour."""
     total = math.ceil(seconds) if ceil else math.floor(seconds)
@@ -98,7 +116,7 @@ class TranscriptFeature:
         parts and the fresh result are still written.
         """
         lang_key = language or "orig"
-        final_key = CacheKey(video_id, KIND_FINAL, lang_key, MODE, PROMPT_VERSION)
+        final_key = transcript_key(video_id, lang_key)
         if use_cache:
             cached = _load_final(await self._cache.get(final_key))
             if cached is not None:
