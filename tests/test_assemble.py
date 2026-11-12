@@ -66,3 +66,30 @@ def test_completeness():
     assert r.complete and r.gaps == ((5, 580),)
     assert check_completeness([Cue(1, 0, 5, "a")], 600).complete is False
     assert check_completeness([], 600).complete is False
+
+
+def test_merge_joins_same_start_lines():
+    cues = merge([[ParsedLine(10, None, "а"), ParsedLine(10, None, "б"), ParsedLine(20, None, "в")]])
+    assert [(c.id, c.start, c.end, c.text) for c in cues] == [(1, 10, None, "а б"), (2, 20, None, "в")]
+
+
+def test_merge_same_start_keeps_max_end():
+    cues = merge([[ParsedLine(10, 12, "а"), ParsedLine(10, None, "б"), ParsedLine(10, 15, "в")]])
+    assert [(c.end, c.text) for c in cues] == [(15, "а б в")]
+
+
+def test_fix_ends_drops_cues_past_duration_and_renumbers():
+    out = fix_ends([Cue(1, 5, None, "a"), Cue(2, 100, None, "b"), Cue(3, 120, 130, "c")], 100)
+    assert [c.id for c in out] == [1]
+    assert all(c.end > c.start for c in out)
+
+
+def test_fix_ends_every_end_after_start():
+    cues = merge([[ParsedLine(10, None, "а"), ParsedLine(10, None, "б"), ParsedLine(99.9, None, "в")]])
+    out = fix_ends(cues, 100)
+    assert all(c.end > c.start for c in out)
+
+
+def test_completeness_leading_gap():
+    r = check_completeness([Cue(1, 180, 590, "a")], 600)
+    assert r.complete and r.gaps == ((0, 180),)

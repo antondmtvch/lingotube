@@ -36,6 +36,11 @@ def merge(chunks: Sequence[Sequence[ParsedLine]]) -> list[Cue]:
         text = line.text.strip()
         if _is_duplicate(kept, line.start, text):
             continue
+        if kept and kept[-1].start == line.start:
+            prev = kept[-1]
+            ends = [e for e in (prev.end, line.end) if e is not None]
+            kept[-1] = ParsedLine(prev.start, max(ends) if ends else None, f"{prev.text} {text}")
+            continue
         kept.append(replace(line, text=text))
     return [Cue(i, line.start, line.end, line.text) for i, line in enumerate(kept, 1)]
 
@@ -57,7 +62,11 @@ def fix_ends(
     max_s: float = 7.0,
     cps: float = 15.0,
 ) -> list[Cue]:
-    """Оставляет конец чата, если он верен; иначе обрезает по границам или считает по времени чтения."""
+    """Оставляет конец чата, если он верен; иначе обрезает по границам или считает по времени чтения.
+
+    Реплики, начинающиеся не раньше конца видео, отбрасываются; номера перенумеровываются с 1.
+    """
+    cues = [c for c in cues if c.start < duration]
     out: list[Cue] = []
     for i, cue in enumerate(cues):
         limit = duration
@@ -68,7 +77,7 @@ def fix_ends(
         else:
             reading = min(max(len(cue.text) / cps, min_s), max_s)
             end = min(cue.start + reading, limit)
-        out.append(replace(cue, end=end))
+        out.append(replace(cue, id=i + 1, end=end))
     return out
 
 
@@ -93,8 +102,8 @@ def check_completeness(
         tail_tolerance = max(60.0, 0.05 * duration)
     gaps: list[tuple[float, float]] = []
     reached = 0.0
-    for i, cue in enumerate(cues):
-        if i and cue.start - reached > gap_warn:
+    for cue in cues:
+        if cue.start - reached > gap_warn:
             gaps.append((reached, cue.start))
         reached = max(reached, cue.end if cue.end is not None else cue.start)
     return Completeness(reached >= duration - tail_tolerance, reached, tuple(gaps))
