@@ -36,13 +36,16 @@ def merge(chunks: Sequence[Sequence[ParsedLine]]) -> list[Cue]:
         text = line.text.strip()
         if _is_duplicate(kept, line.start, text):
             continue
-        if kept and kept[-1].start == line.start:
-            prev = kept[-1]
-            ends = [e for e in (prev.end, line.end) if e is not None]
-            kept[-1] = ParsedLine(prev.start, max(ends) if ends else None, f"{prev.text} {text}")
-            continue
         kept.append(replace(line, text=text))
-    return [Cue(i, line.start, line.end, line.text) for i, line in enumerate(kept, 1)]
+    joined: list[ParsedLine] = []
+    for line in kept:
+        if joined and joined[-1].start == line.start:
+            prev = joined[-1]
+            ends = [e for e in (prev.end, line.end) if e is not None]
+            joined[-1] = ParsedLine(prev.start, max(ends) if ends else None, f"{prev.text} {line.text}")
+        else:
+            joined.append(line)
+    return [Cue(i, line.start, line.end, line.text) for i, line in enumerate(joined, 1)]
 
 
 def _is_duplicate(kept: Sequence[ParsedLine], start: float, text: str) -> bool:
@@ -70,8 +73,9 @@ def fix_ends(
     out: list[Cue] = []
     for i, cue in enumerate(cues):
         limit = duration
-        if i + 1 < len(cues):
-            limit = min(limit, cues[i + 1].start)
+        next_start = next((c.start for c in cues[i + 1 :] if c.start > cue.start), None)
+        if next_start is not None:
+            limit = min(limit, next_start)
         if cue.end is not None and cue.end > cue.start:
             end = min(cue.end, limit)
         else:

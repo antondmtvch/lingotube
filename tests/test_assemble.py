@@ -93,3 +93,15 @@ def test_fix_ends_every_end_after_start():
 def test_completeness_leading_gap():
     r = check_completeness([Cue(1, 180, 590, "a")], 600)
     assert r.complete and r.gaps == ((0, 180),)
+
+
+def test_merge_seam_dedupe_applies_before_join():
+    a = [ParsedLine(10, 12, "p"), ParsedLine(10, 12, "q")]
+    b = [ParsedLine(11, 13, "p")]
+    assert [(c.start, c.text) for c in merge([a, b])] == [(10, "p q")]
+
+
+def test_fix_ends_same_start_unmerged_never_degenerate():
+    out = fix_ends([Cue(1, 10, None, "a"), Cue(2, 10, None, "b"), Cue(3, 20, None, "c")], 100)
+    assert all(c.end > c.start for c in out)
+    assert out[0].end == 11.5 and out[1].end == 11.5
