@@ -1,0 +1,77 @@
+from importlib import resources
+
+import pytest
+
+from lingotube.prompts import PROMPT_VERSION, load_prompt
+
+NAMES = ("transcript", "transcript_translated", "summary", "translate_batch")
+
+
+def test_version():
+    assert PROMPT_VERSION == "1"
+
+
+def test_transcript_substitutes_range():
+    text = load_prompt("transcript", start="0:00", end="10:00")
+    assert "0:00" in text and "10:00" in text
+    assert "{" not in text
+
+
+def test_transcript_hour_format_kept():
+    assert "1:05:00" in load_prompt("transcript", start="1:05:00", end="1:10:00")
+
+
+def test_translated_mentions_language_and_forbids_original():
+    text = load_prompt("transcript_translated", start="0:00", end="5:00", language="Russian")
+    assert "Russian" in text and "{" not in text
+    assert "только" in text and "оригинал" in text
+
+
+def test_summary_language():
+    text = load_prompt("summary", language="Russian")
+    assert "Russian" in text and "{" not in text
+
+
+def test_translate_batch_keeps_tab_and_language():
+    text = load_prompt("translate_batch", language="German")
+    assert "German" in text
+    assert "\t" in text
+
+
+@pytest.mark.parametrize(
+    ("name", "variables"),
+    [
+        ("transcript", {"start": "0:00"}),
+        ("transcript_translated", {"start": "0:00", "end": "1:00"}),
+        ("summary", {}),
+        ("translate_batch", {}),
+    ],
+)
+def test_missing_variable_raises_key_error(name, variables):
+    with pytest.raises(KeyError):
+        load_prompt(name, **variables)
+
+
+def test_extra_variable_is_ignored():
+    assert "{" not in load_prompt("summary", language="Russian", unused="x")
+
+
+def test_substituted_value_with_braces_is_not_reprocessed():
+    text = load_prompt("summary", language="{start}")
+    assert "{start}" in text
+
+
+def test_unknown_name_raises():
+    with pytest.raises(FileNotFoundError):
+        load_prompt("nope")  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("name", NAMES)
+def test_files_are_package_data(name):
+    path = resources.files("lingotube") / "prompts" / f"{name}.v1.txt"
+    assert path.is_file()
+    assert path.read_text(encoding="utf-8").strip()
+
+
+def test_format_doc_is_package_data():
+    assert (resources.files("lingotube") / "prompts" / "FORMAT.md").is_file()
