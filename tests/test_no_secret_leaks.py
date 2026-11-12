@@ -219,12 +219,23 @@ def route_youtube(
             )
         )
     else:
-        router.get(url=f"{YT}/watch").mock(
-            return_value=httpx.Response(
+
+        def watch(request: httpx.Request) -> httpx.Response:
+            failed = (
+                failure(
+                    request=request,
+                    scenario=scenario,
+                    known="watch-page",  # no chat token exists before the watch page is read
+                )
+                if fail_at == "watch"
+                else None
+            )
+            return failed or httpx.Response(
                 status_code=200,
                 text=watch_page(duration=duration),
             )
-        )
+
+        router.get(url=f"{YT}/watch").mock(side_effect=watch)
     nxt = {"signed_out": "next_signed_out.json", "no_chat": "next_no_chat.json"}.get(
         scenario,
         "next_eligible.json",
@@ -562,6 +573,45 @@ def test_transcript_never_leaks(
         json_mode=json_mode,
     )
     assert (code == 0) is (scenario in ("ok", "browser_ok"))
+
+
+@pytest.mark.parametrize(
+    argnames="json_mode",
+    argvalues=MODES,
+)
+@pytest.mark.parametrize(
+    argnames="scenario",
+    argvalues=["http_500", "transport"],
+)
+def test_transcript_never_leaks_when_watch_page_fails(
+    tmp_path,
+    router,
+    scenario,
+    json_mode,
+):
+    route_youtube(
+        router=router,
+        scenario=scenario,
+        fail_at="watch",
+    )
+    leak = Leak(
+        tmp_path=tmp_path,
+        scenario=scenario,
+    )
+    argv = [
+        "transcript",
+        URL,
+        *(["--json"] if json_mode else []),
+    ]
+    code, out, err = leak.run(*argv)
+    leak.assert_clean(
+        code=code,
+        out=out,
+        err=err,
+        json_mode=json_mode,
+    )
+    assert code == 6, err
+    assert youtube_saw_cookies(router=router)
 
 
 @pytest.mark.parametrize(

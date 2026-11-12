@@ -10,9 +10,11 @@ from dataclasses import replace
 
 from lingotube.assemble import check_completeness
 from lingotube.cache import Cache, CacheKey, put_best_effort
-from lingotube.errors import ValidationError
-from lingotube.features.transcript import TranscriptFeature, TranscriptResult
-from lingotube.models import Transcript
+from lingotube.features.transcript import (
+    TranscriptFeature,
+    TranscriptResult,
+    _parse_final,
+)
 from lingotube.prompts import PROMPT_VERSION
 from lingotube.translate.base import Translator
 
@@ -114,7 +116,11 @@ class SubtitlesFeature:
 
 
 def _load(data: dict | None) -> TranscriptResult | None:
-    if data is None or data.get("complete") is not True:
+    transcript = _parse_final(
+        data=data,
+        require_complete=True,
+    )
+    if transcript is None or data is None:
         return None
     warnings = data.get("warnings")
     if not isinstance(
@@ -127,10 +133,6 @@ def _load(data: dict | None) -> TranscriptResult | None:
         )
         for w in warnings
     ):
-        return None
-    try:
-        transcript = Transcript.from_dict(d=data.get("transcript"))  # type: ignore[arg-type]
-    except ValidationError:
         return None
     return TranscriptResult(
         transcript=transcript,

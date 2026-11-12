@@ -419,8 +419,12 @@ async def transcript_outcome(
     text: str,
     fmt: str,
     output: str | None,
+    warnings: tuple[str, ...] = (),
 ) -> Outcome:
-    """Delivers a rendered transcript; an incomplete one is still delivered, with exit code 5."""
+    """Delivers a rendered transcript; an incomplete one is still delivered, with exit code 5.
+
+    `warnings` are added to those of a `TranscriptResult` (or stand alone for a bare Transcript).
+    """
     if isinstance(
         result,
         TranscriptResult,
@@ -428,10 +432,10 @@ async def transcript_outcome(
         transcript, complete, warnings = (
             result.transcript,
             result.completeness.complete,
-            result.warnings,
+            result.warnings + warnings,
         )
     else:
-        transcript, complete, warnings = result, True, ()
+        transcript, complete = result, True
     language = transcript.language or "orig"
     path = await deliver(
         ctx=ctx,

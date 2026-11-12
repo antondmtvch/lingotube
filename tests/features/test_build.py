@@ -162,7 +162,8 @@ async def test_build_stores_translation_in_cache(tmp_path):
         language="ru",
         translated=translated(),
     )
-    assert result.language == "ru"
+    assert result.transcript.language == "ru"
+    assert result.warnings == ()
     stored = await cache.get(
         key=CacheKey(
             video_id=VID,
@@ -172,7 +173,7 @@ async def test_build_stores_translation_in_cache(tmp_path):
             prompt_version=PROMPT_VERSION,
         )
     )
-    assert stored == result.to_dict()
+    assert stored == result.transcript.to_dict()
 
 
 def test_validate_many_missing_ids_is_capped():
@@ -206,7 +207,7 @@ async def test_build_accepts_incomplete_cached_original(tmp_path):
         language="ru",
         translated=translated(),
     )
-    assert result.language == "ru"
+    assert result.transcript.language == "ru"
 
 
 async def test_build_malformed_cached_original_is_missing(tmp_path):
@@ -249,3 +250,34 @@ async def test_build_cached_payload_without_transcript_key_is_missing(tmp_path):
             translated=translated(),
         )
     assert "lingotube transcript" in (e.value.hint or "")
+
+
+class FailingWriteCache(Cache):
+    async def put(
+        self,
+        key,
+        value,
+    ) -> None:
+        raise PermissionError("denied: /secret/path")
+
+
+async def test_build_cache_write_failure_keeps_result_and_warns(tmp_path):
+    good = Cache(root=tmp_path / "cache")
+    await good.put(
+        key=CacheKey(
+            video_id=VID,
+            kind="transcript",
+            language="orig",
+            mode="chat",
+            prompt_version=PROMPT_VERSION,
+        ),
+        value={"complete": True, "warnings": [], "transcript": original().to_dict()},
+    )
+    result = await BuildFeature(cache=FailingWriteCache(root=tmp_path / "cache")).run(
+        video_id=VID,
+        language="ru",
+        translated=translated(),
+    )
+    assert result.transcript.language == "ru"
+    assert result.warnings == ("не удалось сохранить в кэш: PermissionError",)
+    assert all("secret" not in w for w in result.warnings)

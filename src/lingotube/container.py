@@ -30,6 +30,7 @@ from lingotube.features.build import BuildFeature
 from lingotube.features.subtitles import SubtitlesFeature
 from lingotube.features.summary import SummaryFeature
 from lingotube.features.transcript import TranscriptFeature
+from lingotube.translate.lazy import LazyTranslator
 from lingotube.translate.openai_compat import OpenAICompatTranslator
 
 TRANSLATOR_TIMEOUT = 120.0  # a model translating a batch can be slow
@@ -213,20 +214,33 @@ class Container(containers.DeclarativeContainer):
         root=cache_dir,
     )
 
+    own_model_translator = providers.Singleton(
+        OpenAICompatTranslator,
+        http=translator_http,
+        settings=settings.provided.translator,
+        api_key=providers.Callable(
+            translator_api_key,
+            settings=settings,
+            env=env,
+        ),
+    )
     translator = providers.Selector(
         selector=providers.Callable(
             translator_mode,
             settings=settings,
         ),
+        own_model=own_model_translator,
+        none=providers.Object(None),
+    )
+    # What the subtitles feature gets: the key is read on the first translation only.
+    lazy_translator = providers.Selector(
+        selector=providers.Callable(
+            translator_mode,
+            settings=settings,
+        ),
         own_model=providers.Singleton(
-            OpenAICompatTranslator,
-            http=translator_http,
-            settings=settings.provided.translator,
-            api_key=providers.Callable(
-                translator_api_key,
-                settings=settings,
-                env=env,
-            ),
+            LazyTranslator,
+            factory=providers.Delegate(own_model_translator),
         ),
         none=providers.Object(None),
     )
@@ -241,7 +255,7 @@ class Container(containers.DeclarativeContainer):
     subtitles_feature = providers.Factory(
         SubtitlesFeature,
         transcripts=transcript_feature,
-        translator=translator,
+        translator=lazy_translator,
         cache=cache,
     )
     summary_feature = providers.Factory(

@@ -590,3 +590,54 @@ async def test_network_error_does_not_claim_missing_login():
         or ""
     )
     assert doctor_exit_code(checks=checks) == 6
+
+
+class CrashingSource:
+    async def load(self) -> Credentials:
+        raise RuntimeError(f"boom {SECRET_SAPISID}")
+
+
+async def test_unexpected_error_in_source_marks_row_failed_and_exit_1():
+    checks = await run_doctor(
+        sources={"файл cookies": CrashingSource(), "браузер chrome": GoodSource()},
+        make_ask=ask_factory(),
+        test_video_id="abcdefghijk",
+    )
+    row = by_name(
+        checks=checks,
+        name="файл cookies",
+    )
+    assert not row.ok and row.critical
+    assert "RuntimeError" in row.detail
+    assert SECRET_SAPISID not in repr(checks)
+    assert by_name(
+        checks=checks,
+        name="браузер chrome",
+    ).ok
+    assert doctor_exit_code(checks=checks) == 1
+
+
+async def test_unexpected_error_in_chat_open_marks_row_failed_and_exit_1():
+    checks = await run_doctor(
+        sources={"файл cookies": GoodSource()},
+        make_ask=ask_factory(outcome=KeyError(SECRET_SID)),
+        test_video_id="abcdefghijk",
+    )
+    row = by_name(
+        checks=checks,
+        name="файл cookies",
+    )
+    assert not row.ok and "KeyError" in row.detail
+    assert SECRET_SID not in repr(checks)
+    assert doctor_exit_code(checks=checks) == 1
+
+
+def test_doctor_command_unexpected_error_still_prints_table(tmp_path):
+    h = Harness(
+        tmp_path=tmp_path,
+        sources={"файл cookies": CrashingSource(), "браузер chrome": GoodSource()},
+    )
+    code, out, err = h.run()
+    assert code == 1
+    assert "файл cookies" in out and "RuntimeError" in out and LOGIN in out
+    assert SECRET_SAPISID not in out + err

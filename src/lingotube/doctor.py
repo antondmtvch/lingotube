@@ -43,6 +43,20 @@ class Check:
     detail: str
     hint: str | None
     critical: bool = True  # False: failed, but another source works, so not an error
+    unexpected: bool = False  # the check itself crashed (a bug, not a user problem)
+
+
+def _crashed(
+    name: str,
+    error: Exception,
+) -> Check:
+    return Check(
+        name=name,
+        ok=False,
+        detail=f"проверка завершилась неожиданной ошибкой ({type(error).__name__})",
+        hint=None,
+        unexpected=True,
+    )
 
 
 class UnsetCookieFile:
@@ -82,6 +96,14 @@ async def run_doctor(
                     ok=False,
                     detail=e.message,
                     hint=e.hint,
+                )
+            )
+            continue
+        except Exception as e:  # never the text: it may hold secrets
+            checks.append(
+                _crashed(
+                    name=name,
+                    error=e,
                 )
             )
             continue
@@ -138,6 +160,12 @@ async def run_doctor(
                 detail="не проверен: нет соединения с YouTube",
                 hint=None,
             )
+        except Exception as e:  # unexpected: record it and try the next source
+            checks[index] = _crashed(
+                name=name,
+                error=e,
+            )
+            continue
         else:
             checks[index] = Check(
                 name=name,
@@ -192,7 +220,7 @@ async def run_doctor(
                     c,
                     critical=False,
                 )
-                if c.name in sources and not c.ok
+                if c.name in sources and not c.ok and not c.unexpected
                 else c
             )
             for c in checks
@@ -216,6 +244,11 @@ def _passed(
 
 def doctor_error(checks: list[Check]) -> LingotubeError | None:
     """None when ready; otherwise the error whose exit code `doctor` ends with."""
+    if any(c.unexpected for c in checks):
+        return LingotubeError(
+            message="Одна из проверок завершилась неожиданной ошибкой.",
+            hint="Повторите команду; если ошибка повторяется — сообщите о ней.",
+        )
     if _passed(
         checks=checks,
         name=CHAT,

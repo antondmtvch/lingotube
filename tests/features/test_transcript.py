@@ -1064,3 +1064,30 @@ async def test_cache_write_failure_keeps_result_and_warns(tmp_path):
     assert len(result.transcript.cues) == 30
     assert "не удалось сохранить в кэш: PermissionError" in result.warnings
     assert all("secret" not in w for w in result.warnings)
+
+
+async def test_exhausted_mid_video_part_adds_warning_naming_the_range(tmp_path):
+    def answer(prompt: str) -> str:
+        start, end = requested(prompt=prompt)
+        if start < 300:
+            return lines(
+                start=0,
+                end=61,
+            )  # the chat stops at 1:00 whatever is asked
+        return lines(
+            start=start,
+            end=end,
+        )
+
+    client = FakeAskClient(
+        info=info(duration=900),
+        answer=answer,
+    )
+    result = await feature(
+        client=client,
+        tmp_path=tmp_path,
+    ).run(video_id=VID)
+    ranged = [w for w in result.warnings if "0:00–5:00" in w]
+    assert len(ranged) == 1
+    assert "1:00" in ranged[0] and "оборван" not in ranged[0]
+    assert not any("5:00–10:00" in w or "10:00–15:00" in w for w in result.warnings)

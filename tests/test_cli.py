@@ -800,6 +800,32 @@ def test_translator_key_missing_is_auth_error(tmp_path):
     assert "LINGOTUBE_API_KEY" in err
 
 
+def test_translator_key_not_needed_when_no_translation_is_requested(tmp_path):
+    settings = Settings(
+        translator=TranslatorSettings(
+            base_url="http://127.0.0.1:9/v1",
+            model="m",
+        )
+    )
+    h = Harness(
+        tmp_path=tmp_path,
+        settings=settings,
+        env={},
+    )
+    code, out, err = h.run(
+        "subs",
+        URL,
+        "--lang",
+        "en",  # the video's own language: nothing to translate
+    )
+    assert code == 0, err
+    code, _, err = h.run(
+        "transcript",
+        URL,
+    )
+    assert code == 0, err
+
+
 # --- container ---
 
 

@@ -234,6 +234,18 @@ class TranscriptFeature:
                     f"отрезок {format_time(seconds=start)}–{range_end} остался оборванным: "
                     f"ответ чата дошёл только до {format_time(seconds=reached)}"
                 )
+            elif prior.truncated and not is_last:
+                # the chat gave nothing more for a range in the middle of the video: name
+                # it (the last range is described by the completeness warnings)
+                reached = prior.lines[-1].start if prior.lines else start
+                range_end = format_time(
+                    seconds=end,
+                    ceil=True,
+                )
+                warnings.append(
+                    f"отрезок {format_time(seconds=start)}–{range_end}: чат перестал отвечать "
+                    f"на {format_time(seconds=reached)}, остаток отрезка не получен"
+                )
             chunks.append(prior.lines)
             self._progress(
                 index + 1,

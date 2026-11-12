@@ -1,9 +1,9 @@
 """Agent mode: validate an externally translated transcript against the cached original and cache it."""
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import Any
 
-from lingotube.cache import Cache, CacheKey
+from lingotube.cache import Cache, CacheKey, put_best_effort
 from lingotube.errors import ValidationError
 from lingotube.features.transcript import load_cached_transcript
 from lingotube.models import Cue, Transcript
@@ -77,6 +77,12 @@ def validate_translation(
     )
 
 
+@dataclass(frozen=True)
+class BuildResult:
+    transcript: Transcript
+    warnings: tuple[str, ...] = ()
+
+
 class BuildFeature:
     def __init__(self, cache: Cache) -> None:
         self._cache = cache
@@ -86,7 +92,7 @@ class BuildFeature:
         video_id: str,
         language: str,
         translated: dict[str, Any],
-    ) -> Transcript:
+    ) -> BuildResult:
         original = await load_cached_transcript(
             cache=self._cache,
             video_id=video_id,
@@ -102,7 +108,8 @@ class BuildFeature:
             translated=translated,
             language=language,
         )
-        await self._cache.put(
+        failed = await put_best_effort(
+            cache=self._cache,
             key=CacheKey(
                 video_id=video_id,
                 kind="subtitles",
@@ -112,7 +119,10 @@ class BuildFeature:
             ),
             value=result.to_dict(),
         )
-        return result
+        return BuildResult(
+            transcript=result,
+            warnings=(failed,) if failed is not None else (),
+        )
 
 
 def _read_json(path) -> Any:
@@ -196,9 +206,10 @@ def register(
             )
             return await c.transcript_outcome(
                 ctx=ctx,
-                result=result,
+                result=result.transcript,
+                warnings=result.warnings,
                 text=render(
-                    transcript=result,
+                    transcript=result.transcript,
                     fmt=fmt_,
                     offset=shift,
                 ),
