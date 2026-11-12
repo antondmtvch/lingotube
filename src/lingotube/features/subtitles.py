@@ -69,3 +69,34 @@ def _load(data: dict | None) -> TranscriptResult | None:
     return TranscriptResult(
         transcript, check_completeness(transcript.cues, transcript.duration), tuple(warnings)
     )
+
+
+def register(app, get_context) -> None:
+    """Adds the `subs` command (CLI layer; imported lazily to keep the feature core light)."""
+    from lingotube import commands as c
+    from lingotube.writers import render
+
+    @app.command("subs", help="Файл субтитров на выбранном языке.")
+    def subs(
+        video: c.VideoArg,
+        lang: c.LangOpt = None,
+        fmt: c.FormatOpt = None,
+        output: c.OutputOpt = None,
+        offset: c.OffsetOpt = 0.0,
+        cookies_file: c.CookiesFileOpt = None,
+        browser: c.BrowserOpt = None,
+        no_cache: c.NoCacheOpt = False,
+        json_: c.JsonOpt = False,
+    ) -> None:
+        common = c.Common(json_, cookies_file, browser, no_cache)
+
+        async def body(ctx: c.AppContext, video_id: str | None) -> c.Outcome:
+            assert video_id is not None
+            language = c.require_lang(lang, ctx.settings)
+            fmt_ = c.require_format(fmt, ctx.settings)
+            shift = c.require_offset(offset)
+            feature = await ctx.provide(ctx.container.subtitles_feature)
+            result = await feature.run(video_id, language, use_cache=common.use_cache)
+            return await c.transcript_outcome(ctx, result, render(result.transcript, fmt_, shift), fmt_, output)
+
+        c.execute(get_context, common, video, body)

@@ -274,3 +274,32 @@ def _load_final(data: dict | None) -> TranscriptResult | None:
         return None
     completeness = check_completeness(transcript.cues, transcript.duration)
     return TranscriptResult(transcript, completeness, tuple(warnings))
+
+
+def register(app, get_context) -> None:
+    """Adds the `transcript` command: the original-language transcript (JSON by default, spec §8)."""
+    from lingotube import commands as c
+    from lingotube.writers import render
+
+    @app.command("transcript", help="Транскрипция на языке оригинала с тайм-кодами (по умолчанию JSON).")
+    def transcript(
+        video: c.VideoArg,
+        fmt: c.FormatOpt = None,
+        output: c.OutputOpt = None,
+        offset: c.OffsetOpt = 0.0,
+        cookies_file: c.CookiesFileOpt = None,
+        browser: c.BrowserOpt = None,
+        no_cache: c.NoCacheOpt = False,
+        json_: c.JsonOpt = False,
+    ) -> None:
+        common = c.Common(json_, cookies_file, browser, no_cache)
+
+        async def body(ctx: c.AppContext, video_id: str | None) -> c.Outcome:
+            assert video_id is not None
+            fmt_ = c.require_format(fmt, default="json")
+            shift = c.require_offset(offset)
+            feature = await ctx.provide(ctx.container.transcript_feature)
+            result = await feature.run(video_id, None, use_cache=common.use_cache)
+            return await c.transcript_outcome(ctx, result, render(result.transcript, fmt_, shift), fmt_, output)
+
+        c.execute(get_context, common, video, body)

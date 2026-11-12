@@ -29,3 +29,33 @@ class SummaryFeature:
             )
         await self._cache.put(key, {"text": text})
         return text
+
+
+def register(app, get_context) -> None:
+    """Adds the `summary` command: text to stdout, or to a file with -o."""
+    from lingotube import commands as c
+
+    @app.command("summary", help="Краткое содержание на выбранном языке.")
+    def summary(
+        video: c.VideoArg,
+        lang: c.LangOpt = None,
+        output: c.OutputOpt = None,
+        cookies_file: c.CookiesFileOpt = None,
+        browser: c.BrowserOpt = None,
+        no_cache: c.NoCacheOpt = False,
+        json_: c.JsonOpt = False,
+    ) -> None:
+        common = c.Common(json_, cookies_file, browser, no_cache)
+
+        async def body(ctx: c.AppContext, video_id: str | None) -> c.Outcome:
+            assert video_id is not None
+            language = c.require_lang(lang, ctx.settings)
+            feature = await ctx.provide(ctx.container.summary_feature)
+            text = await feature.run(video_id, language, use_cache=common.use_cache)
+            path = await c.deliver(ctx, text + "\n", output if output is not None else "-", "")
+            result = {"video_id": video_id, "language": language, "text": text}
+            if path is not None:
+                result["path"] = str(path)
+            return c.Outcome(result, text=text if path is None else None)
+
+        c.execute(get_context, common, video, body)

@@ -37,3 +37,10 @@ class NetworkError(LingotubeError):
 class ValidationError(LingotubeError):
     code = "validation"
     exit_code = 7
+
+
+class UsageError(LingotubeError):
+    """Wrong or missing command-line parameters (same exit code as the parser's own errors)."""
+
+    code = "usage"
+    exit_code = 2

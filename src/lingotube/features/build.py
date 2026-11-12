@@ -77,3 +77,56 @@ class BuildFeature:
             CacheKey(video_id, "subtitles", language, "agent", PROMPT_VERSION), result.to_dict()
         )
         return result
+
+
+def _read_json(path) -> Any:
+    import json
+
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        raise ValidationError(f"Файл перевода не найден: {path}") from None
+    except (OSError, ValueError) as e:
+        raise ValidationError(
+            f"Не удалось прочитать файл перевода {path} как JSON UTF-8: {type(e).__name__}.",
+            hint="Файл должен быть в формате транскрипции (раздел 8): video_id, duration, language, cues.",
+        ) from None
+
+
+def register(app, get_context) -> None:
+    """Adds the `build` command: validates an agent's translation and writes subtitles."""
+    import asyncio
+    from pathlib import Path
+    from typing import Annotated
+
+    import typer
+
+    from lingotube import commands as c
+    from lingotube.writers import render
+
+    FromOpt = Annotated[Path, typer.Option("--from", help="Файл с переведённой транскрипцией (JSON).")]
+
+    @app.command("build", help="Сверяет готовый перевод с оригиналом и собирает субтитры.")
+    def build(
+        video: c.VideoArg,
+        source: FromOpt,
+        lang: c.LangOpt = None,
+        fmt: c.FormatOpt = None,
+        output: c.OutputOpt = None,
+        offset: c.OffsetOpt = 0.0,
+        json_: c.JsonOpt = False,
+    ) -> None:
+        common = c.Common(json=json_)
+
+        async def body(ctx: c.AppContext, video_id: str | None) -> c.Outcome:
+            assert video_id is not None
+            language = c.require_lang(lang, ctx.settings)
+            fmt_ = c.require_format(fmt, ctx.settings)
+            shift = c.require_offset(offset)
+            translated = await asyncio.to_thread(_read_json, ctx.path(source))
+            feature = await ctx.provide(ctx.container.build_feature)
+            result = await feature.run(video_id, language, translated)
+            return await c.transcript_outcome(ctx, result, render(result, fmt_, shift), fmt_, output)
+
+        c.execute(get_context, common, video, body)
