@@ -679,3 +679,95 @@ async def test_short_cookie_values_are_not_masked(
         await session.ask(prompt="q")
     assert "HTTP 2019" in str(e.value)
     assert "abcd" not in str(e.value)
+
+
+async def test_exhausted_retries_error_has_no_chained_cause(
+    mock,
+    http,
+    ftime,
+):
+    route_page(mock=mock)
+    mock.post(url=PANEL).mock(return_value=httpx.Response(status_code=500))
+    session = await make_client(
+        http=http,
+        ftime=ftime,
+    ).open(video_id=VIDEO)
+    with pytest.raises(expected_exception=NetworkError) as e:
+        await session.ask(prompt="q")
+    assert e.value.__cause__ is None and e.value.__suppress_context__
+
+
+async def test_non_transport_http_error_has_no_chained_cause(
+    mock,
+    http,
+    ftime,
+):
+    route_page(mock=mock)
+    mock.post(url=PANEL).mock(
+        side_effect=httpx.TooManyRedirects(message=f"loop {SAPISID}")
+    )
+    session = await make_client(
+        http=http,
+        ftime=ftime,
+    ).open(video_id=VIDEO)
+    with pytest.raises(expected_exception=NetworkError) as e:
+        await session.ask(prompt="q")
+    assert e.value.__cause__ is None and e.value.__suppress_context__
+    assert SAPISID not in str(e.value) and "***" in str(e.value)
+
+
+async def test_http_403_is_auth_error_and_leaks_nothing(
+    mock,
+    http,
+    ftime,
+):
+    route_page(mock=mock)
+    panel = mock.post(url=PANEL).mock(
+        return_value=httpx.Response(
+            status_code=403,
+            text=f"denied {SAPISID} {SID}",
+            headers={"x-echo": SAPISID},
+        )
+    )
+    session = await make_client(
+        http=http,
+        ftime=ftime,
+    ).open(video_id=VIDEO)
+    with pytest.raises(expected_exception=AuthError) as e:
+        await session.ask(prompt="q")
+    assert e.value.exit_code == 4
+    assert "403" in str(e.value)
+    text = str(e.value) + (e.value.hint or "")
+    assert SAPISID not in text and SID not in text
+    assert panel.call_count == 1
+
+
+async def test_http_429_is_retried_paced_and_leaks_nothing(
+    mock,
+    http,
+    ftime,
+):
+    route_page(mock=mock)
+    starts: list[float] = []
+
+    def on_panel(request: httpx.Request) -> httpx.Response:
+        starts.append(ftime.now)
+        return httpx.Response(
+            status_code=429,
+            text=f"slow down {SAPISID} {SID}",
+        )
+
+    mock.post(url=PANEL).mock(side_effect=on_panel)
+    session = await make_client(
+        http=http,
+        ftime=ftime,
+        min_interval=5.0,
+    ).open(video_id=VIDEO)
+    with pytest.raises(expected_exception=NetworkError) as e:
+        await session.ask(prompt="q")
+    assert e.value.exit_code == 6
+    assert "429" in str(e.value)
+    text = str(e.value) + (e.value.hint or "")
+    assert SAPISID not in text and SID not in text
+    assert len(starts) == 3
+    assert all(b - a >= 5.0 for a, b in zip(starts, starts[1:], strict=False))

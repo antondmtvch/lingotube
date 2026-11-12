@@ -139,3 +139,26 @@ async def test_cookie_with_control_characters_is_dropped(tmp_path):
     creds = await FileCookieSource(path=p).load()
     assert "SID" not in creds.cookies
     assert "ab" not in repr(creds) and "cd" not in repr(creds)
+
+
+@pytest.mark.skipif(
+    condition=os.name == "nt",
+    reason="POSIX permissions",
+)
+async def test_file_0600_gives_no_warning(tmp_path):
+    p = tmp_path / "c.txt"
+    p.write_text(
+        data=H
+        + row(
+            domain=".youtube.com",
+            name="SAPISID",
+            value="a",
+        )
+    )
+    p.chmod(mode=0o600)
+    msgs = []
+    await FileCookieSource(
+        path=p,
+        warn=msgs.append,
+    ).load()
+    assert msgs == []
