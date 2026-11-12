@@ -94,3 +94,8 @@ def test_end_before_start_gives_none_end():
 
 def test_minutes_over_99_in_ms_form():
     assert parse_answer("(105:30) x") == [ParsedLine(6330.0, None, "x")]
+
+
+def test_bullet_with_several_spaces_and_bold():
+    assert parse_answer("-  **(0:02-0:04)** x") == [ParsedLine(2.0, 4.0, "x")]
+    assert parse_answer("*   (0:02) x") == [ParsedLine(2.0, None, "x")]
