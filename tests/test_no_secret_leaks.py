@@ -34,12 +34,12 @@ URL = f"https://www.youtube.com/watch?v={VID}"
 FIX = Path(__file__).parent / "fixtures"
 YT = "https://www.youtube.com"
 MODEL_URL = "https://model.test/v1/chat/completions"
-_RANGE = re.compile(r"с (\d+(?::\d\d)+) по (\d+(?::\d\d)+)")
+_RANGE = re.compile(pattern=r"с (\d+(?::\d\d)+) по (\d+(?::\d\d)+)")
 
 
 def _secs(stamp: str) -> int:
     total = 0
-    for part in stamp.split(":"):
+    for part in stamp.split(sep=":"):
         total = total * 60 + int(part)
     return total
 
@@ -48,15 +48,32 @@ def _stamp(t: int) -> str:
     return f"{t // 60}:{t % 60:02}"
 
 
-def _answer(prompt: str, stop: int | None) -> str:
-    match = _RANGE.search(prompt)
+def _answer(
+    prompt: str,
+    stop: int | None,
+) -> str:
+    match = _RANGE.search(string=prompt)
     if match is None:
         return "Краткое содержание видео."
-    start, end = _secs(match.group(1)), _secs(match.group(2))
-    end = min(end, stop) if stop is not None else end
+    start, end = _secs(stamp=match.group(1)), _secs(stamp=match.group(2))
+    end = (
+        min(
+            end,
+            stop,
+        )
+        if stop is not None
+        else end
+    )
     if start >= end:
-        return f"({_stamp(start)}) конец"
-    return "\n".join(f"({_stamp(t)}) реплика {t}" for t in range(start, end, 10))
+        return f"({_stamp(t=start)}) конец"
+    return "\n".join(
+        f"({_stamp(t=t)}) реплика {t}"
+        for t in range(
+            start,
+            end,
+            10,
+        )
+    )
 
 
 def watch_page(duration: int) -> str:
@@ -75,7 +92,7 @@ def watch_page(duration: int) -> str:
         "videoDetails": {
             "videoId": VID,
             "title": "Видео",
-            "lengthSeconds": str(duration),
+            "lengthSeconds": str(object=duration),
         },
         "captions": {
             "playerCaptionsTracklistRenderer": {
@@ -90,16 +107,20 @@ def watch_page(duration: int) -> str:
         },
     }
     return (
-        f"<html><body><script>ytcfg.set({json.dumps(cfg)});</script>"
-        f"<script>var ytInitialPlayerResponse = {json.dumps(player)};</script></body></html>"
+        f"<html><body><script>ytcfg.set({json.dumps(obj=cfg)});</script>"
+        f"<script>var ytInitialPlayerResponse = {json.dumps(obj=player)};</script></body></html>"
     )
 
 
 def next_response(name: str = "next_eligible.json") -> dict:
     text = (FIX / name).read_text(encoding="utf-8")
     return json.loads(
-        text.replace("FAKE_CONTINUATION_1", f"{TOKEN}_CONT").replace(
-            "FAKE_CTP_1", f"{TOKEN}_CTP"
+        s=text.replace(
+            "FAKE_CONTINUATION_1",
+            f"{TOKEN}_CONT",
+        ).replace(
+            "FAKE_CTP_1",
+            f"{TOKEN}_CTP",
         )
     )
 
@@ -123,7 +144,7 @@ def panel_response(answer: str) -> dict:
 
 
 def prompt_of(request: httpx.Request) -> str:
-    return json.loads(request.content)["formData"]["inputComposerFormData"][
+    return json.loads(s=request.content)["formData"]["inputComposerFormData"][
         "userInputText"
     ]
 
@@ -155,115 +176,189 @@ TR_SCENARIOS = [
 ]
 
 
-def failure(request: httpx.Request, scenario: str, known: str) -> httpx.Response | None:
+def failure(
+    request: httpx.Request,
+    scenario: str,
+    known: str,
+) -> httpx.Response | None:
     """The response (or raised error) of a failing endpoint; None when it should work.
 
     `known`: a chat token the client already holds when this endpoint is called."""
     if scenario == "http_500":
-        return httpx.Response(500, text=f"oops {known} {SAPISID}")
+        return httpx.Response(
+            status_code=500,
+            text=f"oops {known} {SAPISID}",
+        )
     if scenario == "transport":
         raise httpx.ConnectError(
-            f"connect failed {known} {SAPISID} {SID}", request=request
+            message=f"connect failed {known} {SAPISID} {SID}",
+            request=request,
         )
     if scenario == "not_json":
-        return httpx.Response(200, text=f"<html>{known}</html>")
+        return httpx.Response(
+            status_code=200,
+            text=f"<html>{known}</html>",
+        )
     if scenario == "internal":
         raise RuntimeError(f"unexpected {known} {SAPISID}")
     return None
 
 
 def route_youtube(
-    router: respx.MockRouter, scenario: str, fail_at: str = "get_panel"
+    router: respx.MockRouter,
+    scenario: str,
+    fail_at: str = "get_panel",
 ) -> None:
     """`fail_at`: which endpoint the transport/HTTP/internal failures hit."""
     duration = 600 if scenario == "incomplete" else 30
     if scenario == "forbidden":
-        router.get(f"{YT}/watch").mock(
-            return_value=httpx.Response(403, text=f"denied {TOKEN}")
+        router.get(url=f"{YT}/watch").mock(
+            return_value=httpx.Response(
+                status_code=403,
+                text=f"denied {TOKEN}",
+            )
         )
     else:
-        router.get(f"{YT}/watch").mock(
-            return_value=httpx.Response(200, text=watch_page(duration))
+        router.get(url=f"{YT}/watch").mock(
+            return_value=httpx.Response(
+                status_code=200,
+                text=watch_page(duration=duration),
+            )
         )
     nxt = {"signed_out": "next_signed_out.json", "no_chat": "next_no_chat.json"}.get(
-        scenario, "next_eligible.json"
+        scenario,
+        "next_eligible.json",
     )
 
     def next_(request: httpx.Request) -> httpx.Response:
         failed = (
-            failure(request, scenario, f"{TOKEN}_VISITOR")
+            failure(
+                request=request,
+                scenario=scenario,
+                known=f"{TOKEN}_VISITOR",
+            )
             if fail_at == "next"
             else None
         )
-        return failed or httpx.Response(200, json=next_response(nxt))
+        return failed or httpx.Response(
+            status_code=200,
+            json=next_response(name=nxt),
+        )
 
     def panel(request: httpx.Request) -> httpx.Response:
         failed = (
-            failure(request, scenario, f"{TOKEN}_CONT")
+            failure(
+                request=request,
+                scenario=scenario,
+                known=f"{TOKEN}_CONT",
+            )
             if fail_at == "get_panel"
             else None
         )
         if failed is not None:
             return failed
         if scenario == "empty_answer":
-            return httpx.Response(200, json=panel_response("Не могу ответить."))
+            return httpx.Response(
+                status_code=200,
+                json=panel_response(answer="Не могу ответить."),
+            )
         stop = 100 if scenario == "incomplete" else None
         return httpx.Response(
-            200, json=panel_response(_answer(prompt_of(request), stop))
+            status_code=200,
+            json=panel_response(
+                answer=_answer(
+                    prompt=prompt_of(request=request),
+                    stop=stop,
+                )
+            ),
         )
 
-    router.post(f"{YT}/youtubei/v1/next").mock(side_effect=next_)
-    router.post(f"{YT}/youtubei/v1/get_panel").mock(side_effect=panel)
+    router.post(url=f"{YT}/youtubei/v1/next").mock(side_effect=next_)
+    router.post(url=f"{YT}/youtubei/v1/get_panel").mock(side_effect=panel)
 
 
-def route_translator(router: respx.MockRouter, scenario: str) -> None:
+def route_translator(
+    router: respx.MockRouter,
+    scenario: str,
+) -> None:
     def model(request: httpx.Request) -> httpx.Response:
         if scenario == "tr_401":
-            return httpx.Response(401, json={"error": f"bad key {KEY}"})
+            return httpx.Response(
+                status_code=401,
+                json={"error": f"bad key {KEY}"},
+            )
         if scenario == "tr_500":
-            return httpx.Response(500, text=f"server error {KEY}")
+            return httpx.Response(
+                status_code=500,
+                text=f"server error {KEY}",
+            )
         if scenario == "tr_transport":
-            raise httpx.ConnectError(f"cannot reach model with {KEY}", request=request)
+            raise httpx.ConnectError(
+                message=f"cannot reach model with {KEY}",
+                request=request,
+            )
         if scenario == "tr_redirect":
             return httpx.Response(
-                302, headers={"location": f"https://evil.test/?k={KEY}"}
+                status_code=302,
+                headers={"location": f"https://evil.test/?k={KEY}"},
             )
         if scenario == "tr_garbage":
             return httpx.Response(
-                200, json={"choices": [{"message": {"content": "не перевод"}}]}
+                status_code=200,
+                json={"choices": [{"message": {"content": "не перевод"}}]},
             )
-        user = json.loads(request.content)["messages"][1]["content"]
-        lines = [line.split("\t", 1) for line in user.split("\n")]
+        user = json.loads(s=request.content)["messages"][1]["content"]
+        lines = [
+            line.split(
+                sep="\t",
+                maxsplit=1,
+            )
+            for line in user.split(sep="\n")
+        ]
         content = "\n".join(f"{n}\tперевод {text}" for n, text in lines)
         return httpx.Response(
-            200, json={"choices": [{"message": {"content": content}}]}
+            status_code=200,
+            json={"choices": [{"message": {"content": content}}]},
         )
 
-    router.post(MODEL_URL).mock(side_effect=model)
+    router.post(url=MODEL_URL).mock(side_effect=model)
 
 
 # --- harness ---
 
 
-def write_cookies(path: Path, with_sapisid: bool = True) -> None:
+def write_cookies(
+    path: Path,
+    with_sapisid: bool = True,
+) -> None:
     lines = ["# Netscape HTTP Cookie File"]
     if with_sapisid:
         lines.append(f".youtube.com\tTRUE\t/\tTRUE\t2000000000\tSAPISID\t{SAPISID}")
     lines.append(f"#HttpOnly_.youtube.com\tTRUE\t/\tTRUE\t2000000000\tSID\t{SID}")
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    path.write_text(
+        data="\n".join(lines) + "\n",
+        encoding="utf-8",
+    )
 
 
 class Leak:
-    def __init__(self, tmp_path: Path, scenario: str) -> None:
+    def __init__(
+        self,
+        tmp_path: Path,
+        scenario: str,
+    ) -> None:
         self.tmp = tmp_path
         self.scenario = scenario
         self.cookies = tmp_path / "secret.cookies.txt"
         write_cookies(
-            self.cookies, with_sapisid=scenario not in ("no_cookies", "browser_fails")
+            path=self.cookies,
+            with_sapisid=scenario not in ("no_cookies", "browser_fails"),
         )
         translator = (
             TranslatorSettings(
-                base_url="https://model.test/v1", model="m", api_key_env=KEY_ENV
+                base_url="https://model.test/v1",
+                model="m",
+                api_key_env=KEY_ENV,
             )
             if scenario.startswith("tr_")
             else None
@@ -285,12 +380,21 @@ class Leak:
             return {"SAPISID": SAPISID, "SID": SID}
         raise OSError(f"cannot decrypt {SID} in C:/profiles/{SAPISID}/Cookies")
 
-    def factory(self, out, err) -> AppContext:
+    def factory(
+        self,
+        out,
+        err,
+    ) -> AppContext:
         container = build_container(
-            settings=self.settings, env=self.env, cache_dir=self.tmp / "cache", err=err
+            settings=self.settings,
+            env=self.env,
+            cache_dir=self.tmp / "cache",
+            err=err,
         )
         # never touch a real browser profile in tests
-        container.browser_loader.override(providers.Object(self.browser_loader))
+        container.browser_loader.override(
+            provider=providers.Object(self.browser_loader)
+        )
         return AppContext(
             container=container,
             out=out,
@@ -301,20 +405,32 @@ class Leak:
 
     def run(self, *argv: str) -> tuple[int, str, str]:
         out, err = io.StringIO(), io.StringIO()
-        code = cli.run(list(argv), out=out, err=err, context_factory=self.factory)
+        code = cli.run(
+            argv=list(argv),
+            out=out,
+            err=err,
+            context_factory=self.factory,
+        )
         return code, out.getvalue(), err.getvalue()
 
-    def assert_clean(self, code: int, out: str, err: str, json_mode: bool) -> None:
+    def assert_clean(
+        self,
+        code: int,
+        out: str,
+        err: str,
+        json_mode: bool,
+    ) -> None:
         assert MARK not in out, out
         assert MARK not in err, err
-        for path in self.tmp.rglob("*"):
+        for path in self.tmp.rglob(pattern="*"):
             if path.is_file() and path != self.cookies:
                 assert MARK not in path.read_text(
-                    encoding="utf-8", errors="replace"
+                    encoding="utf-8",
+                    errors="replace",
                 ), path
         assert "Traceback" not in out + err
         if json_mode:
-            doc = json.loads(out)
+            doc = json.loads(s=out)
             assert doc["ok"] is (code == 0)
 
 
@@ -323,36 +439,80 @@ def browser_args(scenario: str) -> list[str]:
 
 
 def youtube_saw_cookies(router: respx.MockRouter) -> bool:
-    return any(SAPISID in c.request.headers.get("cookie", "") for c in router.calls)
+    return any(
+        SAPISID
+        in c.request.headers.get(
+            key="cookie",
+            default="",
+        )
+        for c in router.calls
+    )
 
 
-MODES = [pytest.param(False, id="plain"), pytest.param(True, id="json")]
+MODES = [
+    pytest.param(
+        False,
+        id="plain",
+    ),
+    pytest.param(
+        True,
+        id="json",
+    ),
+]
 
 
 @pytest.fixture
 def router():
-    with respx.mock(assert_all_mocked=True, assert_all_called=False) as mock:
+    with respx.mock(
+        assert_all_mocked=True,
+        assert_all_called=False,
+    ) as mock:
         yield mock
 
 
-@pytest.mark.parametrize("json_mode", MODES)
-@pytest.mark.parametrize("scenario", YT_SCENARIOS + TR_SCENARIOS)
-def test_subs_never_leaks(tmp_path, router, scenario, json_mode):
-    route_youtube(router, "ok" if scenario.startswith("tr_") else scenario)
-    route_translator(router, scenario)
-    leak = Leak(tmp_path, scenario)
+@pytest.mark.parametrize(
+    argnames="json_mode",
+    argvalues=MODES,
+)
+@pytest.mark.parametrize(
+    argnames="scenario",
+    argvalues=YT_SCENARIOS + TR_SCENARIOS,
+)
+def test_subs_never_leaks(
+    tmp_path,
+    router,
+    scenario,
+    json_mode,
+):
+    route_youtube(
+        router=router,
+        scenario="ok" if scenario.startswith("tr_") else scenario,
+    )
+    route_translator(
+        router=router,
+        scenario=scenario,
+    )
+    leak = Leak(
+        tmp_path=tmp_path,
+        scenario=scenario,
+    )
     argv = [
         "subs",
         URL,
         "--lang",
         "ru",
-        *browser_args(scenario),
+        *browser_args(scenario=scenario),
         *(["--json"] if json_mode else []),
     ]
     code, out, err = leak.run(*argv)
-    leak.assert_clean(code, out, err, json_mode)
+    leak.assert_clean(
+        code=code,
+        out=out,
+        err=err,
+        json_mode=json_mode,
+    )
     if scenario not in ("no_cookies", "browser_fails"):
-        assert youtube_saw_cookies(router)  # the secrets really were in play
+        assert youtube_saw_cookies(router=router)  # the secrets really were in play
     if scenario.startswith("tr_"):
         model_calls = [c for c in router.calls if c.request.url.host == "model.test"]
         assert (
@@ -366,37 +526,81 @@ def test_subs_never_leaks(tmp_path, router, scenario, json_mode):
         assert code != 0
 
 
-@pytest.mark.parametrize("json_mode", MODES)
-@pytest.mark.parametrize("scenario", YT_SCENARIOS)
-def test_transcript_never_leaks(tmp_path, router, scenario, json_mode):
-    route_youtube(router, scenario)
-    leak = Leak(tmp_path, scenario)
+@pytest.mark.parametrize(
+    argnames="json_mode",
+    argvalues=MODES,
+)
+@pytest.mark.parametrize(
+    argnames="scenario",
+    argvalues=YT_SCENARIOS,
+)
+def test_transcript_never_leaks(
+    tmp_path,
+    router,
+    scenario,
+    json_mode,
+):
+    route_youtube(
+        router=router,
+        scenario=scenario,
+    )
+    leak = Leak(
+        tmp_path=tmp_path,
+        scenario=scenario,
+    )
     argv = [
         "transcript",
         URL,
-        *browser_args(scenario),
+        *browser_args(scenario=scenario),
         *(["--json"] if json_mode else []),
     ]
     code, out, err = leak.run(*argv)
-    leak.assert_clean(code, out, err, json_mode)
+    leak.assert_clean(
+        code=code,
+        out=out,
+        err=err,
+        json_mode=json_mode,
+    )
     assert (code == 0) is (scenario in ("ok", "browser_ok"))
 
 
-@pytest.mark.parametrize("json_mode", MODES)
-@pytest.mark.parametrize("scenario", [s for s in YT_SCENARIOS if s != "incomplete"])
-def test_summary_never_leaks(tmp_path, router, scenario, json_mode):
-    route_youtube(router, scenario)
-    leak = Leak(tmp_path, scenario)
+@pytest.mark.parametrize(
+    argnames="json_mode",
+    argvalues=MODES,
+)
+@pytest.mark.parametrize(
+    argnames="scenario",
+    argvalues=[s for s in YT_SCENARIOS if s != "incomplete"],
+)
+def test_summary_never_leaks(
+    tmp_path,
+    router,
+    scenario,
+    json_mode,
+):
+    route_youtube(
+        router=router,
+        scenario=scenario,
+    )
+    leak = Leak(
+        tmp_path=tmp_path,
+        scenario=scenario,
+    )
     argv = [
         "summary",
         URL,
         "--lang",
         "ru",
-        *browser_args(scenario),
+        *browser_args(scenario=scenario),
         *(["--json"] if json_mode else []),
     ]
     code, out, err = leak.run(*argv)
-    leak.assert_clean(code, out, err, json_mode)
+    leak.assert_clean(
+        code=code,
+        out=out,
+        err=err,
+        json_mode=json_mode,
+    )
     assert (code == 0) is (scenario in ("ok", "browser_ok", "empty_answer"))
 
 
@@ -410,14 +614,39 @@ BUILD_CASES = [
 ]
 
 
-@pytest.mark.parametrize("json_mode", MODES)
-@pytest.mark.parametrize("case", BUILD_CASES)
-def test_build_never_leaks(tmp_path, router, case, json_mode):
-    route_youtube(router, "ok")
-    leak = Leak(tmp_path, "ok")
+@pytest.mark.parametrize(
+    argnames="json_mode",
+    argvalues=MODES,
+)
+@pytest.mark.parametrize(
+    argnames="case",
+    argvalues=BUILD_CASES,
+)
+def test_build_never_leaks(
+    tmp_path,
+    router,
+    case,
+    json_mode,
+):
+    route_youtube(
+        router=router,
+        scenario="ok",
+    )
+    leak = Leak(
+        tmp_path=tmp_path,
+        scenario="ok",
+    )
     if case != "no_original":
-        assert leak.run("transcript", URL, "-o", "orig.json")[0] == 0
-        data = json.loads((tmp_path / "orig.json").read_text(encoding="utf-8"))
+        assert (
+            leak.run(
+                "transcript",
+                URL,
+                "-o",
+                "orig.json",
+            )[0]
+            == 0
+        )
+        data = json.loads(s=(tmp_path / "orig.json").read_text(encoding="utf-8"))
     else:
         data = {
             "video_id": VID,
@@ -435,9 +664,18 @@ def test_build_never_leaks(tmp_path, router, case, json_mode):
         data["video_id"] = "zzzzzzzzzzz"
     source = tmp_path / "ru.json"
     if case == "broken_json":
-        source.write_text("{not json", encoding="utf-8")
+        source.write_text(
+            data="{not json",
+            encoding="utf-8",
+        )
     elif case != "missing_file":
-        source.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        source.write_text(
+            data=json.dumps(
+                obj=data,
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
     code, out, err = leak.run(
         "build",
         URL,
@@ -447,7 +685,12 @@ def test_build_never_leaks(tmp_path, router, case, json_mode):
         "ru.json",
         *(["--json"] if json_mode else []),
     )
-    leak.assert_clean(code, out, err, json_mode)
+    leak.assert_clean(
+        code=code,
+        out=out,
+        err=err,
+        json_mode=json_mode,
+    )
     assert (code == 0) is (case == "ok")
 
 
@@ -466,25 +709,48 @@ DOCTOR_SCENARIOS = [
 ]
 
 
-@pytest.mark.parametrize("json_mode", MODES)
-@pytest.mark.parametrize("scenario", DOCTOR_SCENARIOS)
-def test_doctor_never_leaks(tmp_path, router, scenario, json_mode):
-    route_youtube(router, scenario, fail_at="next")  # doctor only opens the chat
-    leak = Leak(tmp_path, scenario)
+@pytest.mark.parametrize(
+    argnames="json_mode",
+    argvalues=MODES,
+)
+@pytest.mark.parametrize(
+    argnames="scenario",
+    argvalues=DOCTOR_SCENARIOS,
+)
+def test_doctor_never_leaks(
+    tmp_path,
+    router,
+    scenario,
+    json_mode,
+):
+    route_youtube(
+        router=router,
+        scenario=scenario,
+        fail_at="next",
+    )  # doctor only opens the chat
+    leak = Leak(
+        tmp_path=tmp_path,
+        scenario=scenario,
+    )
     argv = [
         "doctor",
         "--video",
         VID,
-        *browser_args(scenario),
+        *browser_args(scenario=scenario),
         *(["--json"] if json_mode else []),
     ]
     code, out, err = leak.run(*argv)
-    leak.assert_clean(code, out, err, json_mode)
+    leak.assert_clean(
+        code=code,
+        out=out,
+        err=err,
+        json_mode=json_mode,
+    )
     assert (
         leak.loaded_browsers
     )  # browser sources were checked with secret-bearing failures
     if scenario not in ("no_cookies", "browser_fails"):
-        assert youtube_saw_cookies(router)
+        assert youtube_saw_cookies(router=router)
     assert not any(
         c.request.url.path.endswith("get_panel") for c in router.calls
     )  # open() only, never ask

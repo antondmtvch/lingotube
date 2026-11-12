@@ -41,7 +41,9 @@ async def youtube_http() -> AsyncIterator[httpx.AsyncClient]:
     travel only in the explicit header built by the chat client."""
     jar = CookieJar(policy=DefaultCookiePolicy(allowed_domains=[]))
     async with httpx.AsyncClient(
-        follow_redirects=False, cookies=jar, trust_env=False
+        follow_redirects=False,
+        cookies=jar,
+        trust_env=False,
     ) as client:
         yield client
 
@@ -50,7 +52,8 @@ async def youtube_http() -> AsyncIterator[httpx.AsyncClient]:
 async def translator_http() -> AsyncIterator[httpx.AsyncClient]:
     """The translator's own client: never carries YouTube cookies."""
     async with httpx.AsyncClient(
-        follow_redirects=False, timeout=TRANSLATOR_TIMEOUT
+        follow_redirects=False,
+        timeout=TRANSLATOR_TIMEOUT,
     ) as client:
         yield client
 
@@ -64,7 +67,7 @@ def stream_writer(stream: TextIO) -> Callable[[str], None]:
 
 
 def progress_writer(stream: TextIO) -> Callable[[int, int], None]:
-    write = stream_writer(stream)
+    write = stream_writer(stream=stream)
     return lambda done, total: write(f"часть {done} из {total}")
 
 
@@ -77,10 +80,23 @@ def make_cookie_source(
     loader: BrowserLoader = default_loader,
 ) -> CookieSource:
     if settings.cookies_file is not None:
-        return FileCookieSource(settings.cookies_file, warn=warn)
+        return FileCookieSource(
+            path=settings.cookies_file,
+            warn=warn,
+        )
     if settings.browser is not None:
-        return BrowserCookieSource(settings.browser, loader=loader)
-    return ChainCookieSource([BrowserCookieSource(None, loader=loader)])
+        return BrowserCookieSource(
+            browser=settings.browser,
+            loader=loader,
+        )
+    return ChainCookieSource(
+        sources=[
+            BrowserCookieSource(
+                browser=None,
+                loader=loader,
+            )
+        ]
+    )
 
 
 def make_doctor_sources(
@@ -92,36 +108,53 @@ def make_doctor_sources(
     (only the chosen one when a browser is set)."""
     sources: dict[str, CookieSource] = {
         FILE_SOURCE: (
-            FileCookieSource(settings.cookies_file, warn=warn)
+            FileCookieSource(
+                path=settings.cookies_file,
+                warn=warn,
+            )
             if settings.cookies_file is not None
             else UnsetCookieFile()
         )
     }
     for browser in (settings.browser,) if settings.browser is not None else BROWSERS:
-        sources[browser_source_name(browser)] = BrowserCookieSource(
-            browser, loader=loader
+        sources[browser_source_name(browser=browser)] = BrowserCookieSource(
+            browser=browser,
+            loader=loader,
         )
     return sources
 
 
 def make_ask_factory(
-    http: httpx.AsyncClient, pacer: Pacer, max_retries: int
+    http: httpx.AsyncClient,
+    pacer: Pacer,
+    max_retries: int,
 ) -> Callable[[CookieSource], AskClient]:
     """A chat client per cookie source (doctor tries sources one by one); one shared pacer."""
-    return lambda source: YouTubeAskClient(http, source, pacer, max_retries=max_retries)
+    return lambda source: YouTubeAskClient(
+        http=http,
+        cookies=source,
+        pacer=pacer,
+        max_retries=max_retries,
+    )
 
 
 def translator_mode(settings: Settings) -> str:
     return "own_model" if settings.translator is not None else "none"
 
 
-def translator_api_key(settings: Settings, env: Mapping[str, str]) -> str:
+def translator_api_key(
+    settings: Settings,
+    env: Mapping[str, str],
+) -> str:
     assert settings.translator is not None
     name = settings.translator.api_key_env
-    key = env.get(name, "").strip()
+    key = env.get(
+        name,
+        "",
+    ).strip()
     if not key:
         raise AuthError(
-            "Не задан ключ модели перевода.",
+            message="Не задан ключ модели перевода.",
             hint=f"Задайте ключ в переменной окружения {name} (ключ не передаётся параметром команды).",
         )
     return key
@@ -133,55 +166,101 @@ class Container(containers.DeclarativeContainer):
     cache_dir = providers.Dependency(instance_of=Path)
     err = providers.Dependency()
 
-    warn = providers.Singleton(stream_writer, err)
-    progress = providers.Singleton(progress_writer, err)
+    warn = providers.Singleton(
+        stream_writer,
+        stream=err,
+    )
+    progress = providers.Singleton(
+        progress_writer,
+        stream=err,
+    )
 
     http = providers.Resource(youtube_http)
     translator_http = providers.Resource(translator_http)
 
     browser_loader = providers.Object(default_loader)
     cookie_source = providers.Singleton(
-        make_cookie_source, settings, warn, browser_loader
+        make_cookie_source,
+        settings=settings,
+        warn=warn,
+        loader=browser_loader,
     )
     doctor_sources = providers.Singleton(
-        make_doctor_sources, settings, warn, browser_loader
+        make_doctor_sources,
+        settings=settings,
+        warn=warn,
+        loader=browser_loader,
     )
-    pacer = providers.Singleton(Pacer, settings.provided.min_interval)
+    pacer = providers.Singleton(
+        Pacer,
+        min_interval=settings.provided.min_interval,
+    )
     ask_client = providers.Singleton(
         YouTubeAskClient,
-        http,
-        cookie_source,
-        pacer,
+        http=http,
+        cookies=cookie_source,
+        pacer=pacer,
         max_retries=settings.provided.max_retries,
     )
     ask_factory = providers.Singleton(
-        make_ask_factory, http, pacer, settings.provided.max_retries
+        make_ask_factory,
+        http=http,
+        pacer=pacer,
+        max_retries=settings.provided.max_retries,
     )
-    cache = providers.Singleton(Cache, cache_dir)
+    cache = providers.Singleton(
+        Cache,
+        root=cache_dir,
+    )
 
     translator = providers.Selector(
-        providers.Callable(translator_mode, settings),
+        selector=providers.Callable(
+            translator_mode,
+            settings=settings,
+        ),
         own_model=providers.Singleton(
             OpenAICompatTranslator,
-            translator_http,
-            settings.provided.translator,
-            providers.Callable(translator_api_key, settings, env),
+            http=translator_http,
+            settings=settings.provided.translator,
+            api_key=providers.Callable(
+                translator_api_key,
+                settings=settings,
+                env=env,
+            ),
         ),
         none=providers.Object(None),
     )
 
     transcript_feature = providers.Factory(
-        TranscriptFeature, ask_client, cache, settings, progress
+        TranscriptFeature,
+        ask=ask_client,
+        cache=cache,
+        settings=settings,
+        progress=progress,
     )
     subtitles_feature = providers.Factory(
-        SubtitlesFeature, transcript_feature, translator, cache
+        SubtitlesFeature,
+        transcripts=transcript_feature,
+        translator=translator,
+        cache=cache,
     )
-    summary_feature = providers.Factory(SummaryFeature, ask_client, cache)
-    build_feature = providers.Factory(BuildFeature, cache)
+    summary_feature = providers.Factory(
+        SummaryFeature,
+        ask=ask_client,
+        cache=cache,
+    )
+    build_feature = providers.Factory(
+        BuildFeature,
+        cache=cache,
+    )
 
 
 def build_container(
-    *, settings: Settings, env: Mapping[str, str], cache_dir: Path, err: TextIO
+    *,
+    settings: Settings,
+    env: Mapping[str, str],
+    cache_dir: Path,
+    err: TextIO,
 ) -> Container:
     return Container(
         settings=providers.Object(settings),

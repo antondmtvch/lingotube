@@ -8,12 +8,33 @@ from lingotube.features.transcript import TranscriptResult
 from lingotube.models import Cue, Transcript
 
 VID = "vid123"
-OK = Completeness(True, 10.0, ())
+OK = Completeness(
+    complete=True,
+    last_end=10.0,
+    gaps=(),
+)
 
 
 def make_transcript(language: str | None) -> Transcript:
     return Transcript(
-        VID, 10.0, language, "1", (Cue(1, 0.0, 5.0, "hello"), Cue(2, 5.0, 10.0, "bye"))
+        video_id=VID,
+        duration=10.0,
+        language=language,
+        prompt_version="1",
+        cues=(
+            Cue(
+                id=1,
+                start=0.0,
+                end=5.0,
+                text="hello",
+            ),
+            Cue(
+                id=2,
+                start=5.0,
+                end=10.0,
+                text="bye",
+            ),
+        ),
     )
 
 
@@ -27,33 +48,67 @@ class FakeTranscripts:
         self.original_language = original_language
         self.result = result
 
-    async def run(self, video_id, language=None, *, use_cache=True):
+    async def run(
+        self,
+        video_id,
+        language=None,
+        *,
+        use_cache=True,
+    ):
         self.calls.append((video_id, language))
         if self.result is not None:
             return self.result
         lang = language if language is not None else self.original_language
-        return TranscriptResult(make_transcript(lang), OK, ())
+        return TranscriptResult(
+            transcript=make_transcript(language=lang),
+            completeness=OK,
+            warnings=(),
+        )
 
 
 class FakeTranslator:
     def __init__(self):
         self.calls: list[str] = []
 
-    async def translate(self, cues: Sequence[Cue], target_language: str) -> list[Cue]:
+    async def translate(
+        self,
+        cues: Sequence[Cue],
+        target_language: str,
+    ) -> list[Cue]:
         self.calls.append(target_language)
-        return [replace(c, text=f"[{target_language}] {c.text}") for c in cues]
+        return [
+            replace(
+                c,
+                text=f"[{target_language}] {c.text}",
+            )
+            for c in cues
+        ]
 
 
 async def test_chat_mode_requests_translated_transcript(tmp_path):
     tr = FakeTranscripts()
-    res = await SubtitlesFeature(tr, None, Cache(tmp_path)).run(VID, "ru")
+    res = await SubtitlesFeature(
+        transcripts=tr,
+        translator=None,
+        cache=Cache(root=tmp_path),
+    ).run(
+        video_id=VID,
+        language="ru",
+    )
     assert tr.calls == [(VID, "ru")]
     assert res.transcript.language == "ru"
 
 
 async def test_own_model_mode_requests_original_then_translates(tmp_path):
     tr, tl = FakeTranscripts(), FakeTranslator()
-    res = await SubtitlesFeature(tr, tl, Cache(tmp_path)).run(VID, "ru")
+    res = await SubtitlesFeature(
+        transcripts=tr,
+        translator=tl,
+        cache=Cache(root=tmp_path),
+    ).run(
+        video_id=VID,
+        language="ru",
+    )
     assert tr.calls == [(VID, None)]
     assert tl.calls == ["ru"]
     assert res.transcript.language == "ru"
@@ -66,8 +121,15 @@ async def test_own_model_mode_requests_original_then_translates(tmp_path):
 
 
 async def test_same_language_skips_translation(tmp_path):
-    tr, tl = FakeTranscripts("ru-RU"), FakeTranslator()
-    res = await SubtitlesFeature(tr, tl, Cache(tmp_path)).run(VID, "ru")
+    tr, tl = FakeTranscripts(original_language="ru-RU"), FakeTranslator()
+    res = await SubtitlesFeature(
+        transcripts=tr,
+        translator=tl,
+        cache=Cache(root=tmp_path),
+    ).run(
+        video_id=VID,
+        language="ru",
+    )
     assert tl.calls == []
     assert res.transcript.language == "ru"
     assert res.transcript.cues[0].text == "hello"
@@ -76,37 +138,82 @@ async def test_same_language_skips_translation(tmp_path):
 async def test_second_language_reuses_cached_original(tmp_path):
     # the original is cached by TranscriptFeature itself; both languages ask only for it
     tr, tl = FakeTranscripts(), FakeTranslator()
-    feature = SubtitlesFeature(tr, tl, Cache(tmp_path))
-    await feature.run(VID, "ru")
-    await feature.run(VID, "es")
+    feature = SubtitlesFeature(
+        transcripts=tr,
+        translator=tl,
+        cache=Cache(root=tmp_path),
+    )
+    await feature.run(
+        video_id=VID,
+        language="ru",
+    )
+    await feature.run(
+        video_id=VID,
+        language="es",
+    )
     assert tr.calls == [(VID, None), (VID, None)]
     assert tl.calls == ["ru", "es"]
 
 
 async def test_translation_cached_per_language_and_mode(tmp_path):
     tr, tl = FakeTranscripts(), FakeTranslator()
-    feature = SubtitlesFeature(tr, tl, Cache(tmp_path))
-    first = await feature.run(VID, "ru")
-    again = await feature.run(VID, "ru")
+    feature = SubtitlesFeature(
+        transcripts=tr,
+        translator=tl,
+        cache=Cache(root=tmp_path),
+    )
+    first = await feature.run(
+        video_id=VID,
+        language="ru",
+    )
+    again = await feature.run(
+        video_id=VID,
+        language="ru",
+    )
     assert tl.calls == ["ru"] and len(tr.calls) == 1
     assert again.transcript == first.transcript
-    await feature.run(VID, "es")
+    await feature.run(
+        video_id=VID,
+        language="es",
+    )
     assert tl.calls == ["ru", "es"]
-    await feature.run(VID, "ru", use_cache=False)
+    await feature.run(
+        video_id=VID,
+        language="ru",
+        use_cache=False,
+    )
     assert tl.calls == ["ru", "es", "ru"]
 
 
 async def test_incomplete_original_propagates_completeness(tmp_path):
-    incomplete = Completeness(False, 5.0, ())
+    incomplete = Completeness(
+        complete=False,
+        last_end=5.0,
+        gaps=(),
+    )
     tr = FakeTranscripts(
-        result=TranscriptResult(make_transcript("en"), incomplete, ("обрыв",))
+        result=TranscriptResult(
+            transcript=make_transcript(language="en"),
+            completeness=incomplete,
+            warnings=("обрыв",),
+        )
     )
     tl = FakeTranslator()
-    feature = SubtitlesFeature(tr, tl, Cache(tmp_path))
-    res = await feature.run(VID, "ru")
+    feature = SubtitlesFeature(
+        transcripts=tr,
+        translator=tl,
+        cache=Cache(root=tmp_path),
+    )
+    res = await feature.run(
+        video_id=VID,
+        language="ru",
+    )
     assert not res.completeness.complete
     assert res.warnings == ("обрыв",)
-    await feature.run(VID, "ru")
+    await feature.run(
+        video_id=VID,
+        language="ru",
+    )
     assert tl.calls == [
         "ru",
         "ru",
@@ -115,6 +222,13 @@ async def test_incomplete_original_propagates_completeness(tmp_path):
 
 async def test_unknown_original_language_is_translated(tmp_path):
     tr, tl = FakeTranscripts(original_language=None), FakeTranslator()
-    res = await SubtitlesFeature(tr, tl, Cache(tmp_path)).run(VID, "ru")
+    res = await SubtitlesFeature(
+        transcripts=tr,
+        translator=tl,
+        cache=Cache(root=tmp_path),
+    ).run(
+        video_id=VID,
+        language="ru",
+    )
     assert tl.calls == ["ru"]
     assert res.transcript.cues[0].text == "[ru] hello"

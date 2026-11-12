@@ -24,7 +24,7 @@ class CacheKey:
     def digest(self) -> str:
         # JSON-encoded list is unambiguous: no field can collide into another.
         raw = json.dumps(
-            [
+            obj=[
                 self.video_id,
                 self.kind,
                 self.language,
@@ -34,7 +34,7 @@ class CacheKey:
             ],
             ensure_ascii=True,
         )
-        return hashlib.sha256(raw.encode("ascii")).hexdigest()
+        return hashlib.sha256(data=raw.encode(encoding="ascii")).hexdigest()
 
 
 class Cache:
@@ -45,32 +45,74 @@ class Cache:
         return self._root / f"{key.digest()}.json"
 
     async def get(self, key: CacheKey) -> dict | None:
-        return await asyncio.to_thread(self._read, self._path(key))
+        return await asyncio.to_thread(
+            self._read,
+            self._path(key=key),
+        )
 
-    async def put(self, key: CacheKey, value: dict) -> None:
-        await asyncio.to_thread(self._write, self._path(key), value)
+    async def put(
+        self,
+        key: CacheKey,
+        value: dict,
+    ) -> None:
+        await asyncio.to_thread(
+            self._write,
+            self._path(key=key),
+            value,
+        )
 
     async def delete(self, key: CacheKey) -> None:
-        await asyncio.to_thread(self._path(key).unlink, True)
+        await asyncio.to_thread(
+            self._path(key=key).unlink,
+            True,
+        )
 
     @staticmethod
     def _read(path: Path) -> dict | None:
         try:
-            data = json.loads(path.read_text(encoding="utf-8"))
+            data = json.loads(s=path.read_text(encoding="utf-8"))
         except OSError, ValueError:  # missing, unreadable, truncated, bad encoding
             return None
-        return data if isinstance(data, dict) else None
+        return (
+            data
+            if isinstance(
+                data,
+                dict,
+            )
+            else None
+        )
 
-    def _write(self, path: Path, value: dict) -> None:
-        payload = json.dumps(value, ensure_ascii=False)
-        self._root.mkdir(parents=True, exist_ok=True)
-        fd, tmp = tempfile.mkstemp(dir=self._root, prefix=".tmp-", suffix=".part")
+    def _write(
+        self,
+        path: Path,
+        value: dict,
+    ) -> None:
+        payload = json.dumps(
+            obj=value,
+            ensure_ascii=False,
+        )
+        self._root.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+        fd, tmp = tempfile.mkstemp(
+            dir=self._root,
+            prefix=".tmp-",
+            suffix=".part",
+        )
         try:
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
+            with os.fdopen(
+                fd=fd,
+                mode="w",
+                encoding="utf-8",
+            ) as f:
                 f.write(payload)
-            os.replace(tmp, path)
+            os.replace(
+                src=tmp,
+                dst=path,
+            )
         finally:
             try:
-                os.unlink(tmp)
+                os.unlink(path=tmp)
             except FileNotFoundError:
                 pass

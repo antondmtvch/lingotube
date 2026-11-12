@@ -17,13 +17,26 @@ def make() -> Transcript:
         duration=750.0,
         language="en",
         prompt_version="1",
-        cues=(Cue(1, 2.0, 4.0, "Help!"), Cue(2, 4.0, None, "x")),
+        cues=(
+            Cue(
+                id=1,
+                start=2.0,
+                end=4.0,
+                text="Help!",
+            ),
+            Cue(
+                id=2,
+                start=4.0,
+                end=None,
+                text="x",
+            ),
+        ),
     )
 
 
 def test_roundtrip():
     t = make()
-    assert Transcript.from_dict(t.to_dict()) == t
+    assert Transcript.from_dict(d=t.to_dict()) == t
 
 
 def test_to_dict_keys():
@@ -33,8 +46,8 @@ def test_to_dict_keys():
 
 
 @pytest.mark.parametrize(
-    "bad",
-    [
+    argnames="bad",
+    argvalues=[
         {"cues": "x"},
         {},
         [],
@@ -46,13 +59,13 @@ def test_to_dict_keys():
     ],
 )
 def test_from_dict_invalid(bad):
-    with pytest.raises(ValidationError):
-        Transcript.from_dict(bad)
+    with pytest.raises(expected_exception=ValidationError):
+        Transcript.from_dict(d=bad)
 
 
 @pytest.mark.parametrize(
-    ("cls", "code", "exit_code"),
-    [
+    argnames=("cls", "code", "exit_code"),
+    argvalues=[
         (ChatUnavailableError, "chat_unavailable", 3),
         (AuthError, "auth", 4),
         (IncompleteError, "incomplete", 5),
@@ -60,13 +73,23 @@ def test_from_dict_invalid(bad):
         (ValidationError, "validation", 7),
     ],
 )
-def test_errors(cls, code, exit_code):
-    e = cls("boom", "try this")
-    assert isinstance(e, LingotubeError)
+def test_errors(
+    cls,
+    code,
+    exit_code,
+):
+    e = cls(
+        message="boom",
+        hint="try this",
+    )
+    assert isinstance(
+        e,
+        LingotubeError,
+    )
     assert (e.code, e.exit_code, e.message, e.hint) == (
         code,
         exit_code,
         "boom",
         "try this",
     )
-    assert str(e) == "boom"
+    assert str(object=e) == "boom"

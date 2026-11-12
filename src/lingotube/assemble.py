@@ -9,18 +9,31 @@ from lingotube.parsing import ParsedLine
 _SEAM_WINDOW = 2.0
 
 
-def plan_ranges(duration: float, chunk_seconds: int) -> list[tuple[float, float]]:
+def plan_ranges(
+    duration: float,
+    chunk_seconds: int,
+) -> list[tuple[float, float]]:
     """Отрезки [начало, конец) подряд длиной chunk_seconds; последний обрезан по длительности."""
     ranges: list[tuple[float, float]] = []
     start = 0.0
     while start < duration:
-        ranges.append((start, min(start + chunk_seconds, duration)))
+        ranges.append(
+            (
+                start,
+                min(
+                    start + chunk_seconds,
+                    duration,
+                ),
+            )
+        )
         start += chunk_seconds
     return ranges
 
 
 def is_truncated(
-    lines: Sequence[ParsedLine], range_end: float, tolerance: float = 60.0
+    lines: Sequence[ParsedLine],
+    range_end: float,
+    tolerance: float = 60.0,
 ) -> bool:
     """Ответ оборван: последняя реплика заканчивается заметно раньше конца запрошенного отрезка."""
     if not lines:
@@ -33,28 +46,55 @@ def is_truncated(
 def merge(chunks: Sequence[Sequence[ParsedLine]]) -> list[Cue]:
     """Склейка отрезков: сортировка по началу, удаление дублей на стыках, номера с 1."""
     lines = sorted(
-        (line for chunk in chunks for line in chunk), key=lambda line: line.start
+        (line for chunk in chunks for line in chunk),
+        key=lambda line: line.start,
     )
     kept: list[ParsedLine] = []
     for line in lines:
         text = line.text.strip()
-        if _is_duplicate(kept, line.start, text):
+        if _is_duplicate(
+            kept=kept,
+            start=line.start,
+            text=text,
+        ):
             continue
-        kept.append(replace(line, text=text))
+        kept.append(
+            replace(
+                line,
+                text=text,
+            )
+        )
     joined: list[ParsedLine] = []
     for line in kept:
         if joined and joined[-1].start == line.start:
             prev = joined[-1]
             ends = [e for e in (prev.end, line.end) if e is not None]
             joined[-1] = ParsedLine(
-                prev.start, max(ends) if ends else None, f"{prev.text} {line.text}"
+                start=prev.start,
+                end=max(ends) if ends else None,
+                text=f"{prev.text} {line.text}",
             )
         else:
             joined.append(line)
-    return [Cue(i, line.start, line.end, line.text) for i, line in enumerate(joined, 1)]
+    return [
+        Cue(
+            id=i,
+            start=line.start,
+            end=line.end,
+            text=line.text,
+        )
+        for i, line in enumerate(
+            iterable=joined,
+            start=1,
+        )
+    ]
 
 
-def _is_duplicate(kept: Sequence[ParsedLine], start: float, text: str) -> bool:
+def _is_duplicate(
+    kept: Sequence[ParsedLine],
+    start: float,
+    text: str,
+) -> bool:
     for prev in reversed(kept):
         if start - prev.start > _SEAM_WINDOW:
             return False
@@ -77,17 +117,41 @@ def fix_ends(
     """
     cues = [c for c in cues if c.start < duration]
     out: list[Cue] = []
-    for i, cue in enumerate(cues):
+    for i, cue in enumerate(iterable=cues):
         limit = duration
-        next_start = next((c.start for c in cues[i + 1 :] if c.start > cue.start), None)
+        next_start = next(
+            (c.start for c in cues[i + 1 :] if c.start > cue.start),
+            None,
+        )
         if next_start is not None:
-            limit = min(limit, next_start)
+            limit = min(
+                limit,
+                next_start,
+            )
         if cue.end is not None and cue.end > cue.start:
-            end = min(cue.end, limit)
+            end = min(
+                cue.end,
+                limit,
+            )
         else:
-            reading = min(max(len(cue.text) / cps, min_s), max_s)
-            end = min(cue.start + reading, limit)
-        out.append(replace(cue, id=i + 1, end=end))
+            reading = min(
+                max(
+                    len(cue.text) / cps,
+                    min_s,
+                ),
+                max_s,
+            )
+            end = min(
+                cue.start + reading,
+                limit,
+            )
+        out.append(
+            replace(
+                cue,
+                id=i + 1,
+                end=end,
+            )
+        )
     return out
 
 
@@ -107,13 +171,27 @@ def check_completeness(
 ) -> Completeness:
     """Доходит ли последняя реплика до конца видео; пустоты длиннее gap_warn — только предупреждение."""
     if not cues:
-        return Completeness(False, 0.0, ())
+        return Completeness(
+            complete=False,
+            last_end=0.0,
+            gaps=(),
+        )
     if tail_tolerance is None:
-        tail_tolerance = max(60.0, 0.05 * duration)
+        tail_tolerance = max(
+            60.0,
+            0.05 * duration,
+        )
     gaps: list[tuple[float, float]] = []
     reached = 0.0
     for cue in cues:
         if cue.start - reached > gap_warn:
             gaps.append((reached, cue.start))
-        reached = max(reached, cue.end if cue.end is not None else cue.start)
-    return Completeness(reached >= duration - tail_tolerance, reached, tuple(gaps))
+        reached = max(
+            reached,
+            cue.end if cue.end is not None else cue.start,
+        )
+    return Completeness(
+        complete=reached >= duration - tail_tolerance,
+        last_end=reached,
+        gaps=tuple(gaps),
+    )

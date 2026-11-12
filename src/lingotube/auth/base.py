@@ -34,7 +34,8 @@ class Credentials:
         value = self.sapisid()
         if not value:
             raise AuthError(
-                "В cookies нет SAPISID (вход в YouTube не найден).", EXPORT_HINT
+                message="В cookies нет SAPISID (вход в YouTube не найден).",
+                hint=EXPORT_HINT,
             )
         return value
 

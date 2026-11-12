@@ -16,7 +16,10 @@ class FakeAskSession(AskSession):
     async def ask(self, prompt: str) -> str:
         self._client.prompts.append(prompt)
         result = self._client.answer(prompt)
-        if isinstance(result, BaseException):
+        if isinstance(
+            result,
+            BaseException,
+        ):
             raise result
         return result
 
@@ -27,7 +30,11 @@ class FakeAskClient(AskClient):
     `.prompts` records every prompt sent, `.opened` every video id opened.
     """
 
-    def __init__(self, info: VideoInfo, answer: Answer) -> None:
+    def __init__(
+        self,
+        info: VideoInfo,
+        answer: Answer,
+    ) -> None:
         self.info = info
         self.answer = answer
         self.prompts: list[str] = []
@@ -35,4 +42,4 @@ class FakeAskClient(AskClient):
 
     async def open(self, video_id: str) -> AskSession:
         self.opened.append(video_id)
-        return FakeAskSession(self)
+        return FakeAskSession(client=self)

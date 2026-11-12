@@ -24,13 +24,22 @@ BAD = [
 ]
 
 
-@pytest.mark.parametrize(("src", "expected"), OK)
-def test_ok(src, expected):
-    assert parse_video_id(src) == expected
+@pytest.mark.parametrize(
+    argnames=("src", "expected"),
+    argvalues=OK,
+)
+def test_ok(
+    src,
+    expected,
+):
+    assert parse_video_id(value=src) == expected
 
 
-@pytest.mark.parametrize("src", BAD)
+@pytest.mark.parametrize(
+    argnames="src",
+    argvalues=BAD,
+)
 def test_bad(src):
-    with pytest.raises(ValidationError) as ei:
-        parse_video_id(src)
+    with pytest.raises(expected_exception=ValidationError) as ei:
+        parse_video_id(value=src)
     assert ei.value.exit_code == 7

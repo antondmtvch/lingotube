@@ -12,63 +12,96 @@ def test_version():
 
 
 def test_transcript_substitutes_range():
-    text = load_prompt("transcript", start="0:00", end="10:00")
+    text = load_prompt(
+        name="transcript",
+        start="0:00",
+        end="10:00",
+    )
     assert "0:00" in text and "10:00" in text
     assert "{" not in text
 
 
 def test_transcript_hour_format_kept():
-    assert "1:05:00" in load_prompt("transcript", start="1:05:00", end="1:10:00")
+    assert "1:05:00" in load_prompt(
+        name="transcript",
+        start="1:05:00",
+        end="1:10:00",
+    )
 
 
 def test_translated_mentions_language_and_forbids_original():
     text = load_prompt(
-        "transcript_translated", start="0:00", end="5:00", language="Russian"
+        name="transcript_translated",
+        start="0:00",
+        end="5:00",
+        language="Russian",
     )
     assert "Russian" in text and "{" not in text
     assert "только" in text and "оригинал" in text
 
 
 def test_summary_language():
-    text = load_prompt("summary", language="Russian")
+    text = load_prompt(
+        name="summary",
+        language="Russian",
+    )
     assert "Russian" in text and "{" not in text
 
 
 def test_translate_batch_keeps_tab_and_language():
-    text = load_prompt("translate_batch", language="German")
+    text = load_prompt(
+        name="translate_batch",
+        language="German",
+    )
     assert "German" in text
     assert "\t" in text
 
 
 @pytest.mark.parametrize(
-    ("name", "variables"),
-    [
+    argnames=("name", "variables"),
+    argvalues=[
         ("transcript", {"start": "0:00"}),
         ("transcript_translated", {"start": "0:00", "end": "1:00"}),
         ("summary", {}),
         ("translate_batch", {}),
     ],
 )
-def test_missing_variable_raises_key_error(name, variables):
-    with pytest.raises(KeyError):
-        load_prompt(name, **variables)
+def test_missing_variable_raises_key_error(
+    name,
+    variables,
+):
+    with pytest.raises(expected_exception=KeyError):
+        load_prompt(
+            name=name,
+            **variables,
+        )
 
 
 def test_extra_variable_is_ignored():
-    assert "{" not in load_prompt("summary", language="Russian", unused="x")
+    assert "{" not in load_prompt(
+        name="summary",
+        language="Russian",
+        unused="x",
+    )
 
 
 def test_substituted_value_with_braces_is_not_reprocessed():
-    text = load_prompt("summary", language="{start}")
+    text = load_prompt(
+        name="summary",
+        language="{start}",
+    )
     assert "{start}" in text
 
 
 def test_unknown_name_raises():
-    with pytest.raises(FileNotFoundError):
-        load_prompt("nope")  # type: ignore[arg-type]
+    with pytest.raises(expected_exception=FileNotFoundError):
+        load_prompt(name="nope")  # type: ignore[arg-type]
 
 
-@pytest.mark.parametrize("name", NAMES)
+@pytest.mark.parametrize(
+    argnames="name",
+    argvalues=NAMES,
+)
 def test_files_are_package_data(name):
     path = resources.files("lingotube") / "prompts" / f"{name}.v1.txt"
     assert path.is_file()

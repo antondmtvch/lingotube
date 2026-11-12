@@ -81,7 +81,9 @@ class AskClient(Protocol):
 
 def _ensure_youtube(url: httpx.URL) -> None:
     if url.scheme != "https" or url.host != ALLOWED_HOST or url.port not in (None, 443):
-        raise NetworkError("Отказ: запрос не к https://www.youtube.com не выполняется.")
+        raise NetworkError(
+            message="Отказ: запрос не к https://www.youtube.com не выполняется."
+        )
 
 
 class _Channel:
@@ -113,13 +115,22 @@ class _Channel:
         self._secrets.update(v for v in values if v)
 
     def redact(self, text: str) -> str:
-        return redact(text, self._secrets)
+        return redact(
+            text=text,
+            secrets=self._secrets,
+        )
 
     def set_context(self, context: dict[str, Any]) -> None:
         self.context = context
         client = context.get("client")
-        if isinstance(client, dict) and isinstance(client.get("visitorData"), str):
-            self.add_secrets([client["visitorData"]])
+        if isinstance(
+            client,
+            dict,
+        ) and isinstance(
+            client.get("visitorData"),
+            str,
+        ):
+            self.add_secrets(values=[client["visitorData"]])
 
     def _headers(self, api: bool) -> dict[str, str]:
         headers = {
@@ -130,30 +141,51 @@ class _Channel:
         if not api:
             headers["Accept"] = "text/html"
             return headers
-        auth = auth_headers(self._creds, int(self.wall_clock()))
+        auth = auth_headers(
+            creds=self._creds,
+            now=int(self.wall_clock()),
+        )
         authorization = auth["Authorization"]
         self.add_secrets(
-            [
+            values=[
                 authorization,
-                authorization.split(" ", 1)[-1],
-                authorization.rsplit("_", 1)[-1],
+                authorization.split(
+                    sep=" ",
+                    maxsplit=1,
+                )[-1],
+                authorization.rsplit(
+                    sep="_",
+                    maxsplit=1,
+                )[-1],
             ]
         )
         headers.update(auth)
-        referer = httpx.URL(ORIGIN + WATCH_PATH, params={"v": self._video_id})
+        referer = httpx.URL(
+            url=ORIGIN + WATCH_PATH,
+            params={"v": self._video_id},
+        )
         headers.update(
             {
                 "Content-Type": "application/json",
-                "Referer": str(referer),
+                "Referer": str(object=referer),
                 "X-Goog-AuthUser": "0",
                 "X-YouTube-Client-Name": WEB_CLIENT_NAME_ID,
             }
         )
         client = self.context.get("client")
-        if isinstance(client, dict):
-            if isinstance(client.get("clientVersion"), str):
+        if isinstance(
+            client,
+            dict,
+        ):
+            if isinstance(
+                client.get("clientVersion"),
+                str,
+            ):
                 headers["X-YouTube-Client-Version"] = client["clientVersion"]
-            if isinstance(client.get("visitorData"), str):
+            if isinstance(
+                client.get("visitorData"),
+                str,
+            ):
                 headers["X-Goog-Visitor-Id"] = client["visitorData"]
         return headers
 
@@ -166,8 +198,11 @@ class _Channel:
         params: dict[str, str] | None = None,
         body: dict[str, Any] | None = None,
     ) -> httpx.Response:
-        url = httpx.URL(ORIGIN + path, params=params)
-        _ensure_youtube(url)
+        url = httpx.URL(
+            url=ORIGIN + path,
+            params=params,
+        )
+        _ensure_youtube(url=url)
         api = body is not None
         attempts = 1 + self._max_retries
         last = ""
@@ -176,9 +211,9 @@ class _Channel:
                 await self._pacer.wait()
                 try:
                     resp = await self._http.request(
-                        method,
-                        url,
-                        headers=self._headers(api),
+                        method=method,
+                        url=url,
+                        headers=self._headers(api=api),
                         json=body,
                         timeout=self._timeout,
                         follow_redirects=False,
@@ -188,57 +223,89 @@ class _Channel:
                     continue
                 except httpx.HTTPError as e:
                     raise NetworkError(
-                        self.redact(f"{what}: {type(e).__name__}: {e}")
+                        message=self.redact(text=f"{what}: {type(e).__name__}: {e}")
                     ) from None
             status = resp.status_code
             if resp.history or 300 <= status < 400 or resp.url.host != ALLOWED_HOST:
                 raise NetworkError(
-                    f"{what}: YouTube ответил перенаправлением (HTTP {status}); переходы не выполняются."
+                    message=f"{what}: YouTube ответил перенаправлением (HTTP {status}); переходы не выполняются."
                 )
             if status in (401, 403):
                 raise AuthError(
-                    f"{what}: YouTube отказал в доступе (HTTP {status}).", EXPORT_HINT
+                    message=f"{what}: YouTube отказал в доступе (HTTP {status}).",
+                    hint=EXPORT_HINT,
                 )
             if status == 429 or status >= 500:
                 last = f"{what}: HTTP {status}"
                 continue
             if status >= 400:
-                raise NetworkError(f"{what}: HTTP {status}")
+                raise NetworkError(message=f"{what}: HTTP {status}")
             return resp
-        raise NetworkError(self.redact(f"{last} (попыток: {attempts})")) from None
+        raise NetworkError(
+            message=self.redact(text=f"{last} (попыток: {attempts})")
+        ) from None
 
     async def post_json(
-        self, what: str, path: str, body: dict[str, Any]
+        self,
+        what: str,
+        path: str,
+        body: dict[str, Any],
     ) -> dict[str, Any]:
         resp = await self.request(
-            what, "POST", path, params={"prettyPrint": "false"}, body=body
+            what=what,
+            method="POST",
+            path=path,
+            params={"prettyPrint": "false"},
+            body=body,
         )
         try:
             data = resp.json()
         except ValueError:
-            raise NetworkError(f"{what}: YouTube вернул не JSON.") from None
-        if not isinstance(data, dict):
-            raise NetworkError(f"{what}: неожиданный формат ответа YouTube.")
+            raise NetworkError(message=f"{what}: YouTube вернул не JSON.") from None
+        if not isinstance(
+            data,
+            dict,
+        ):
+            raise NetworkError(message=f"{what}: неожиданный формат ответа YouTube.")
         return data
 
 
 class YouTubeAskSession(AskSession):
     """One Ask chat for one video. Remembers the current send command between questions."""
 
-    def __init__(self, channel: _Channel, info: VideoInfo, cmd: SendCommand) -> None:
+    def __init__(
+        self,
+        channel: _Channel,
+        info: VideoInfo,
+        cmd: SendCommand,
+    ) -> None:
         self._channel = channel
         self.info = info
         self._cmd = cmd
-        channel.add_secrets([cmd.continuation, cmd.click_tracking_params])
+        channel.add_secrets(values=[cmd.continuation, cmd.click_tracking_params])
 
     async def ask(self, prompt: str) -> str:
         now_ms = int(self._channel.wall_clock() * 1000)
-        body = wire.build_ask_body(self._channel.context, self._cmd, prompt, now_ms)
-        data = await self._channel.post_json("get_panel", GET_PANEL_PATH, body)
-        answer = wire.extract_answer(data)
-        fresh = wire.find_send_command(data, panel_only=False)
+        body = wire.build_ask_body(
+            context=self._channel.context,
+            cmd=self._cmd,
+            prompt=prompt,
+            now_ms=now_ms,
+        )
+        data = await self._channel.post_json(
+            what="get_panel",
+            path=GET_PANEL_PATH,
+            body=body,
+        )
+        answer = wire.extract_answer(get_panel_response=data)
+        fresh = wire.find_send_command(
+            next_response=data,
+            panel_only=False,
+        )
         if fresh is not None:
-            self._channel.add_secrets([fresh.continuation, fresh.click_tracking_params])
+            self._channel.add_secrets(
+                values=[fresh.continuation, fresh.click_tracking_params]
+            )
             self._cmd = fresh
         return answer
 
@@ -269,44 +336,64 @@ class YouTubeAskClient(AskClient):
         creds = await self._cookies.load()
         creds.require_sapisid()
         ch = _Channel(
-            self._http,
-            self._pacer,
-            self._lock,
-            creds,
-            video_id,
-            self._max_retries,
-            self._timeout,
-            self._wall_clock,
+            http=self._http,
+            pacer=self._pacer,
+            lock=self._lock,
+            creds=creds,
+            video_id=video_id,
+            max_retries=self._max_retries,
+            timeout=self._timeout,
+            wall_clock=self._wall_clock,
         )
-        page = await ch.request("watch", "GET", WATCH_PATH, params={"v": video_id})
+        page = await ch.request(
+            what="watch",
+            method="GET",
+            path=WATCH_PATH,
+            params={"v": video_id},
+        )
         html = page.text
-        if wire.page_logged_in(html) is False:
-            raise AuthError(_STALE_COOKIES, EXPORT_HINT)
-        context, info = wire.extract_page(html)
-        ch.set_context(context)
+        if wire.page_logged_in(html=html) is False:
+            raise AuthError(
+                message=_STALE_COOKIES,
+                hint=EXPORT_HINT,
+            )
+        context, info = wire.extract_page(html=html)
+        ch.set_context(context=context)
 
         nxt = await ch.post_json(
-            "next", NEXT_PATH, {"context": context, "videoId": video_id}
+            what="next",
+            path=NEXT_PATH,
+            body={"context": context, "videoId": video_id},
         )
-        if not wire.is_signed_in(nxt):
-            raise AuthError(_STALE_COOKIES, EXPORT_HINT)
-        cmd = wire.find_send_command(nxt)
+        if not wire.is_signed_in(next_response=nxt):
+            raise AuthError(
+                message=_STALE_COOKIES,
+                hint=EXPORT_HINT,
+            )
+        cmd = wire.find_send_command(next_response=nxt)
         if cmd is None:
-            panel_token = wire.find_chat_panel_token(nxt)
+            panel_token = wire.find_chat_panel_token(next_response=nxt)
             if panel_token:
                 # spec section 12: the command may appear after an "empty" initial get_panel
-                ch.add_secrets([panel_token])
+                ch.add_secrets(values=[panel_token])
                 initial = await ch.post_json(
-                    "get_panel",
-                    GET_PANEL_PATH,
-                    {"context": context, "continuation": panel_token},
+                    what="get_panel",
+                    path=GET_PANEL_PATH,
+                    body={"context": context, "continuation": panel_token},
                 )
-                cmd = wire.find_send_command(initial, panel_only=False)
+                cmd = wire.find_send_command(
+                    next_response=initial,
+                    panel_only=False,
+                )
         if cmd is None:
             raise ChatUnavailableError(
-                "Чат YouTube («Спросить») недоступен для этого видео."
+                message="Чат YouTube («Спросить») недоступен для этого видео."
             )
-        return YouTubeAskSession(ch, info, cmd)
+        return YouTubeAskSession(
+            channel=ch,
+            info=info,
+            cmd=cmd,
+        )
 
     def __repr__(self) -> str:
         return f"YouTubeAskClient(max_retries={self._max_retries})"

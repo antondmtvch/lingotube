@@ -6,7 +6,10 @@ from typing import Any
 from lingotube.errors import ValidationError
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(
+    frozen=True,
+    slots=True,
+)
 class Cue:
     id: int
     start: float
@@ -14,7 +17,10 @@ class Cue:
     text: str
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(
+    frozen=True,
+    slots=True,
+)
 class VideoInfo:
     video_id: str
     duration: float
@@ -23,18 +29,33 @@ class VideoInfo:
 
 
 def _is_int(v: object) -> bool:
-    return isinstance(v, int) and not isinstance(v, bool)
+    return isinstance(
+        v,
+        int,
+    ) and not isinstance(
+        v,
+        bool,
+    )
 
 
 def _is_num(v: object) -> bool:
-    return isinstance(v, int | float) and not isinstance(v, bool)
+    return isinstance(
+        v,
+        int | float,
+    ) and not isinstance(
+        v,
+        bool,
+    )
 
 
 def _fail(what: str) -> ValidationError:
-    return ValidationError(f"Invalid transcript: {what}")
+    return ValidationError(message=f"Invalid transcript: {what}")
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(
+    frozen=True,
+    slots=True,
+)
 class Transcript:
     video_id: str
     duration: float
@@ -56,34 +77,66 @@ class Transcript:
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "Transcript":
-        if not isinstance(d, dict):
-            raise _fail("expected an object")
-        if not isinstance(d.get("video_id"), str):
-            raise _fail("video_id must be a string")
-        if not _is_num(d.get("duration")):
-            raise _fail("duration must be a number")
+        if not isinstance(
+            d,
+            dict,
+        ):
+            raise _fail(what="expected an object")
+        if not isinstance(
+            d.get("video_id"),
+            str,
+        ):
+            raise _fail(what="video_id must be a string")
+        if not _is_num(v=d.get("duration")):
+            raise _fail(what="duration must be a number")
         language = d.get("language")
-        if language is not None and not isinstance(language, str):
-            raise _fail("language must be a string or null")
-        if not isinstance(d.get("prompt_version"), str):
-            raise _fail("prompt_version must be a string")
+        if language is not None and not isinstance(
+            language,
+            str,
+        ):
+            raise _fail(what="language must be a string or null")
+        if not isinstance(
+            d.get("prompt_version"),
+            str,
+        ):
+            raise _fail(what="prompt_version must be a string")
         raw = d.get("cues")
-        if not isinstance(raw, list):
-            raise _fail("cues must be a list")
+        if not isinstance(
+            raw,
+            list,
+        ):
+            raise _fail(what="cues must be a list")
         cues: list[Cue] = []
-        for i, c in enumerate(raw):
-            if not isinstance(c, dict):
-                raise _fail(f"cue #{i} must be an object")
-            if not _is_int(c.get("id")):
-                raise _fail(f"cue #{i}: id must be an integer")
-            if not _is_num(c.get("start")):
-                raise _fail(f"cue #{i}: start must be a number")
+        for i, c in enumerate(iterable=raw):
+            if not isinstance(
+                c,
+                dict,
+            ):
+                raise _fail(what=f"cue #{i} must be an object")
+            if not _is_int(v=c.get("id")):
+                raise _fail(what=f"cue #{i}: id must be an integer")
+            if not _is_num(v=c.get("start")):
+                raise _fail(what=f"cue #{i}: start must be a number")
             end = c.get("end")
-            if end is not None and not _is_num(end):
-                raise _fail(f"cue #{i}: end must be a number or null")
-            if not isinstance(c.get("text"), str):
-                raise _fail(f"cue #{i}: text must be a string")
-            cues.append(Cue(c["id"], c["start"], end, c["text"]))
+            if end is not None and not _is_num(v=end):
+                raise _fail(what=f"cue #{i}: end must be a number or null")
+            if not isinstance(
+                c.get("text"),
+                str,
+            ):
+                raise _fail(what=f"cue #{i}: text must be a string")
+            cues.append(
+                Cue(
+                    id=c["id"],
+                    start=c["start"],
+                    end=end,
+                    text=c["text"],
+                )
+            )
         return cls(
-            d["video_id"], d["duration"], language, d["prompt_version"], tuple(cues)
+            video_id=d["video_id"],
+            duration=d["duration"],
+            language=language,
+            prompt_version=d["prompt_version"],
+            cues=tuple(cues),
         )

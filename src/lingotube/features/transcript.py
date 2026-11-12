@@ -55,35 +55,70 @@ class _Part:
     )
 
 
-def transcript_key(video_id: str, lang_key: str = "orig") -> CacheKey:
+def transcript_key(
+    video_id: str,
+    lang_key: str = "orig",
+) -> CacheKey:
     """Cache key of the final transcript (`lang_key` "orig" = original language)."""
-    return CacheKey(video_id, KIND_FINAL, lang_key, MODE, PROMPT_VERSION)
-
-
-async def load_cached_transcript(
-    cache: Cache, video_id: str, lang_key: str = "orig", *, require_complete: bool
-) -> Transcript | None:
-    """Cached final transcript, or None if absent/malformed (or incomplete when required)."""
-    return _parse_final(
-        await cache.get(transcript_key(video_id, lang_key)), require_complete
+    return CacheKey(
+        video_id=video_id,
+        kind=KIND_FINAL,
+        language=lang_key,
+        mode=MODE,
+        prompt_version=PROMPT_VERSION,
     )
 
 
-def _parse_final(data: dict | None, require_complete: bool) -> Transcript | None:
+async def load_cached_transcript(
+    cache: Cache,
+    video_id: str,
+    lang_key: str = "orig",
+    *,
+    require_complete: bool,
+) -> Transcript | None:
+    """Cached final transcript, or None if absent/malformed (or incomplete when required)."""
+    return _parse_final(
+        data=await cache.get(
+            key=transcript_key(
+                video_id=video_id,
+                lang_key=lang_key,
+            )
+        ),
+        require_complete=require_complete,
+    )
+
+
+def _parse_final(
+    data: dict | None,
+    require_complete: bool,
+) -> Transcript | None:
     """The one place a cached final payload is parsed; malformed → None."""
     if data is None or (require_complete and data.get("complete") is not True):
         return None
     try:
-        return Transcript.from_dict(data.get("transcript"))  # type: ignore[arg-type]
+        return Transcript.from_dict(d=data.get("transcript"))  # type: ignore[arg-type]
     except ValidationError:
         return None
 
 
-def format_time(seconds: float, *, ceil: bool = False) -> str:
+def format_time(
+    seconds: float,
+    *,
+    ceil: bool = False,
+) -> str:
     """`m:ss` below one hour, `h:mm:ss` from one hour."""
     total = math.ceil(seconds) if ceil else math.floor(seconds)
-    hours, rest = divmod(max(total, 0), 3600)
-    minutes, secs = divmod(rest, 60)
+    hours, rest = divmod(
+        max(
+            total,
+            0,
+        ),
+        3600,
+    )
+    minutes, secs = divmod(
+        rest,
+        60,
+    )
     return f"{hours}:{minutes:02}:{secs:02}" if hours else f"{minutes}:{secs:02}"
 
 
@@ -119,7 +154,11 @@ class TranscriptFeature:
         self._progress = progress
 
     async def run(
-        self, video_id: str, language: str | None = None, *, use_cache: bool = True
+        self,
+        video_id: str,
+        language: str | None = None,
+        *,
+        use_cache: bool = True,
     ) -> TranscriptResult:
         """`language=None` → original language; otherwise the chat translates directly.
 
@@ -127,47 +166,84 @@ class TranscriptFeature:
         parts and the fresh result are still written.
         """
         lang_key = language or "orig"
-        final_key = transcript_key(video_id, lang_key)
+        final_key = transcript_key(
+            video_id=video_id,
+            lang_key=lang_key,
+        )
         if use_cache:
-            cached = _load_final(await self._cache.get(final_key))
+            cached = _load_final(data=await self._cache.get(key=final_key))
             if cached is not None:
                 return cached
 
-        session = await self._ask.open(video_id)
+        session = await self._ask.open(video_id=video_id)
         info = session.info
-        ranges = plan_ranges(info.duration, self._settings.chunk_seconds)
+        ranges = plan_ranges(
+            duration=info.duration,
+            chunk_seconds=self._settings.chunk_seconds,
+        )
         chunks: list[Sequence[ParsedLine]] = []
         warnings: list[str] = []
-        for index, (start, end) in enumerate(ranges):
+        for index, (start, end) in enumerate(iterable=ranges):
             is_last = index == len(ranges) - 1
             part_key = CacheKey(
-                video_id,
-                KIND_PART,
-                lang_key,
-                MODE,
-                PROMPT_VERSION,
+                video_id=video_id,
+                kind=KIND_PART,
+                language=lang_key,
+                mode=MODE,
+                prompt_version=PROMPT_VERSION,
                 part=f"{start}-{end}",
             )
-            prior = _load_part(await self._cache.get(part_key)) if use_cache else None
+            prior = (
+                _load_part(data=await self._cache.get(key=part_key))
+                if use_cache
+                else None
+            )
             if prior is None or (prior.truncated and not prior.exhausted):
                 prior = await self._collect(
-                    session, start, end, language, prior, is_last
+                    session=session,
+                    start=start,
+                    end=end,
+                    language=language,
+                    prior=prior,
+                    is_last=is_last,
                 )
-                await self._cache.put(part_key, _dump_part(prior))
+                await self._cache.put(
+                    key=part_key,
+                    value=_dump_part(part=prior),
+                )
             if prior.truncated and not prior.exhausted:
                 # re-request budget ran out while the chat was still progressing; an exhausted
                 # part (no further speech from the chat) is left to the completeness warnings
                 reached = prior.lines[-1].start if prior.lines else start
+                range_end = format_time(
+                    seconds=end,
+                    ceil=True,
+                )
                 warnings.append(
-                    f"отрезок {format_time(start)}–{format_time(end, ceil=True)} остался оборванным: "
-                    f"ответ чата дошёл только до {format_time(reached)}"
+                    f"отрезок {format_time(seconds=start)}–{range_end} остался оборванным: "
+                    f"ответ чата дошёл только до {format_time(seconds=reached)}"
                 )
             chunks.append(prior.lines)
-            self._progress(index + 1, len(ranges))
+            self._progress(
+                index + 1,
+                len(ranges),
+            )
 
-        cues = fix_ends(merge(chunks), info.duration)
-        completeness = check_completeness(cues, info.duration)
-        warnings = _completeness_warnings(completeness, info.duration) + warnings
+        cues = fix_ends(
+            cues=merge(chunks=chunks),
+            duration=info.duration,
+        )
+        completeness = check_completeness(
+            cues=cues,
+            duration=info.duration,
+        )
+        warnings = (
+            _completeness_warnings(
+                completeness=completeness,
+                duration=info.duration,
+            )
+            + warnings
+        )
         transcript = Transcript(
             video_id=video_id,
             duration=info.duration,
@@ -175,10 +251,14 @@ class TranscriptFeature:
             prompt_version=PROMPT_VERSION,
             cues=tuple(cues),
         )
-        result = TranscriptResult(transcript, completeness, tuple(warnings))
+        result = TranscriptResult(
+            transcript=transcript,
+            completeness=completeness,
+            warnings=tuple(warnings),
+        )
         await self._cache.put(
-            final_key,
-            {
+            key=final_key,
+            value={
                 "complete": completeness.complete,
                 "warnings": list(result.warnings),
                 "transcript": transcript.to_dict(),
@@ -197,11 +277,20 @@ class TranscriptFeature:
     ) -> _Part:
         """Asks one range (or continues a truncated cached one) with bounded re-requests."""
         if prior is None:
-            lines = await self._ask_range(session, start, end, language)
+            lines = await self._ask_range(
+                session=session,
+                start=start,
+                end=end,
+                language=language,
+            )
             if not lines:
+                range_end = format_time(
+                    seconds=end,
+                    ceil=True,
+                )
                 raise ChatUnavailableError(
-                    f"Чат не вернул транскрипцию отрезка {format_time(start)}–"
-                    f"{format_time(end, ceil=True)}: в ответе нет ни одного тайм-кода.",
+                    message=f"Чат не вернул транскрипцию отрезка {format_time(seconds=start)}–"
+                    f"{range_end}: в ответе нет ни одного тайм-кода.",
                     hint="Возможно, чат отказался отвечать по этому видео. Повторите позже.",
                 )
         else:
@@ -209,12 +298,20 @@ class TranscriptFeature:
 
         exhausted = False
         for _ in range(MAX_REREQUESTS):
-            if not is_truncated(lines, end):
+            if not is_truncated(
+                lines=lines,
+                range_end=end,
+            ):
                 break
             resume_at = lines[-1].start if lines else start
             more = [
                 x
-                for x in await self._ask_range(session, resume_at, end, language)
+                for x in await self._ask_range(
+                    session=session,
+                    start=resume_at,
+                    end=end,
+                    language=language,
+                )
                 if x.start >= resume_at
             ]
             if (
@@ -229,36 +326,66 @@ class TranscriptFeature:
                 exhausted = True  # no progress: asking again would not help
                 break
 
-        truncated = is_truncated(lines, end)
+        truncated = is_truncated(
+            lines=lines,
+            range_end=end,
+        )
         if not is_last:
             lines = [
                 x for x in lines if x.start < end
             ]  # overshoot belongs to the next range
-        return _Part(tuple(lines), truncated, exhausted and truncated)
+        return _Part(
+            lines=tuple(lines),
+            truncated=truncated,
+            exhausted=exhausted and truncated,
+        )
 
     async def _ask_range(
-        self, session: AskSession, start: float, end: float, language: str | None
+        self,
+        session: AskSession,
+        start: float,
+        end: float,
+        language: str | None,
     ) -> list[ParsedLine]:
-        variables = {"start": format_time(start), "end": format_time(end, ceil=True)}
+        variables = {
+            "start": format_time(seconds=start),
+            "end": format_time(
+                seconds=end,
+                ceil=True,
+            ),
+        }
         if language is None:
-            prompt = load_prompt("transcript", **variables)
+            prompt = load_prompt(
+                name="transcript",
+                **variables,
+            )
         else:
             prompt = load_prompt(
-                "transcript_translated", language=language, **variables
+                name="transcript_translated",
+                language=language,
+                **variables,
             )
-        lines = parse_answer(await session.ask(prompt))
-        return keep_second_of_identical(lines) if language is not None else lines
+        lines = parse_answer(text=await session.ask(prompt=prompt))
+        return keep_second_of_identical(lines=lines) if language is not None else lines
 
 
-def _completeness_warnings(completeness: Completeness, duration: float) -> list[str]:
+def _completeness_warnings(
+    completeness: Completeness,
+    duration: float,
+) -> list[str]:
     warnings = [
-        f"пропуск {format_time(a)}–{format_time(b)}" for a, b in completeness.gaps
+        f"пропуск {format_time(seconds=a)}–{format_time(seconds=b)}"
+        for a, b in completeness.gaps
     ]
     if not completeness.complete:
+        total = format_time(
+            seconds=duration,
+            ceil=True,
+        )
         warnings.insert(
             0,
-            f"транскрипция неполная: обрывается на {format_time(completeness.last_end)} "
-            f"из {format_time(duration, ceil=True)}",
+            f"транскрипция неполная: обрывается на {format_time(seconds=completeness.last_end)} "
+            f"из {total}",
         )
     return warnings
 
@@ -272,56 +399,113 @@ def _dump_part(part: _Part) -> dict[str, Any]:
 
 
 def _is_num(v: object) -> bool:
-    return isinstance(v, int | float) and not isinstance(v, bool)
+    return isinstance(
+        v,
+        int | float,
+    ) and not isinstance(
+        v,
+        bool,
+    )
 
 
 def _load_part(data: dict | None) -> _Part | None:
     """A malformed cached part is treated as missing."""
     if (
         data is None
-        or not isinstance(data.get("truncated"), bool)
-        or not isinstance(data.get("lines"), list)
+        or not isinstance(
+            data.get("truncated"),
+            bool,
+        )
+        or not isinstance(
+            data.get("lines"),
+            list,
+        )
     ):
         return None
     lines: list[ParsedLine] = []
     for item in data["lines"]:
-        if not (isinstance(item, list) and len(item) == 3):
+        if not (
+            isinstance(
+                item,
+                list,
+            )
+            and len(item) == 3
+        ):
             return None
         start, end, text = item
         if (
-            not _is_num(start)
-            or not (end is None or _is_num(end))
-            or not isinstance(text, str)
+            not _is_num(v=start)
+            or not (end is None or _is_num(v=end))
+            or not isinstance(
+                text,
+                str,
+            )
         ):
             return None
         lines.append(
-            ParsedLine(float(start), None if end is None else float(end), text)
+            ParsedLine(
+                start=float(start),
+                end=None if end is None else float(end),
+                text=text,
+            )
         )
-    exhausted = data.get("exhausted", False)
-    if not isinstance(exhausted, bool):
+    exhausted = data.get(
+        "exhausted",
+        False,
+    )
+    if not isinstance(
+        exhausted,
+        bool,
+    ):
         return None
-    return _Part(tuple(lines), data["truncated"], exhausted)
+    return _Part(
+        lines=tuple(lines),
+        truncated=data["truncated"],
+        exhausted=exhausted,
+    )
 
 
 def _load_final(data: dict | None) -> TranscriptResult | None:
     """Only a well-formed result marked complete is served; anything else is re-asked."""
-    transcript = _parse_final(data, require_complete=True)
+    transcript = _parse_final(
+        data=data,
+        require_complete=True,
+    )
     if transcript is None or data is None:
         return None
     warnings = data.get("warnings")
-    if not isinstance(warnings, list) or not all(isinstance(w, str) for w in warnings):
+    if not isinstance(
+        warnings,
+        list,
+    ) or not all(
+        isinstance(
+            w,
+            str,
+        )
+        for w in warnings
+    ):
         return None
-    completeness = check_completeness(transcript.cues, transcript.duration)
-    return TranscriptResult(transcript, completeness, tuple(warnings))
+    completeness = check_completeness(
+        cues=transcript.cues,
+        duration=transcript.duration,
+    )
+    return TranscriptResult(
+        transcript=transcript,
+        completeness=completeness,
+        warnings=tuple(warnings),
+    )
 
 
-def register(app, get_context) -> None:
+def register(
+    app,
+    get_context,
+) -> None:
     """Adds the `transcript` command: the original-language transcript (JSON by default, spec §8)."""
     from lingotube import commands as c
     from lingotube.writers import render
 
     @app.command(
-        "transcript",
+        name="transcript",
         help="Транскрипция на языке оригинала с тайм-кодами (по умолчанию JSON).",
     )
     def transcript(
@@ -334,16 +518,44 @@ def register(app, get_context) -> None:
         no_cache: c.NoCacheOpt = False,
         json_: c.JsonOpt = False,
     ) -> None:
-        common = c.Common(json_, cookies_file, browser, no_cache)
+        common = c.Common(
+            json=json_,
+            cookies_file=cookies_file,
+            browser=browser,
+            no_cache=no_cache,
+        )
 
-        async def body(ctx: c.AppContext, video_id: str | None) -> c.Outcome:
+        async def body(
+            ctx: c.AppContext,
+            video_id: str | None,
+        ) -> c.Outcome:
             assert video_id is not None
-            fmt_ = c.require_format(fmt, default="json")
-            shift = c.require_offset(offset)
-            feature = await ctx.provide(ctx.container.transcript_feature)
-            result = await feature.run(video_id, None, use_cache=common.use_cache)
+            fmt_ = c.require_format(
+                fmt=fmt,
+                default="json",
+            )
+            shift = c.require_offset(offset=offset)
+            feature = await ctx.provide(provider=ctx.container.transcript_feature)
+            result = await feature.run(
+                video_id=video_id,
+                language=None,
+                use_cache=common.use_cache,
+            )
             return await c.transcript_outcome(
-                ctx, result, render(result.transcript, fmt_, shift), fmt_, output
+                ctx=ctx,
+                result=result,
+                text=render(
+                    transcript=result.transcript,
+                    fmt=fmt_,
+                    offset=shift,
+                ),
+                fmt=fmt_,
+                output=output,
             )
 
-        c.execute(get_context, common, video, body)
+        c.execute(
+            get_context=get_context,
+            common=common,
+            video=video,
+            body=body,
+        )

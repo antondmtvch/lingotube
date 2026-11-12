@@ -10,36 +10,71 @@ KIND = "summary"
 
 
 class SummaryFeature:
-    def __init__(self, ask: AskClient, cache: Cache) -> None:
+    def __init__(
+        self,
+        ask: AskClient,
+        cache: Cache,
+    ) -> None:
         self._ask = ask
         self._cache = cache
 
-    async def run(self, video_id: str, language: str, *, use_cache: bool = True) -> str:
-        key = CacheKey(video_id, KIND, language, MODE, PROMPT_VERSION)
+    async def run(
+        self,
+        video_id: str,
+        language: str,
+        *,
+        use_cache: bool = True,
+    ) -> str:
+        key = CacheKey(
+            video_id=video_id,
+            kind=KIND,
+            language=language,
+            mode=MODE,
+            prompt_version=PROMPT_VERSION,
+        )
         if use_cache:
-            data = await self._cache.get(key)
+            data = await self._cache.get(key=key)
             if (
                 data is not None
-                and isinstance(data.get("text"), str)
+                and isinstance(
+                    data.get("text"),
+                    str,
+                )
                 and data["text"].strip()
             ):
                 return data["text"]
-        session = await self._ask.open(video_id)
-        text = (await session.ask(load_prompt("summary", language=language))).strip()
+        session = await self._ask.open(video_id=video_id)
+        text = (
+            await session.ask(
+                prompt=load_prompt(
+                    name="summary",
+                    language=language,
+                )
+            )
+        ).strip()
         if not text:
             raise ChatUnavailableError(
-                "Чат вернул пустой ответ вместо краткого содержания.",
+                message="Чат вернул пустой ответ вместо краткого содержания.",
                 hint="Повторите запрос позже.",
             )
-        await self._cache.put(key, {"text": text})
+        await self._cache.put(
+            key=key,
+            value={"text": text},
+        )
         return text
 
 
-def register(app, get_context) -> None:
+def register(
+    app,
+    get_context,
+) -> None:
     """Adds the `summary` command: text to stdout, or to a file with -o."""
     from lingotube import commands as c
 
-    @app.command("summary", help="Краткое содержание на выбранном языке.")
+    @app.command(
+        name="summary",
+        help="Краткое содержание на выбранном языке.",
+    )
     def summary(
         video: c.VideoArg,
         lang: c.LangOpt = None,
@@ -49,19 +84,45 @@ def register(app, get_context) -> None:
         no_cache: c.NoCacheOpt = False,
         json_: c.JsonOpt = False,
     ) -> None:
-        common = c.Common(json_, cookies_file, browser, no_cache)
+        common = c.Common(
+            json=json_,
+            cookies_file=cookies_file,
+            browser=browser,
+            no_cache=no_cache,
+        )
 
-        async def body(ctx: c.AppContext, video_id: str | None) -> c.Outcome:
+        async def body(
+            ctx: c.AppContext,
+            video_id: str | None,
+        ) -> c.Outcome:
             assert video_id is not None
-            language = c.require_lang(lang, ctx.settings)
-            feature = await ctx.provide(ctx.container.summary_feature)
-            text = await feature.run(video_id, language, use_cache=common.use_cache)
+            language = c.require_lang(
+                lang=lang,
+                settings=ctx.settings,
+            )
+            feature = await ctx.provide(provider=ctx.container.summary_feature)
+            text = await feature.run(
+                video_id=video_id,
+                language=language,
+                use_cache=common.use_cache,
+            )
             path = await c.deliver(
-                ctx, text + "\n", output if output is not None else "-", ""
+                ctx=ctx,
+                text=text + "\n",
+                output=output if output is not None else "-",
+                default_name="",
             )
             result = {"video_id": video_id, "language": language, "text": text}
             if path is not None:
-                result["path"] = str(path)
-            return c.Outcome(result, text=text if path is None else None)
+                result["path"] = str(object=path)
+            return c.Outcome(
+                result=result,
+                text=text if path is None else None,
+            )
 
-        c.execute(get_context, common, video, body)
+        c.execute(
+            get_context=get_context,
+            common=common,
+            video=video,
+            body=body,
+        )

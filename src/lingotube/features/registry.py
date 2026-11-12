@@ -19,6 +19,13 @@ class FeatureRegistry:
     def add(self, register: Register) -> None:
         self._registrars.append(register)
 
-    def apply(self, app: typer.Typer, get_context: GetContext) -> None:
+    def apply(
+        self,
+        app: typer.Typer,
+        get_context: GetContext,
+    ) -> None:
         for register in self._registrars:
-            register(app, get_context)
+            register(
+                app,
+                get_context,
+            )

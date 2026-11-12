@@ -19,11 +19,14 @@ _WIN_HINT = "Chrome/Edge на Windows обычно нельзя прочитат
 def default_loader(browser: str) -> Mapping[str, str]:
     import browser_cookie3  # lazy: optional at runtime, never needed in tests
 
-    func = getattr(browser_cookie3, browser)
+    func = getattr(
+        browser_cookie3,
+        browser,
+    )
     cookies: dict[str, str] = {}
     for domain in ("youtube.com", "google.com"):
         for c in func(domain_name=domain):
-            if c.value is not None and is_allowed_domain(c.domain):
+            if c.value is not None and is_allowed_domain(domain=c.domain):
                 cookies[c.name] = c.value
     return cookies
 
@@ -49,26 +52,28 @@ class BrowserCookieSource:
             cookies = self._loader(browser)
         except Exception:  # never propagate text: may contain paths or values
             raise AuthError(
-                f"Не удалось прочитать cookies из браузера {browser}.",
-                self._hint(browser),
+                message=f"Не удалось прочитать cookies из браузера {browser}.",
+                hint=self._hint(browser=browser),
             ) from None
-        creds = Credentials(cookies)
+        creds = Credentials(cookies=cookies)
         if not creds.sapisid():
             raise AuthError(
-                f"В браузере {browser} нет входа в YouTube.", self._hint(browser)
+                message=f"В браузере {browser} нет входа в YouTube.",
+                hint=self._hint(browser=browser),
             )
         return creds
 
     def _load_all(self) -> Credentials:
         if self._browser:
-            return self._load_one(self._browser)
+            return self._load_one(browser=self._browser)
         for browser in BROWSERS:
             try:
-                return self._load_one(browser)
+                return self._load_one(browser=browser)
             except AuthError:
                 continue
         raise AuthError(
-            "Не удалось получить cookies ни из одного браузера.", EXPORT_HINT
+            message="Не удалось получить cookies ни из одного браузера.",
+            hint=EXPORT_HINT,
         )
 
     async def load(self) -> Credentials:
@@ -86,5 +91,6 @@ class ChainCookieSource:
             except AuthError:
                 continue
         raise AuthError(
-            "Не удалось получить cookies ни из одного источника.", EXPORT_HINT
+            message="Не удалось получить cookies ни из одного источника.",
+            hint=EXPORT_HINT,
         )

@@ -33,7 +33,7 @@ class GoodSource:
 
     async def load(self) -> Credentials:
         self.loads += 1
-        return Credentials({"SAPISID": SECRET_SAPISID, "SID": SECRET_SID})
+        return Credentials(cookies={"SAPISID": SECRET_SAPISID, "SID": SECRET_SID})
 
 
 class BadSource:
@@ -42,13 +42,19 @@ class BadSource:
 
     async def load(self) -> Credentials:
         raise AuthError(
-            self.message, hint="выгрузите cookies.txt и запустите с --cookies-file"
+            message=self.message,
+            hint="выгрузите cookies.txt и запустите с --cookies-file",
         )
 
 
 class FakeSession:
     def __init__(self, video_id: str) -> None:
-        self.info = VideoInfo(video_id, 60.0, "t", "en")
+        self.info = VideoInfo(
+            video_id=video_id,
+            duration=60.0,
+            title="t",
+            language="en",
+        )
 
     async def ask(self, prompt: str) -> str:  # doctor must never ask
         raise AssertionError("doctor must not send chat messages")
@@ -57,7 +63,12 @@ class FakeSession:
 class FakeAsk:
     """`outcome`: None → chat opens; an exception → raised by open()."""
 
-    def __init__(self, source, outcome, log: list) -> None:
+    def __init__(
+        self,
+        source,
+        outcome,
+        log: list,
+    ) -> None:
         self.source = source
         self.outcome = outcome
         self.log = log
@@ -68,64 +79,106 @@ class FakeAsk:
         self.log.append(video_id)
         if self.outcome is not None:
             raise self.outcome
-        return FakeSession(video_id)
+        return FakeSession(video_id=video_id)
 
 
-def ask_factory(outcome=None, log: list | None = None):
+def ask_factory(
+    outcome=None,
+    log: list | None = None,
+):
     log = log if log is not None else []
-    return lambda source: FakeAsk(source, outcome, log)
+    return lambda source: FakeAsk(
+        source=source,
+        outcome=outcome,
+        log=log,
+    )
 
 
-def by_name(checks: list[Check], name: str) -> Check:
+def by_name(
+    checks: list[Check],
+    name: str,
+) -> Check:
     return next(c for c in checks if c.name == name)
 
 
 async def test_file_ok_browser_fails_is_success():
     opened: list[str] = []
     checks = await run_doctor(
-        {"файл cookies": GoodSource(), "браузер chrome": BadSource()},
-        ask_factory(log=opened),
-        "abcdefghijk",
+        sources={"файл cookies": GoodSource(), "браузер chrome": BadSource()},
+        make_ask=ask_factory(log=opened),
+        test_video_id="abcdefghijk",
     )
     sources = [c for c in checks if c.name not in (LOGIN, CHAT, NETWORK)]
     assert [(c.name, c.ok) for c in sources] == [
         ("файл cookies", True),
         ("браузер chrome", False),
     ]
-    assert by_name(checks, LOGIN).ok and by_name(checks, CHAT).ok
-    assert doctor_exit_code(checks) == 0
+    assert (
+        by_name(
+            checks=checks,
+            name=LOGIN,
+        ).ok
+        and by_name(
+            checks=checks,
+            name=CHAT,
+        ).ok
+    )
+    assert doctor_exit_code(checks=checks) == 0
     assert opened == ["abcdefghijk"]
 
 
 async def test_all_sources_fail_is_exit_4_with_export_hint():
     checks = await run_doctor(
-        {
-            "файл cookies": BadSource("Файл cookies не задан."),
+        sources={
+            "файл cookies": BadSource(message="Файл cookies не задан."),
             "браузер edge": BadSource(),
         },
-        ask_factory(),
-        "abcdefghijk",
+        make_ask=ask_factory(),
+        test_video_id="abcdefghijk",
     )
-    assert not by_name(checks, LOGIN).ok and not by_name(checks, CHAT).ok
-    assert doctor_exit_code(checks) == 4
-    assert "--cookies-file" in (by_name(checks, LOGIN).hint or "")
+    assert (
+        not by_name(
+            checks=checks,
+            name=LOGIN,
+        ).ok
+        and not by_name(
+            checks=checks,
+            name=CHAT,
+        ).ok
+    )
+    assert doctor_exit_code(checks=checks) == 4
+    assert "--cookies-file" in (
+        by_name(
+            checks=checks,
+            name=LOGIN,
+        ).hint
+        or ""
+    )
 
 
 async def test_signed_in_but_chat_unavailable_is_exit_3():
     checks = await run_doctor(
-        {"файл cookies": GoodSource()},
-        ask_factory(ChatUnavailableError("Чат недоступен для этого видео.")),
-        "abcdefghijk",
+        sources={"файл cookies": GoodSource()},
+        make_ask=ask_factory(
+            outcome=ChatUnavailableError(message="Чат недоступен для этого видео.")
+        ),
+        test_video_id="abcdefghijk",
     )
-    assert by_name(checks, LOGIN).ok
-    assert not by_name(checks, CHAT).ok
-    assert doctor_exit_code(checks) == 3
+    assert by_name(
+        checks=checks,
+        name=LOGIN,
+    ).ok
+    assert not by_name(
+        checks=checks,
+        name=CHAT,
+    ).ok
+    assert doctor_exit_code(checks=checks) == 3
 
 
 async def test_stale_first_source_falls_back_to_next():
     class Stale:
         async def load(self) -> Credentials:
-            return Credentials({"SAPISID": "STALE"})
+            return Credentials(cookies={"SAPISID": "STALE"})
 
     class StaleAware:
         def __init__(self, source) -> None:
@@ -133,55 +186,82 @@ async def test_stale_first_source_falls_back_to_next():
 
         async def open(self, video_id: str) -> FakeSession:
             if (await self.source.load()).sapisid() == "STALE":
-                raise AuthError("cookies устарели")
-            return FakeSession(video_id)
+                raise AuthError(message="cookies устарели")
+            return FakeSession(video_id=video_id)
 
     checks = await run_doctor(
-        {"файл cookies": Stale(), "браузер firefox": GoodSource()},
-        StaleAware,
-        "abcdefghijk",
+        sources={"файл cookies": Stale(), "браузер firefox": GoodSource()},
+        make_ask=StaleAware,
+        test_video_id="abcdefghijk",
     )
-    assert not by_name(checks, "файл cookies").ok
-    assert by_name(checks, "браузер firefox").ok
-    assert by_name(checks, LOGIN).ok and by_name(checks, CHAT).ok
-    assert doctor_exit_code(checks) == 0
+    assert not by_name(
+        checks=checks,
+        name="файл cookies",
+    ).ok
+    assert by_name(
+        checks=checks,
+        name="браузер firefox",
+    ).ok
+    assert (
+        by_name(
+            checks=checks,
+            name=LOGIN,
+        ).ok
+        and by_name(
+            checks=checks,
+            name=CHAT,
+        ).ok
+    )
+    assert doctor_exit_code(checks=checks) == 0
 
 
 async def test_all_loaded_sources_stale_is_exit_4():
     checks = await run_doctor(
-        {"файл cookies": GoodSource()},
-        ask_factory(AuthError("cookies устарели")),
-        "abcdefghijk",
+        sources={"файл cookies": GoodSource()},
+        make_ask=ask_factory(outcome=AuthError(message="cookies устарели")),
+        test_video_id="abcdefghijk",
     )
-    assert not by_name(checks, LOGIN).ok
-    assert doctor_exit_code(checks) == 4
+    assert not by_name(
+        checks=checks,
+        name=LOGIN,
+    ).ok
+    assert doctor_exit_code(checks=checks) == 4
 
 
 async def test_network_failure_is_exit_6():
     checks = await run_doctor(
-        {"файл cookies": GoodSource()}, ask_factory(NetworkError("сеть")), "abcdefghijk"
+        sources={"файл cookies": GoodSource()},
+        make_ask=ask_factory(outcome=NetworkError(message="сеть")),
+        test_video_id="abcdefghijk",
     )
-    assert not by_name(checks, NETWORK).ok
-    assert doctor_exit_code(checks) == 6
+    assert not by_name(
+        checks=checks,
+        name=NETWORK,
+    ).ok
+    assert doctor_exit_code(checks=checks) == 6
 
 
 async def test_source_read_once():
     source = GoodSource()
-    await run_doctor({"файл cookies": source}, ask_factory(), "abcdefghijk")
+    await run_doctor(
+        sources={"файл cookies": source},
+        make_ask=ask_factory(),
+        test_video_id="abcdefghijk",
+    )
     assert source.loads == 1
 
 
 async def test_checks_never_contain_cookie_values():
     for outcome in (
         None,
-        ChatUnavailableError("нет чата"),
-        AuthError("нет входа"),
-        NetworkError("сеть"),
+        ChatUnavailableError(message="нет чата"),
+        AuthError(message="нет входа"),
+        NetworkError(message="сеть"),
     ):
         checks = await run_doctor(
-            {"файл cookies": GoodSource(), "браузер chrome": BadSource()},
-            ask_factory(outcome),
-            "abcdefghijk",
+            sources={"файл cookies": GoodSource(), "браузер chrome": BadSource()},
+            make_ask=ask_factory(outcome=outcome),
+            test_video_id="abcdefghijk",
         )
         text = repr(checks)
         assert SECRET_SAPISID not in text and SECRET_SID not in text
@@ -205,29 +285,51 @@ class Harness:
         self.settings = settings or Settings()
         self.containers: list = []
 
-    def factory(self, out, err) -> AppContext:
+    def factory(
+        self,
+        out,
+        err,
+    ) -> AppContext:
         container = build_container(
-            settings=self.settings, env={}, cache_dir=self.tmp / "cache", err=err
+            settings=self.settings,
+            env={},
+            cache_dir=self.tmp / "cache",
+            err=err,
         )
-        container.doctor_sources.override(providers.Object(self.sources))
+        container.doctor_sources.override(provider=providers.Object(self.sources))
         container.ask_factory.override(
-            providers.Object(ask_factory(self.outcome, self.opened))
+            provider=providers.Object(
+                ask_factory(
+                    outcome=self.outcome,
+                    log=self.opened,
+                )
+            )
         )
         self.containers.append(container)
         return AppContext(
-            container=container, out=out, err=err, cwd=self.tmp, settings_path=None
+            container=container,
+            out=out,
+            err=err,
+            cwd=self.tmp,
+            settings_path=None,
         )
 
     def run(self, *argv: str) -> tuple[int, str, str]:
         out, err = io.StringIO(), io.StringIO()
         code = cli.run(
-            ["doctor", *argv], out=out, err=err, context_factory=self.factory
+            argv=["doctor", *argv],
+            out=out,
+            err=err,
+            context_factory=self.factory,
         )
         return code, out.getvalue(), err.getvalue()
 
 
 def test_doctor_command_success_prints_table(tmp_path):
-    h = Harness(tmp_path, {"файл cookies": GoodSource(), "браузер chrome": BadSource()})
+    h = Harness(
+        tmp_path=tmp_path,
+        sources={"файл cookies": GoodSource(), "браузер chrome": BadSource()},
+    )
     code, out, err = h.run()
     assert code == 0, err
     assert (
@@ -242,9 +344,9 @@ def test_doctor_command_success_prints_table(tmp_path):
 
 def test_doctor_command_all_sources_fail_exit_4(tmp_path):
     h = Harness(
-        tmp_path,
-        {
-            "файл cookies": BadSource("Файл cookies не задан."),
+        tmp_path=tmp_path,
+        sources={
+            "файл cookies": BadSource(message="Файл cookies не задан."),
             "браузер chrome": BadSource(),
         },
     )
@@ -257,9 +359,9 @@ def test_doctor_command_all_sources_fail_exit_4(tmp_path):
 
 def test_doctor_command_chat_unavailable_exit_3(tmp_path):
     h = Harness(
-        tmp_path,
-        {"файл cookies": GoodSource()},
-        outcome=ChatUnavailableError("Чат недоступен."),
+        tmp_path=tmp_path,
+        sources={"файл cookies": GoodSource()},
+        outcome=ChatUnavailableError(message="Чат недоступен."),
     )
     code, out, err = h.run()
     assert code == 3
@@ -269,13 +371,13 @@ def test_doctor_command_chat_unavailable_exit_3(tmp_path):
 
 def test_doctor_command_json(tmp_path):
     h = Harness(
-        tmp_path,
-        {"файл cookies": GoodSource()},
-        outcome=ChatUnavailableError("Чат недоступен."),
+        tmp_path=tmp_path,
+        sources={"файл cookies": GoodSource()},
+        outcome=ChatUnavailableError(message="Чат недоступен."),
     )
     code, out, _ = h.run("--json")
     assert code == 3
-    doc = json.loads(out)
+    doc = json.loads(s=out)
     assert doc["ok"] is False and doc["error"]["code"] == "chat_unavailable"
     assert doc["result"]["video_id"] == DEFAULT_TEST_VIDEO
     names = [c["name"] for c in doc["result"]["checks"]]
@@ -284,18 +386,34 @@ def test_doctor_command_json(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "arg", ["-n5MqamatXE", "https://youtu.be/-n5MqamatXE", "abcdefghijk"]
+    argnames="arg",
+    argvalues=["-n5MqamatXE", "https://youtu.be/-n5MqamatXE", "abcdefghijk"],
 )
-def test_doctor_video_option(tmp_path, arg):
-    h = Harness(tmp_path, {"файл cookies": GoodSource()})
-    code, _, err = h.run("--video", arg)
+def test_doctor_video_option(
+    tmp_path,
+    arg,
+):
+    h = Harness(
+        tmp_path=tmp_path,
+        sources={"файл cookies": GoodSource()},
+    )
+    code, _, err = h.run(
+        "--video",
+        arg,
+    )
     assert code == 0, err
     assert h.opened == [arg[-11:]]
 
 
 def test_doctor_bad_video_option_fails_before_network(tmp_path):
-    h = Harness(tmp_path, {"файл cookies": GoodSource()})
-    code, _, _ = h.run("--video", "https://example.com/x")
+    h = Harness(
+        tmp_path=tmp_path,
+        sources={"файл cookies": GoodSource()},
+    )
+    code, _, _ = h.run(
+        "--video",
+        "https://example.com/x",
+    )
     assert code == 7
     assert h.opened == []
 
@@ -303,17 +421,23 @@ def test_doctor_bad_video_option_fails_before_network(tmp_path):
 async def test_container_doctor_sources(tmp_path):
     def make(settings):
         return build_container(
-            settings=settings, env={}, cache_dir=tmp_path / "c", err=io.StringIO()
+            settings=settings,
+            env={},
+            cache_dir=tmp_path / "c",
+            err=io.StringIO(),
         )
 
-    plain = make(Settings()).doctor_sources()
+    plain = make(settings=Settings()).doctor_sources()
     assert list(plain) == ["файл cookies", *[f"браузер {b}" for b in BROWSERS]]
-    with pytest.raises(AuthError) as info:
+    with pytest.raises(expected_exception=AuthError) as info:
         await plain["файл cookies"].load()
     assert "--cookies-file" in (info.value.hint or "")
 
     chosen = make(
-        Settings(cookies_file=tmp_path / "c.txt", browser="firefox")
+        settings=Settings(
+            cookies_file=tmp_path / "c.txt",
+            browser="firefox",
+        )
     ).doctor_sources()
     assert list(chosen) == ["файл cookies", "браузер firefox"]
 
@@ -323,8 +447,8 @@ async def test_container_doctor_sources(tmp_path):
         loaded.append(browser)
         return {"SAPISID": "x"}
 
-    container = make(Settings(browser="edge"))
-    container.browser_loader.override(providers.Object(loader))
+    container = make(settings=Settings(browser="edge"))
+    container.browser_loader.override(provider=providers.Object(loader))
     creds = await container.doctor_sources()["браузер edge"].load()
     assert creds.sapisid() == "x" and loaded == ["edge"]
 
@@ -333,12 +457,21 @@ async def test_container_ask_factory_builds_youtube_clients(tmp_path):
     from lingotube.ask.client import YouTubeAskClient
 
     container = build_container(
-        settings=Settings(), env={}, cache_dir=tmp_path / "c", err=io.StringIO()
+        settings=Settings(),
+        env={},
+        cache_dir=tmp_path / "c",
+        err=io.StringIO(),
     )
     try:
         make = await container.ask_factory()
         first, second = make(GoodSource()), make(GoodSource())
-        assert isinstance(first, YouTubeAskClient) and first is not second
+        assert (
+            isinstance(
+                first,
+                YouTubeAskClient,
+            )
+            and first is not second
+        )
     finally:
         await container.shutdown_resources()
 
@@ -346,20 +479,49 @@ async def test_container_ask_factory_builds_youtube_clients(tmp_path):
 def test_doctor_registered_in_cli():
     import typer.main
 
-    app = cli.build_app(cli.build_registry(), lambda: None)  # type: ignore[arg-type, return-value]
-    assert "doctor" in typer.main.get_command(app).commands  # type: ignore[attr-defined]
+    app = cli.build_app(
+        registry=cli.build_registry(),
+        get_context=lambda: None,
+    )  # type: ignore[arg-type, return-value]
+    assert "doctor" in typer.main.get_command(typer_instance=app).commands  # type: ignore[attr-defined]
 
 
 def test_table_lists_hints_of_failed_checks_once():
     from lingotube.doctor import render_table
 
     checks = [
-        Check("a", False, "x", "сделайте A"),
-        Check("b", False, "y", "сделайте A"),
-        Check("c", True, "z", None),
-        Check("d", False, "w", "общая"),
+        Check(
+            name="a",
+            ok=False,
+            detail="x",
+            hint="сделайте A",
+        ),
+        Check(
+            name="b",
+            ok=False,
+            detail="y",
+            hint="сделайте A",
+        ),
+        Check(
+            name="c",
+            ok=True,
+            detail="z",
+            hint=None,
+        ),
+        Check(
+            name="d",
+            ok=False,
+            detail="w",
+            hint="общая",
+        ),
     ]
-    error = AuthError("e", hint="общая")
-    text = render_table(checks, error)
+    error = AuthError(
+        message="e",
+        hint="общая",
+    )
+    text = render_table(
+        checks=checks,
+        error=error,
+    )
     assert text.count("сделайте A") == 1
     assert "общая" not in text
