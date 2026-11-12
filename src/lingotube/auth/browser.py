@@ -36,14 +36,16 @@ class BrowserCookieSource:
         self,
         browser: str | None = None,
         loader: Callable[[str], Mapping[str, str]] | None = None,
+        platform: str = sys.platform,
     ) -> None:
         if browser is not None and browser not in BROWSERS:
             raise ValueError(f"unknown browser: {browser}")
         self._browser = browser
         self._loader = loader or default_loader
+        self._platform = platform
 
     def _hint(self, browser: str) -> str:
-        if sys.platform == "win32" and browser in ("chrome", "edge"):
+        if self._platform == "win32" and browser in ("chrome", "edge"):
             return _WIN_HINT
         return EXPORT_HINT
 
@@ -73,7 +75,7 @@ class BrowserCookieSource:
                 continue
         raise AuthError(
             message="Не удалось получить cookies ни из одного браузера.",
-            hint=EXPORT_HINT,
+            hint=_WIN_HINT if self._platform == "win32" else EXPORT_HINT,
         )
 
     async def load(self) -> Credentials:
@@ -85,12 +87,15 @@ class ChainCookieSource:
         self._sources = list(sources)
 
     async def load(self) -> Credentials:
+        hint = EXPORT_HINT
         for source in self._sources:
             try:
                 return await source.load()
-            except AuthError:
-                continue
+            except AuthError as e:
+                hint = (
+                    e.hint or hint
+                )  # keep the last source's own hint (e.g. the Windows one)
         raise AuthError(
             message="Не удалось получить cookies ни из одного источника.",
-            hint=EXPORT_HINT,
+            hint=hint,
         )

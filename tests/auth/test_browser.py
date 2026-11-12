@@ -66,3 +66,39 @@ async def test_chain_all_fail():
     with pytest.raises(expected_exception=AuthError) as e:
         await ChainCookieSource(sources=[_Fail()]).load()
     assert "cookies-file" in e.value.hint
+
+
+async def test_default_chain_on_windows_keeps_chrome_edge_hint():
+    def boom(b):
+        raise RuntimeError("locked")
+
+    chain = ChainCookieSource(
+        sources=[
+            BrowserCookieSource(
+                browser=None,
+                loader=boom,
+                platform="win32",
+            )
+        ]
+    )
+    with pytest.raises(expected_exception=AuthError) as e:
+        await chain.load()
+    assert "Chrome/Edge" in e.value.hint and "cookies-file" in e.value.hint
+
+
+async def test_default_chain_elsewhere_has_only_export_hint():
+    def boom(b):
+        raise RuntimeError("locked")
+
+    chain = ChainCookieSource(
+        sources=[
+            BrowserCookieSource(
+                browser=None,
+                loader=boom,
+                platform="linux",
+            )
+        ]
+    )
+    with pytest.raises(expected_exception=AuthError) as e:
+        await chain.load()
+    assert "Chrome/Edge" not in e.value.hint and "cookies-file" in e.value.hint
