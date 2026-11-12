@@ -63,5 +63,10 @@ def test_from_dict_invalid(bad):
 def test_errors(cls, code, exit_code):
     e = cls("boom", "try this")
     assert isinstance(e, LingotubeError)
-    assert (e.code, e.exit_code, e.message, e.hint) == (code, exit_code, "boom", "try this")
+    assert (e.code, e.exit_code, e.message, e.hint) == (
+        code,
+        exit_code,
+        "boom",
+        "try this",
+    )
     assert str(e) == "boom"

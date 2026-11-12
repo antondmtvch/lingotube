@@ -5,7 +5,11 @@ from dataclasses import dataclass
 
 _TIME = r"(\d{1,3}:\d{2}(?::\d{2})?)"
 _CUE = re.compile(
-    r"^(?:[-*•]\s++)?\**+\s*+[(\[]\s*" + _TIME + r"(?:\s*[-–—]\s*" + _TIME + r")?\s*[)\]]\s*\**\s*(.*)$"
+    r"^(?:[-*•]\s++)?\**+\s*+[(\[]\s*"
+    + _TIME
+    + r"(?:\s*[-–—]\s*"
+    + _TIME
+    + r")?\s*[)\]]\s*\**\s*(.*)$"
 )
 
 

@@ -26,7 +26,9 @@ _LINE = re.compile(r"^\s*(\d+)(?:[\t ]+|[.):]\s*)(.*?)\s*$")
 
 
 class OpenAICompatTranslator:
-    def __init__(self, http: httpx.AsyncClient, settings: TranslatorSettings, api_key: str) -> None:
+    def __init__(
+        self, http: httpx.AsyncClient, settings: TranslatorSettings, api_key: str
+    ) -> None:
         self._http = http
         self._settings = settings
         self._api_key = api_key
@@ -52,7 +54,9 @@ class OpenAICompatTranslator:
 
     async def _translate_batch(self, batch: list[Cue], language: str) -> list[Cue]:
         system = load_prompt("translate_batch", language=language)
-        user = "\n".join(f"{n}\t{' '.join(c.text.split())}" for n, c in enumerate(batch, 1))
+        user = "\n".join(
+            f"{n}\t{' '.join(c.text.split())}" for n, c in enumerate(batch, 1)
+        )
         for _ in range(ATTEMPTS):
             texts = _parse(await self._complete(system, user), len(batch))
             if texts is not None:
@@ -82,11 +86,15 @@ class OpenAICompatTranslator:
             )
         except httpx.InvalidURL:
             raise ValidationError(
-                "Некорректный адрес модели перевода.", hint="Проверьте настройку translator.base_url."
+                "Некорректный адрес модели перевода.",
+                hint="Проверьте настройку translator.base_url.",
             ) from None
         except httpx.HTTPError as e:
             raise NetworkError(
-                redact(f"Не удалось обратиться к модели перевода: {type(e).__name__}: {e}", [self._api_key])
+                redact(
+                    f"Не удалось обратиться к модели перевода: {type(e).__name__}: {e}",
+                    [self._api_key],
+                )
             ) from None
         status = response.status_code
         if status in (401, 403):
@@ -95,14 +103,18 @@ class OpenAICompatTranslator:
                 hint=f"Проверьте ключ в переменной окружения {self._settings.api_key_env}.",
             ) from None
         if 300 <= status < 400:
-            raise NetworkError("Модель перевода ответила перенаправлением; перенаправления не выполняются.") from None
+            raise NetworkError(
+                "Модель перевода ответила перенаправлением; перенаправления не выполняются."
+            ) from None
         if status >= 400:
             raise NetworkError(
-                redact(f"Модель перевода вернула ошибку HTTP {status}.", [self._api_key])
+                redact(
+                    f"Модель перевода вернула ошибку HTTP {status}.", [self._api_key]
+                )
             ) from None
         try:
             content = response.json()["choices"][0]["message"]["content"]
-        except (ValueError, KeyError, IndexError, TypeError):
+        except ValueError, KeyError, IndexError, TypeError:
             return ""
         return content if isinstance(content, str) else ""
 

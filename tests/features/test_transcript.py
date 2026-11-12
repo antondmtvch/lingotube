@@ -65,7 +65,9 @@ async def test_short_video_single_request(tmp_path):
     assert isinstance(result, TranscriptResult)
     assert len(client.prompts) == 1
     assert client.opened == [VID]
-    assert [c.text for c in result.transcript.cues] == [f"реплика {t}" for t in range(0, 300, 10)]
+    assert [c.text for c in result.transcript.cues] == [
+        f"реплика {t}" for t in range(0, 300, 10)
+    ]
     assert result.completeness.complete
     assert result.transcript.video_id == VID
     assert result.transcript.duration == 300
@@ -96,14 +98,18 @@ async def test_hour_long_video_uses_hour_format(tmp_path):
 async def test_progress_reported(tmp_path):
     calls = []
     client = FakeAskClient(info(1500), full)
-    await feature(client, tmp_path, chunk=600, progress=lambda d, t: calls.append((d, t))).run(VID)
+    await feature(
+        client, tmp_path, chunk=600, progress=lambda d, t: calls.append((d, t))
+    ).run(VID)
     assert calls == [(1, 3), (2, 3), (3, 3)]
 
 
 async def test_truncated_range_is_requested_again_from_last_timecode(tmp_path):
     def answer(prompt: str) -> str:
         start, end = requested(prompt)
-        return lines(0, 241) if start == 0 else lines(start, end)  # 1-й ответ кончается на 4:00
+        return (
+            lines(0, 241) if start == 0 else lines(start, end)
+        )  # 1-й ответ кончается на 4:00
 
     client = FakeAskClient(info(600), answer)
     result = await feature(client, tmp_path, chunk=600).run(VID)
@@ -134,11 +140,17 @@ async def test_truncation_retry_is_bounded(tmp_path):
 
 
 async def test_rerequest_without_progress_stops_and_part_is_not_reasked(tmp_path):
-    client = FakeAskClient(info(300), lambda p: lines(0, 61))  # дозапрос не даёт ничего нового
+    client = FakeAskClient(
+        info(300), lambda p: lines(0, 61)
+    )  # дозапрос не даёт ничего нового
     result = await feature(client, tmp_path).run(VID)
-    assert len(client.prompts) == 2  # первый дозапрос без продвижения — дальше не спрашиваем
+    assert (
+        len(client.prompts) == 2
+    )  # первый дозапрос без продвижения — дальше не спрашиваем
     assert not result.completeness.complete
-    assert not any("оборван" in w for w in result.warnings)  # обрыв описан проверкой полноты
+    assert not any(
+        "оборван" in w for w in result.warnings
+    )  # обрыв описан проверкой полноты
     assert any("неполная" in w for w in result.warnings)
     second = FakeAskClient(info(300), full)
     again = await feature(second, tmp_path).run(VID)
@@ -157,7 +169,9 @@ async def test_cut_line_replaced_and_lines_before_resume_ignored(tmp_path):
     result = await feature(client, tmp_path, chunk=600).run(VID)
     assert len(client.prompts) == 2
     assert "с 4:00 по 10:00" in client.prompts[1]
-    assert [c.text for c in result.transcript.cues] == [f"реплика {t}" for t in range(0, 600, 10)]
+    assert [c.text for c in result.transcript.cues] == [
+        f"реплика {t}" for t in range(0, 600, 10)
+    ]
 
 
 async def test_cut_line_replacement_keeps_earlier_lines_at_same_timecode(tmp_path):
@@ -183,7 +197,9 @@ async def test_no_timecodes_is_error_not_empty_file(tmp_path):
 
 
 async def test_empty_continuation_stops_rerequests(tmp_path):
-    client = FakeAskClient(info(300), lambda p: lines(0, 61) if "с 0:00" in p else "Больше ничего нет.")
+    client = FakeAskClient(
+        info(300), lambda p: lines(0, 61) if "с 0:00" in p else "Больше ничего нет."
+    )
     result = await feature(client, tmp_path).run(VID)
     assert len(client.prompts) == 2
     assert not result.completeness.complete
@@ -191,7 +207,9 @@ async def test_empty_continuation_stops_rerequests(tmp_path):
 
 async def test_parts_cached_and_resume_after_failure(tmp_path):
     def failing(prompt: str) -> str | Exception:
-        return NetworkError("сеть упала") if requested(prompt)[0] == 300 else full(prompt)
+        return (
+            NetworkError("сеть упала") if requested(prompt)[0] == 300 else full(prompt)
+        )
 
     first = FakeAskClient(info(900), failing)
     with pytest.raises(NetworkError):
@@ -206,7 +224,9 @@ async def test_parts_cached_and_resume_after_failure(tmp_path):
 
 
 async def test_resume_counts_cached_parts_in_progress(tmp_path):
-    first = FakeAskClient(info(900), lambda p: NetworkError("x") if "с 5:00" in p else full(p))
+    first = FakeAskClient(
+        info(900), lambda p: NetworkError("x") if "с 5:00" in p else full(p)
+    )
     with pytest.raises(NetworkError):
         await feature(first, tmp_path).run(VID)
     calls = []
@@ -228,10 +248,14 @@ async def test_complete_result_served_from_cache(tmp_path):
 
 
 async def test_incomplete_result_not_served_as_ready(tmp_path):
-    first = FakeAskClient(info(300), creeping)  # дозапросы кончились, чат ещё продвигался
+    first = FakeAskClient(
+        info(300), creeping
+    )  # дозапросы кончились, чат ещё продвигался
     r1 = await feature(first, tmp_path).run(VID)
     assert not r1.completeness.complete
-    final = await Cache(tmp_path / "cache").get(CacheKey(VID, "transcript", "orig", "chat", PROMPT_VERSION))
+    final = await Cache(tmp_path / "cache").get(
+        CacheKey(VID, "transcript", "orig", "chat", PROMPT_VERSION)
+    )
     assert final is not None and final["complete"] is False
     second = FakeAskClient(info(300), full)
     r2 = await feature(second, tmp_path).run(VID)
@@ -258,7 +282,9 @@ async def test_cancelled_run_leaves_cache_readable(tmp_path):
     first = FakeAskClient(info(900), cancelling)
     with pytest.raises(asyncio.CancelledError):
         await feature(first, tmp_path).run(VID)
-    part = CacheKey(VID, "transcript-part", "orig", "chat", PROMPT_VERSION, part="0.0-300.0")
+    part = CacheKey(
+        VID, "transcript-part", "orig", "chat", PROMPT_VERSION, part="0.0-300.0"
+    )
     assert await Cache(tmp_path / "cache").get(part) is not None
     second = FakeAskClient(info(900), full)
     await feature(second, tmp_path).run(VID)
@@ -272,9 +298,17 @@ async def test_language_set_uses_translated_prompt_and_tags_language(tmp_path):
     assert "English" in client.prompts[0]
     assert result.transcript.language == "English"
     cache = Cache(tmp_path / "cache")
-    assert await cache.get(CacheKey(VID, "transcript", "English", "chat", PROMPT_VERSION)) is not None
-    assert await cache.get(CacheKey(VID, "transcript", "orig", "chat", PROMPT_VERSION)) is None
-    part = CacheKey(VID, "transcript-part", "English", "chat", PROMPT_VERSION, part="0.0-300.0")
+    assert (
+        await cache.get(CacheKey(VID, "transcript", "English", "chat", PROMPT_VERSION))
+        is not None
+    )
+    assert (
+        await cache.get(CacheKey(VID, "transcript", "orig", "chat", PROMPT_VERSION))
+        is None
+    )
+    part = CacheKey(
+        VID, "transcript-part", "English", "chat", PROMPT_VERSION, part="0.0-300.0"
+    )
     assert await cache.get(part) is not None
 
 
@@ -303,25 +337,33 @@ async def test_overshoot_past_chunk_end_is_dropped(tmp_path):
         start, end = requested(prompt)
         body = lines(start, end)
         if start == 0:  # чат заходит за конец отрезка 0:00–5:00
-            body = body.replace("\n\nНадеюсь", "\n(5:00) чужая реплика\n(5:10) ещё чужая\n\nНадеюсь")
+            body = body.replace(
+                "\n\nНадеюсь", "\n(5:00) чужая реплика\n(5:10) ещё чужая\n\nНадеюсь"
+            )
         return body
 
     client = FakeAskClient(info(600), answer)
     result = await feature(client, tmp_path).run(VID)
     # без отбрасывания merge склеил бы «реплика 300 чужая реплика»
-    assert [c.text for c in result.transcript.cues] == [f"реплика {t}" for t in range(0, 600, 10)]
+    assert [c.text for c in result.transcript.cues] == [
+        f"реплика {t}" for t in range(0, 600, 10)
+    ]
 
 
 async def test_gaps_reported_as_warnings(tmp_path):
     def answer(prompt: str) -> str:
         start, end = requested(prompt)
-        return lines(start, end) if start == 0 else lines(max(start, 500), end)  # тишина 4:51–8:20
+        return (
+            lines(start, end) if start == 0 else lines(max(start, 500), end)
+        )  # тишина 4:51–8:20
 
     client = FakeAskClient(info(900), answer)
     result = await feature(client, tmp_path).run(VID)
     assert result.completeness.complete
     assert result.completeness.gaps
-    assert any(w.startswith("пропуск 4:5") and w.endswith("8:20") for w in result.warnings)
+    assert any(
+        w.startswith("пропуск 4:5") and w.endswith("8:20") for w in result.warnings
+    )
 
 
 async def test_ends_fixed_and_ids_sequential(tmp_path):

@@ -84,4 +84,6 @@ class Transcript:
             if not isinstance(c.get("text"), str):
                 raise _fail(f"cue #{i}: text must be a string")
             cues.append(Cue(c["id"], c["start"], end, c["text"]))
-        return cls(d["video_id"], d["duration"], language, d["prompt_version"], tuple(cues))
+        return cls(
+            d["video_id"], d["duration"], language, d["prompt_version"], tuple(cues)
+        )

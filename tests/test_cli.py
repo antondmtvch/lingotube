@@ -13,7 +13,12 @@ from lingotube.auth.base import Credentials
 from lingotube.commands import AppContext
 from lingotube.config import Settings, TranslatorSettings
 from lingotube.container import build_container
-from lingotube.errors import AuthError, ChatUnavailableError, NetworkError, ValidationError
+from lingotube.errors import (
+    AuthError,
+    ChatUnavailableError,
+    NetworkError,
+    ValidationError,
+)
 from lingotube.features.build import BuildFeature
 from lingotube.features.subtitles import SubtitlesFeature
 from lingotube.features.summary import SummaryFeature
@@ -123,14 +128,22 @@ class Harness:
             getattr(container, name).override(provider)
         self.containers.append(container)
         return AppContext(
-            container=container, out=out, err=err, cwd=self.tmp, settings_path=self.tmp / "settings.toml"
+            container=container,
+            out=out,
+            err=err,
+            cwd=self.tmp,
+            settings_path=self.tmp / "settings.toml",
         )
 
     def run(self, *argv: str, out=None) -> tuple[int, str, str]:
         out = out if out is not None else io.StringIO()
         err = io.StringIO()
         code = cli.run(list(argv), out=out, err=err, context_factory=self.factory)
-        return code, (out.getvalue() if isinstance(out, io.StringIO) else ""), err.getvalue()
+        return (
+            code,
+            (out.getvalue() if isinstance(out, io.StringIO) else ""),
+            err.getvalue(),
+        )
 
 
 def test_subs_writes_srt_file_default_name(tmp_path):
@@ -167,11 +180,15 @@ def test_subs_incomplete_writes_file_and_exits_5(tmp_path):
 
 def test_offset_and_format_flags(tmp_path):
     h = Harness(tmp_path)
-    code, _, err = h.run("subs", URL, "--lang", "ru", "--format", "vtt", "--offset", "1.5")
+    code, _, err = h.run(
+        "subs", URL, "--lang", "ru", "--format", "vtt", "--offset", "1.5"
+    )
     assert code == 0, err
     text = (tmp_path / f"{VID}.ru.vtt").read_text(encoding="utf-8")
     assert text.startswith("WEBVTT\n\n00:00:01.500 --> ")
-    code, out, err = h.run("subs", URL, "--lang", "ru", "--format", "json", "--offset", "-0.5", "-o", "-")
+    code, out, err = h.run(
+        "subs", URL, "--lang", "ru", "--format", "json", "--offset", "-0.5", "-o", "-"
+    )
     assert code == 0, err
     data = json.loads(out)
     assert data["cues"][1]["start"] == 9.5
@@ -205,7 +222,12 @@ def test_transcript_outputs_json_format(tmp_path):
     assert [c["id"] for c in data["cues"]] == [1, 2, 3]
     code, _, err = h.run("transcript", URL)
     assert code == 0, err
-    assert json.loads((tmp_path / f"{VID}.en.json").read_text(encoding="utf-8"))["video_id"] == VID
+    assert (
+        json.loads((tmp_path / f"{VID}.en.json").read_text(encoding="utf-8"))[
+            "video_id"
+        ]
+        == VID
+    )
 
 
 def test_build_reads_file_and_validates(tmp_path):
@@ -215,13 +237,17 @@ def test_build_reads_file_and_validates(tmp_path):
     data["language"] = "ru"
     for cue in data["cues"]:
         cue["text"] = f"перевод {cue['id']}"
-    (tmp_path / "ru.json").write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    (tmp_path / "ru.json").write_text(
+        json.dumps(data, ensure_ascii=False), encoding="utf-8"
+    )
     code, _, err = h.run("build", URL, "--lang", "ru", "--from", "ru.json")
     assert code == 0, err
     assert "перевод 2" in (tmp_path / f"{VID}.ru.srt").read_text(encoding="utf-8")
 
     data["cues"].pop()
-    (tmp_path / "bad.json").write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    (tmp_path / "bad.json").write_text(
+        json.dumps(data, ensure_ascii=False), encoding="utf-8"
+    )
     code, _, err = h.run("build", URL, "--lang", "ru", "--from", "bad.json")
     assert code == 7
     assert "отсутствуют id: 3" in err
@@ -239,10 +265,18 @@ def test_summary_prints_text(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "exc,code", [(ChatUnavailableError, 3), (AuthError, 4), (NetworkError, 6), (ValidationError, 7)]
+    "exc,code",
+    [
+        (ChatUnavailableError, 3),
+        (AuthError, 4),
+        (NetworkError, 6),
+        (ValidationError, 7),
+    ],
 )
 def test_exit_codes(tmp_path, exc, code):
-    h = Harness(tmp_path, answer=lambda prompt: exc("что-то сломалось", hint="сделайте так"))
+    h = Harness(
+        tmp_path, answer=lambda prompt: exc("что-то сломалось", hint="сделайте так")
+    )
     rc, out, err = h.run("subs", URL, "--lang", "ru")
     assert rc == code
     assert "что-то сломалось" in err and "сделайте так" in err
@@ -283,7 +317,9 @@ def test_json_envelope_success_and_error(tmp_path):
     assert doc["ok"] is False and doc["result"] is None
     assert doc["error"] == {"code": "auth", "message": "нет входа", "hint": "войдите"}
 
-    code, out, _ = h.run("subs", "--json")  # usage error: still exactly one JSON document
+    code, out, _ = h.run(
+        "subs", "--json"
+    )  # usage error: still exactly one JSON document
     assert code == 2
     assert json.loads(out)["error"]["code"] == "usage"
 
@@ -301,7 +337,9 @@ def test_json_envelope_incomplete(tmp_path):
 
 def test_bad_url_fails_before_any_network(tmp_path):
     h = Harness(tmp_path)
-    code, _, err = h.run("subs", "https://example.com/watch?v=abcdefghijk", "--lang", "ru")
+    code, _, err = h.run(
+        "subs", "https://example.com/watch?v=abcdefghijk", "--lang", "ru"
+    )
     assert code == 7
     assert h.asks_made == 0
     assert all(not c.http.initialized for c in h.containers)
@@ -346,7 +384,12 @@ def test_stream_without_reconfigure_falls_back_to_replace(tmp_path):
 
     out = Strict()
     h = Harness(tmp_path)
-    code = cli.run(["summary", URL, "--lang", "ru"], out=out, err=io.StringIO(), context_factory=h.factory)
+    code = cli.run(
+        ["summary", URL, "--lang", "ru"],
+        out=out,
+        err=io.StringIO(),
+        context_factory=h.factory,
+    )
     assert code == 0
     assert "Краткое содержание" in "".join(out.parts)
 
@@ -355,7 +398,9 @@ def test_cookies_file_flag_is_remembered_in_settings(tmp_path):
     cookies = tmp_path / "my.cookies.txt"
     cookies.write_text("# Netscape HTTP Cookie File\n", encoding="utf-8")
     h = Harness(tmp_path)
-    code, _, err = h.run("summary", URL, "--lang", "ru", "--cookies-file", "my.cookies.txt")
+    code, _, err = h.run(
+        "summary", URL, "--lang", "ru", "--cookies-file", "my.cookies.txt"
+    )
     assert code == 0, err
     settings_text = (tmp_path / "settings.toml").read_text(encoding="utf-8")
     assert "cookies_file" in settings_text
@@ -366,7 +411,16 @@ def test_cookies_file_flag_is_remembered_in_settings(tmp_path):
 
 def test_cookies_file_and_browser_together_is_usage_error(tmp_path):
     h = Harness(tmp_path)
-    code, _, err = h.run("summary", URL, "--lang", "ru", "--cookies-file", "a.txt", "--browser", "firefox")
+    code, _, err = h.run(
+        "summary",
+        URL,
+        "--lang",
+        "ru",
+        "--cookies-file",
+        "a.txt",
+        "--browser",
+        "firefox",
+    )
     assert code == 2
     code, _, err = h.run("summary", URL, "--lang", "ru", "--browser", "netscape")
     assert code == 2 and "netscape" in err
@@ -380,7 +434,9 @@ def test_leading_dash_video_id_and_url(tmp_path):
     assert code == 0, err
     code, _, err = h.run("subs", "--lang", "ru", "--", DASH_VID)
     assert code == 0, err
-    code, _, err = h.run("subs", f"https://youtu.be/{DASH_VID}", "--lang", "ru", "--no-cache")
+    code, _, err = h.run(
+        "subs", f"https://youtu.be/{DASH_VID}", "--lang", "ru", "--no-cache"
+    )
     assert code == 0, err
     assert h.ask.opened == [DASH_VID, DASH_VID, DASH_VID]  # third run served from cache
     assert (tmp_path / f"{DASH_VID}.ru.srt").exists()
@@ -388,13 +444,26 @@ def test_leading_dash_video_id_and_url(tmp_path):
 
 def test_negative_offset_value_is_not_taken_for_an_id(tmp_path):
     h = Harness(tmp_path)
-    code, out, err = h.run("subs", URL, "--lang", "ru", "--format", "json", "-o", "-", "--offset", "-1000000000")
+    code, out, err = h.run(
+        "subs",
+        URL,
+        "--lang",
+        "ru",
+        "--format",
+        "json",
+        "-o",
+        "-",
+        "--offset",
+        "-1000000000",
+    )
     assert code == 0, err
     assert json.loads(out)["cues"][0]["start"] == 0.0
 
 
 def test_translator_key_missing_is_auth_error(tmp_path):
-    settings = Settings(translator=TranslatorSettings(base_url="http://127.0.0.1:9/v1", model="m"))
+    settings = Settings(
+        translator=TranslatorSettings(base_url="http://127.0.0.1:9/v1", model="m")
+    )
     h = Harness(tmp_path, settings=settings, env={"OTHER": "x"})
     code, out, err = h.run("subs", URL, "--lang", "ru")
     assert code == 4
@@ -406,7 +475,10 @@ def test_translator_key_missing_is_auth_error(tmp_path):
 
 def _container(tmp_path, settings=None, env=None):
     return build_container(
-        settings=settings or Settings(), env=env or {}, cache_dir=tmp_path / "cache", err=io.StringIO()
+        settings=settings or Settings(),
+        env=env or {},
+        cache_dir=tmp_path / "cache",
+        err=io.StringIO(),
     )
 
 
@@ -443,7 +515,8 @@ async def test_youtube_client_never_stores_set_cookie(tmp_path):
     try:
         http = await _get(container.http)
         response = httpx.Response(
-            200, headers={"set-cookie": "SID=leak; Domain=.youtube.com; Path=/"},
+            200,
+            headers={"set-cookie": "SID=leak; Domain=.youtube.com; Path=/"},
             request=httpx.Request("GET", "https://www.youtube.com/"),
         )
         http.cookies.extract_cookies(response)
@@ -484,7 +557,9 @@ async def test_translator_selected_only_when_configured(tmp_path):
     assert await _get(plain.translator) is None
     await _shutdown(plain)  # nothing initialized: shutdown is synchronous
 
-    tr = TranslatorSettings(base_url="http://127.0.0.1:9/v1", model="m", api_key_env="MY_KEY")
+    tr = TranslatorSettings(
+        base_url="http://127.0.0.1:9/v1", model="m", api_key_env="MY_KEY"
+    )
     configured = _container(tmp_path, Settings(translator=tr), {"MY_KEY": "k-secret"})
     try:
         assert isinstance(await _get(configured.translator), OpenAICompatTranslator)
@@ -529,12 +604,25 @@ def test_broken_settings_do_not_break_help(tmp_path):
 def test_broken_settings_fail_the_command_with_exit_7(tmp_path):
     factory, calls = _broken_settings_factory(tmp_path)
     out, err = io.StringIO(), io.StringIO()
-    assert cli.run(["subs", VID, "--lang", "ru"], out=out, err=err, context_factory=factory) == 7
+    assert (
+        cli.run(
+            ["subs", VID, "--lang", "ru"], out=out, err=err, context_factory=factory
+        )
+        == 7
+    )
     assert "format" in err.getvalue() and "Traceback" not in err.getvalue()
     assert out.getvalue() == ""
 
     out, err = io.StringIO(), io.StringIO()
-    assert cli.run(["subs", VID, "--lang", "ru", "--json"], out=out, err=err, context_factory=factory) == 7
+    assert (
+        cli.run(
+            ["subs", VID, "--lang", "ru", "--json"],
+            out=out,
+            err=err,
+            context_factory=factory,
+        )
+        == 7
+    )
     doc = json.loads(out.getvalue())
     assert doc["ok"] is False and doc["error"]["code"] == "validation"
     assert len(calls) == 2
@@ -551,7 +639,12 @@ def test_unexpected_failure_outside_command_body_is_generic_exit_1(tmp_path):
         raise RuntimeError("secret-xyz")
 
     out, err = io.StringIO(), io.StringIO()
-    assert cli.run(["summary", URL, "--lang", "ru"], out=out, err=err, context_factory=factory) == 1
+    assert (
+        cli.run(
+            ["summary", URL, "--lang", "ru"], out=out, err=err, context_factory=factory
+        )
+        == 1
+    )
     assert "RuntimeError" in err.getvalue()
     assert "secret-xyz" not in out.getvalue() + err.getvalue()
 
@@ -560,7 +653,12 @@ def test_unexpected_failure_outside_command_body_is_generic_exit_1(tmp_path):
             raise OSError("pipe closed secret-xyz")
 
     h = Harness(tmp_path)
-    code = cli.run(["summary", URL, "--lang", "ru"], out=Broken(), err=Broken(), context_factory=h.factory)
+    code = cli.run(
+        ["summary", URL, "--lang", "ru"],
+        out=Broken(),
+        err=Broken(),
+        context_factory=h.factory,
+    )
     assert code == 1
 
 
@@ -575,7 +673,9 @@ def test_failed_write_keeps_previous_file(tmp_path, monkeypatch):
 
     def half_then_fail(fd, *args, **kwargs):
         f = real_fdopen(fd, *args, **kwargs)
-        if kwargs.get("newline") != "":  # only the output writer (the cache writes stay real)
+        if (
+            kwargs.get("newline") != ""
+        ):  # only the output writer (the cache writes stay real)
             return f
         real_write = f.write
 

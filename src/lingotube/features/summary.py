@@ -18,7 +18,11 @@ class SummaryFeature:
         key = CacheKey(video_id, KIND, language, MODE, PROMPT_VERSION)
         if use_cache:
             data = await self._cache.get(key)
-            if data is not None and isinstance(data.get("text"), str) and data["text"].strip():
+            if (
+                data is not None
+                and isinstance(data.get("text"), str)
+                and data["text"].strip()
+            ):
                 return data["text"]
         session = await self._ask.open(video_id)
         text = (await session.ask(load_prompt("summary", language=language))).strip()
@@ -52,7 +56,9 @@ def register(app, get_context) -> None:
             language = c.require_lang(lang, ctx.settings)
             feature = await ctx.provide(ctx.container.summary_feature)
             text = await feature.run(video_id, language, use_cache=common.use_cache)
-            path = await c.deliver(ctx, text + "\n", output if output is not None else "-", "")
+            path = await c.deliver(
+                ctx, text + "\n", output if output is not None else "-", ""
+            )
             result = {"video_id": video_id, "language": language, "text": text}
             if path is not None:
                 result["path"] = str(path)

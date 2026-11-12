@@ -20,7 +20,9 @@ def _ids(ids: list[int]) -> str:
     return text
 
 
-def validate_translation(original: Transcript, translated: dict[str, Any], language: str) -> Transcript:
+def validate_translation(
+    original: Transcript, translated: dict[str, Any], language: str
+) -> Transcript:
     """Checks `translated` against `original`; original times always win.
 
     All problems are collected into one ValidationError listing the offending ids.
@@ -65,8 +67,12 @@ class BuildFeature:
     def __init__(self, cache: Cache) -> None:
         self._cache = cache
 
-    async def run(self, video_id: str, language: str, translated: dict[str, Any]) -> Transcript:
-        original = await load_cached_transcript(self._cache, video_id, require_complete=False)
+    async def run(
+        self, video_id: str, language: str, translated: dict[str, Any]
+    ) -> Transcript:
+        original = await load_cached_transcript(
+            self._cache, video_id, require_complete=False
+        )
         if original is None:
             raise ValidationError(
                 "Оригинальная транскрипция этого видео не найдена в кэше.",
@@ -74,7 +80,8 @@ class BuildFeature:
             )
         result = validate_translation(original, translated, language)
         await self._cache.put(
-            CacheKey(video_id, "subtitles", language, "agent", PROMPT_VERSION), result.to_dict()
+            CacheKey(video_id, "subtitles", language, "agent", PROMPT_VERSION),
+            result.to_dict(),
         )
         return result
 
@@ -105,9 +112,13 @@ def register(app, get_context) -> None:
     from lingotube import commands as c
     from lingotube.writers import render
 
-    FromOpt = Annotated[Path, typer.Option("--from", help="Файл с переведённой транскрипцией (JSON).")]
+    FromOpt = Annotated[
+        Path, typer.Option("--from", help="Файл с переведённой транскрипцией (JSON).")
+    ]
 
-    @app.command("build", help="Сверяет готовый перевод с оригиналом и собирает субтитры.")
+    @app.command(
+        "build", help="Сверяет готовый перевод с оригиналом и собирает субтитры."
+    )
     def build(
         video: c.VideoArg,
         source: FromOpt,
@@ -127,6 +138,8 @@ def register(app, get_context) -> None:
             translated = await asyncio.to_thread(_read_json, ctx.path(source))
             feature = await ctx.provide(ctx.container.build_feature)
             result = await feature.run(video_id, language, translated)
-            return await c.transcript_outcome(ctx, result, render(result, fmt_, shift), fmt_, output)
+            return await c.transcript_outcome(
+                ctx, result, render(result, fmt_, shift), fmt_, output
+            )
 
         c.execute(get_context, common, video, body)

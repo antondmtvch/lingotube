@@ -50,10 +50,20 @@ def default_paths() -> tuple[Path, Path]:
 
 
 _TOP_TYPES = {
-    "lang": "str", "format": "str", "cookies_file": "str", "browser": "str",
-    "chunk_seconds": "int", "min_interval": "float", "max_retries": "int",
+    "lang": "str",
+    "format": "str",
+    "cookies_file": "str",
+    "browser": "str",
+    "chunk_seconds": "int",
+    "min_interval": "float",
+    "max_retries": "int",
 }
-_TR_TYPES = {"base_url": "str", "model": "str", "api_key_env": "str", "batch_size": "int"}
+_TR_TYPES = {
+    "base_url": "str",
+    "model": "str",
+    "api_key_env": "str",
+    "batch_size": "int",
+}
 
 
 def _check(name: str, value: object, typ: str, where: str) -> object:
@@ -96,7 +106,9 @@ def _parse_translator(raw: object) -> TranslatorSettings:
     for req in ("base_url", "model"):
         if req not in raw:
             raise ValidationError(f"Setting 'translator.{req}' is required")
-    return TranslatorSettings(**{k: _validated(k, v, _TR_TYPES[k], "translator.") for k, v in raw.items()})
+    return TranslatorSettings(
+        **{k: _validated(k, v, _TR_TYPES[k], "translator.") for k, v in raw.items()}
+    )
 
 
 def load_settings(path: Path | None, env: Mapping[str, str]) -> Settings:
@@ -117,7 +129,8 @@ def load_settings(path: Path | None, env: Mapping[str, str]) -> Settings:
                 values[k] = _validated(k, v, _TOP_TYPES[k], "")
             else:
                 raise ValidationError(
-                    f"Unknown setting '{k}'", hint=f"Allowed: {sorted([*_TOP_TYPES, 'translator'])}"
+                    f"Unknown setting '{k}'",
+                    hint=f"Allowed: {sorted([*_TOP_TYPES, 'translator'])}",
                 )
     if env.get(ENV_LANG, "").strip():
         values["lang"] = env[ENV_LANG].strip()
@@ -158,7 +171,9 @@ def _toml_value(v: object) -> str:
 
 
 def _dump_toml(data: dict) -> str:
-    lines = [f"{k} = {_toml_value(v)}" for k, v in data.items() if not isinstance(v, dict)]
+    lines = [
+        f"{k} = {_toml_value(v)}" for k, v in data.items() if not isinstance(v, dict)
+    ]
     for k, table in ((k, v) for k, v in data.items() if isinstance(v, dict)):
         lines += ["", f"[{k}]"]
         lines += [f"{kk} = {_toml_value(vv)}" for kk, vv in table.items()]
@@ -171,7 +186,9 @@ def _remember(path: Path, settings_path: Path) -> None:
     except FileNotFoundError:
         data = {}
     except (OSError, tomllib.TOMLDecodeError, UnicodeDecodeError) as e:
-        raise ValidationError(f"Cannot update settings file {settings_path}: {e}") from e
+        raise ValidationError(
+            f"Cannot update settings file {settings_path}: {e}"
+        ) from e
     data["cookies_file"] = str(path.resolve())
     text = _dump_toml(data)
     settings_path.parent.mkdir(parents=True, exist_ok=True)

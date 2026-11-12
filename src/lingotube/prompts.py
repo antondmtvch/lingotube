@@ -6,7 +6,9 @@ from typing import Literal
 
 PROMPT_VERSION = "1"
 
-PromptName = Literal["transcript", "transcript_translated", "summary", "translate_batch"]
+PromptName = Literal[
+    "transcript", "transcript_translated", "summary", "translate_batch"
+]
 
 _PLACEHOLDER = re.compile(r"\{(\w+)\}")
 

@@ -39,7 +39,10 @@ def test_merge_carries_missing_end_and_dedupes_within_2s():
     a = [ParsedLine(10, None, "стык ")]
     b = [ParsedLine(11.5, None, "стык"), ParsedLine(20, None, "z")]
     cues = merge([b, a])
-    assert [(c.start, c.end, c.text) for c in cues] == [(10, None, "стык"), (20, None, "z")]
+    assert [(c.start, c.end, c.text) for c in cues] == [
+        (10, None, "стык"),
+        (20, None, "z"),
+    ]
 
 
 def test_fix_ends_keeps_valid_chat_end():
@@ -69,23 +72,46 @@ def test_completeness():
 
 
 def test_merge_joins_same_start_lines():
-    cues = merge([[ParsedLine(10, None, "а"), ParsedLine(10, None, "б"), ParsedLine(20, None, "в")]])
-    assert [(c.id, c.start, c.end, c.text) for c in cues] == [(1, 10, None, "а б"), (2, 20, None, "в")]
+    cues = merge(
+        [
+            [
+                ParsedLine(10, None, "а"),
+                ParsedLine(10, None, "б"),
+                ParsedLine(20, None, "в"),
+            ]
+        ]
+    )
+    assert [(c.id, c.start, c.end, c.text) for c in cues] == [
+        (1, 10, None, "а б"),
+        (2, 20, None, "в"),
+    ]
 
 
 def test_merge_same_start_keeps_max_end():
-    cues = merge([[ParsedLine(10, 12, "а"), ParsedLine(10, None, "б"), ParsedLine(10, 15, "в")]])
+    cues = merge(
+        [[ParsedLine(10, 12, "а"), ParsedLine(10, None, "б"), ParsedLine(10, 15, "в")]]
+    )
     assert [(c.end, c.text) for c in cues] == [(15, "а б в")]
 
 
 def test_fix_ends_drops_cues_past_duration_and_renumbers():
-    out = fix_ends([Cue(1, 5, None, "a"), Cue(2, 100, None, "b"), Cue(3, 120, 130, "c")], 100)
+    out = fix_ends(
+        [Cue(1, 5, None, "a"), Cue(2, 100, None, "b"), Cue(3, 120, 130, "c")], 100
+    )
     assert [c.id for c in out] == [1]
     assert all(c.end > c.start for c in out)
 
 
 def test_fix_ends_every_end_after_start():
-    cues = merge([[ParsedLine(10, None, "а"), ParsedLine(10, None, "б"), ParsedLine(99.9, None, "в")]])
+    cues = merge(
+        [
+            [
+                ParsedLine(10, None, "а"),
+                ParsedLine(10, None, "б"),
+                ParsedLine(99.9, None, "в"),
+            ]
+        ]
+    )
     out = fix_ends(cues, 100)
     assert all(c.end > c.start for c in out)
 
@@ -102,6 +128,8 @@ def test_merge_seam_dedupe_applies_before_join():
 
 
 def test_fix_ends_same_start_unmerged_never_degenerate():
-    out = fix_ends([Cue(1, 10, None, "a"), Cue(2, 10, None, "b"), Cue(3, 20, None, "c")], 100)
+    out = fix_ends(
+        [Cue(1, 10, None, "a"), Cue(2, 10, None, "b"), Cue(3, 20, None, "c")], 100
+    )
     assert all(c.end > c.start for c in out)
     assert out[0].end == 11.5 and out[1].end == 11.5

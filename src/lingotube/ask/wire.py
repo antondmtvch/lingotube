@@ -46,7 +46,10 @@ def _walk(obj: Any) -> Iterator[dict[str, Any]]:
 def _chat_panels(data: Any) -> Iterator[dict[str, Any]]:
     for d in _walk(data):
         renderer = d.get("engagementPanelSectionListRenderer")
-        if isinstance(renderer, dict) and renderer.get("panelIdentifier") == CHAT_PANEL_ID:
+        if (
+            isinstance(renderer, dict)
+            and renderer.get("panelIdentifier") == CHAT_PANEL_ID
+        ):
             yield renderer
 
 
@@ -64,7 +67,9 @@ def _command_from(raw: Any) -> SendCommand | None:
     return None
 
 
-def find_send_command(next_response: dict[str, Any], *, panel_only: bool = True) -> SendCommand | None:
+def find_send_command(
+    next_response: dict[str, Any], *, panel_only: bool = True
+) -> SendCommand | None:
     """First complete `sendUserQueryCommand` inside a `PAyouchat` panel (or anywhere if not panel_only)."""
     roots = list(_chat_panels(next_response)) if panel_only else [next_response]
     for root in roots:
@@ -80,7 +85,11 @@ def find_chat_panel_token(next_response: dict[str, Any]) -> str | None:
     for panel in _chat_panels(next_response):
         for d in _walk(panel):
             cc = d.get("continuationCommand")
-            if isinstance(cc, dict) and isinstance(cc.get("token"), str) and cc["token"]:
+            if (
+                isinstance(cc, dict)
+                and isinstance(cc.get("token"), str)
+                and cc["token"]
+            ):
                 return cc["token"]
     return None
 
@@ -142,7 +151,9 @@ def page_logged_in(html: str) -> bool | None:
 
 def extract_page(html: str) -> tuple[dict[str, Any], VideoInfo]:
     """Innertube client context (ytcfg) and video info (ytInitialPlayerResponse)."""
-    unavailable = ChatUnavailableError("Не удалось разобрать страницу видео YouTube (видео недоступно?).")
+    unavailable = ChatUnavailableError(
+        "Не удалось разобрать страницу видео YouTube (видео недоступно?)."
+    )
     i = html.find(_CONTEXT_MARKER)
     m = _PLAYER_MARKER.search(html)
     if i < 0 or m is None:
@@ -155,8 +166,16 @@ def extract_page(html: str) -> tuple[dict[str, Any], VideoInfo]:
     details = player.get("videoDetails") if isinstance(player, dict) else None
     if not isinstance(context, dict) or not isinstance(details, dict):
         raise unavailable
-    video_id, title, length = details.get("videoId"), details.get("title"), details.get("lengthSeconds")
-    if not isinstance(video_id, str) or not isinstance(length, str | int) or not str(length).isdigit():
+    video_id, title, length = (
+        details.get("videoId"),
+        details.get("title"),
+        details.get("lengthSeconds"),
+    )
+    if (
+        not isinstance(video_id, str)
+        or not isinstance(length, str | int)
+        or not str(length).isdigit()
+    ):
         raise unavailable
     return context, VideoInfo(
         video_id=video_id,
@@ -168,7 +187,11 @@ def extract_page(html: str) -> tuple[dict[str, Any], VideoInfo]:
 
 def _asr_language(player: dict[str, Any]) -> str | None:
     captions = player.get("captions")
-    renderer = captions.get("playerCaptionsTracklistRenderer") if isinstance(captions, dict) else None
+    renderer = (
+        captions.get("playerCaptionsTracklistRenderer")
+        if isinstance(captions, dict)
+        else None
+    )
     tracks = renderer.get("captionTracks") if isinstance(renderer, dict) else None
     for track in tracks if isinstance(tracks, list) else []:
         if isinstance(track, dict) and track.get("kind") == "asr":

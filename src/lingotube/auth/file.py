@@ -17,7 +17,7 @@ def _parse(text: str) -> dict[str, str]:
     for raw in text.splitlines():
         line = raw.strip()
         if line.startswith(_HTTP_ONLY):
-            line = line[len(_HTTP_ONLY):]
+            line = line[len(_HTTP_ONLY) :]
         elif not line or line.startswith("#"):
             continue
         parts = line.split("	")
@@ -30,7 +30,9 @@ def _parse(text: str) -> dict[str, str]:
 
 
 class FileCookieSource:
-    def __init__(self, path: Path, warn: Callable[[str], None] = lambda msg: None) -> None:
+    def __init__(
+        self, path: Path, warn: Callable[[str], None] = lambda msg: None
+    ) -> None:
         self._path = Path(path)
         self._warn = warn
 
@@ -43,9 +45,13 @@ class FileCookieSource:
         try:
             text, mode = await asyncio.to_thread(self._read)
         except OSError:
-            raise AuthError(f"Не удалось прочитать файл cookies: {self._path}", EXPORT_HINT) from None
+            raise AuthError(
+                f"Не удалось прочитать файл cookies: {self._path}", EXPORT_HINT
+            ) from None
         if mode is not None and mode & 0o044:
-            self._warn(f"Файл cookies доступен другим пользователям: {self._path} (chmod 600).")
+            self._warn(
+                f"Файл cookies доступен другим пользователям: {self._path} (chmod 600)."
+            )
         creds = Credentials(_parse(text))
         creds.require_sapisid()
         return creds

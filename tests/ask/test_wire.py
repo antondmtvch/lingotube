@@ -39,17 +39,27 @@ def test_find_send_command_absent_returns_none():
 
 
 def test_find_send_command_outside_panel_ignored_by_default():
-    stray = {"x": {"sendUserQueryCommand": {"innertubeCommand": {
-        "clickTrackingParams": "C", "continuationCommand": {"token": "T"}}}}}
+    stray = {
+        "x": {
+            "sendUserQueryCommand": {
+                "innertubeCommand": {
+                    "clickTrackingParams": "C",
+                    "continuationCommand": {"token": "T"},
+                }
+            }
+        }
+    }
     assert find_send_command(stray) is None
     assert find_send_command(stray, panel_only=False) == SendCommand("T", "C")
 
 
 def test_find_chat_panel_token():
-    panel = {"engagementPanelSectionListRenderer": {
-        "panelIdentifier": "PAyouchat",
-        "content": {"continuationCommand": {"token": "PANEL_TOK"}},
-    }}
+    panel = {
+        "engagementPanelSectionListRenderer": {
+            "panelIdentifier": "PAyouchat",
+            "content": {"continuationCommand": {"token": "PANEL_TOK"}},
+        }
+    }
     assert find_chat_panel_token({"a": [panel]}) == "PANEL_TOK"
     assert find_chat_panel_token(load("next_no_chat.json")) is None
 
@@ -61,10 +71,19 @@ def test_is_signed_in():
 
 
 def test_build_ask_body():
-    body = build_ask_body({"client": {"clientName": "WEB"}}, SendCommand("TOK", "CTP"), "привет", 1700000000000)
+    body = build_ask_body(
+        {"client": {"clientName": "WEB"}},
+        SendCommand("TOK", "CTP"),
+        "привет",
+        1700000000000,
+    )
     form = body["formData"]["inputComposerFormData"]
     assert body["continuation"] == "TOK"
-    assert form == {"clientMessageId": "youchat-1700000000000", "playerOffsetMs": "0", "userInputText": "привет"}
+    assert form == {
+        "clientMessageId": "youchat-1700000000000",
+        "playerOffsetMs": "0",
+        "userInputText": "привет",
+    }
     assert body["context"]["clickTracking"]["clickTrackingParams"] == "CTP"
 
 
@@ -82,7 +101,11 @@ def test_extract_answer():
 
 def test_extract_answer_ignores_junk_items():
     answer = extract_answer(load("get_panel_answer.json"))
-    for junk in ("Text copied to clipboard", "предложенный вопрос", "примечание о точности"):
+    for junk in (
+        "Text copied to clipboard",
+        "предложенный вопрос",
+        "примечание о точности",
+    ):
         assert junk not in answer
 
 
@@ -113,7 +136,9 @@ def test_extract_page_garbage_raises():
 
 def test_page_logged_in():
     assert page_logged_in(page()) is True
-    assert page_logged_in(page().replace('"LOGGED_IN":true', '"LOGGED_IN":false')) is False
+    assert (
+        page_logged_in(page().replace('"LOGGED_IN":true', '"LOGGED_IN":false')) is False
+    )
     assert page_logged_in("<html></html>") is None
 
 

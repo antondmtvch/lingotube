@@ -37,7 +37,9 @@ async def test_key_fields_cannot_collide_or_escape(tmp_path):
     cache = Cache(tmp_path / "c")
     a = CacheKey("a/../b", "k", "l", "m", "v")
     await cache.put(a, {"x": 1})
-    assert all(p.parent == tmp_path / "c" for p in (tmp_path / "c").rglob("*") if p.is_file())
+    assert all(
+        p.parent == tmp_path / "c" for p in (tmp_path / "c").rglob("*") if p.is_file()
+    )
     assert await cache.get(CacheKey("a", "../bk", "l", "m", "v")) is None
 
 
@@ -61,7 +63,9 @@ async def test_non_dict_json_is_missing(tmp_path):
 
 async def test_no_temp_files_left_after_put(tmp_path):
     cache = Cache(tmp_path)
-    await asyncio.gather(*(cache.put(dataclasses.replace(KEY, part=str(i)), {"i": i}) for i in range(5)))
+    await asyncio.gather(
+        *(cache.put(dataclasses.replace(KEY, part=str(i)), {"i": i}) for i in range(5))
+    )
     assert len(list(tmp_path.iterdir())) == 5
     assert all(p.suffix == ".json" for p in tmp_path.iterdir())
 

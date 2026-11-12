@@ -2,14 +2,25 @@ from pathlib import Path
 
 import pytest
 
-from lingotube.config import Settings, TranslatorSettings, default_paths, load_settings, remember_cookies_file
+from lingotube.config import (
+    Settings,
+    TranslatorSettings,
+    default_paths,
+    load_settings,
+    remember_cookies_file,
+)
 from lingotube.errors import ValidationError
 
 
 def test_load_settings_defaults():
     assert load_settings(None, {}) == Settings()
     s = Settings()
-    assert (s.chunk_seconds, s.min_interval, s.max_retries, s.format) == (300, 5.0, 2, "srt")
+    assert (s.chunk_seconds, s.min_interval, s.max_retries, s.format) == (
+        300,
+        5.0,
+        2,
+        "srt",
+    )
 
 
 def test_missing_file_gives_defaults(tmp_path):
@@ -33,18 +44,25 @@ def test_load_settings_from_toml_and_env(tmp_path):
 
 def test_unknown_key_in_toml_is_validation_error(tmp_path):
     f = tmp_path / "s.toml"
-    f.write_text('bogus = 1\n', encoding="utf-8")
+    f.write_text("bogus = 1\n", encoding="utf-8")
     with pytest.raises(ValidationError, match="bogus"):
         load_settings(f, {})
-    f.write_text('[translator]\nbase_url="u"\nmodel="m"\napi_key="zzz"\n', encoding="utf-8")
+    f.write_text(
+        '[translator]\nbase_url="u"\nmodel="m"\napi_key="zzz"\n', encoding="utf-8"
+    )
     with pytest.raises(ValidationError, match="api_key"):
         load_settings(f, {})
 
 
 def test_wrong_types_and_bad_toml(tmp_path):
     f = tmp_path / "s.toml"
-    for text in ['chunk_seconds = "x"\n', 'lang = 5\n', 'max_retries = true\n', 'lang = \n',
-                 '[translator]\nmodel = "m"\n']:
+    for text in [
+        'chunk_seconds = "x"\n',
+        "lang = 5\n",
+        "max_retries = true\n",
+        "lang = \n",
+        '[translator]\nmodel = "m"\n',
+    ]:
         f.write_text(text, encoding="utf-8")
         with pytest.raises(ValidationError):
             load_settings(f, {})
@@ -56,7 +74,10 @@ def test_api_key_never_in_settings_repr():
     s = Settings(translator=t)
     env = {"LINGOTUBE_API_KEY": "sk-secret-123"}
     assert "sk-secret-123" not in repr(load_settings(None, env)) + repr(s)
-    assert not any("key" in f and f != "api_key_env" for f in TranslatorSettings.__dataclass_fields__)
+    assert not any(
+        "key" in f and f != "api_key_env"
+        for f in TranslatorSettings.__dataclass_fields__
+    )
 
 
 async def test_remember_cookies_file_creates_and_preserves(tmp_path):
@@ -101,14 +122,26 @@ def test_out_of_range_values_rejected(tmp_path, text, key):
     f.write_text(text + "\n", encoding="utf-8")
     with pytest.raises(ValidationError, match=key) as ei:
         load_settings(f, {})
-    assert not any(c.isdigit() for c in str(ei.value).replace(key, "")) or "greater than 0" in str(ei.value) or "at least 0" in str(ei.value)
+    assert (
+        not any(c.isdigit() for c in str(ei.value).replace(key, ""))
+        or "greater than 0" in str(ei.value)
+        or "at least 0" in str(ei.value)
+    )
 
 
 def test_boundary_values_and_formats_accepted(tmp_path):
     f = tmp_path / "s.toml"
-    f.write_text("chunk_seconds = 1\nmin_interval = 0\nmax_retries = 0\nformat = 'json'\n", encoding="utf-8")
+    f.write_text(
+        "chunk_seconds = 1\nmin_interval = 0\nmax_retries = 0\nformat = 'json'\n",
+        encoding="utf-8",
+    )
     s = load_settings(f, {})
-    assert (s.chunk_seconds, s.min_interval, s.max_retries, s.format) == (1, 0.0, 0, "json")
+    assert (s.chunk_seconds, s.min_interval, s.max_retries, s.format) == (
+        1,
+        0.0,
+        0,
+        "json",
+    )
     for fmt in ("srt", "vtt"):
         f.write_text(f"format = '{fmt}'\n", encoding="utf-8")
         assert load_settings(f, {}).format == fmt

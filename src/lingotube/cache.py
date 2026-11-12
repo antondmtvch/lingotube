@@ -24,7 +24,14 @@ class CacheKey:
     def digest(self) -> str:
         # JSON-encoded list is unambiguous: no field can collide into another.
         raw = json.dumps(
-            [self.video_id, self.kind, self.language, self.mode, self.prompt_version, self.part],
+            [
+                self.video_id,
+                self.kind,
+                self.language,
+                self.mode,
+                self.prompt_version,
+                self.part,
+            ],
             ensure_ascii=True,
         )
         return hashlib.sha256(raw.encode("ascii")).hexdigest()
@@ -50,7 +57,7 @@ class Cache:
     def _read(path: Path) -> dict | None:
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):  # missing, unreadable, truncated, bad encoding
+        except OSError, ValueError:  # missing, unreadable, truncated, bad encoding
             return None
         return data if isinstance(data, dict) else None
 

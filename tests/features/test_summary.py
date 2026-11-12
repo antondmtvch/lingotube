@@ -24,7 +24,9 @@ async def test_summary_single_request_in_language(tmp_path):
 
 
 async def test_summary_cached_per_language(tmp_path):
-    client, feature = make(tmp_path, lambda p: "текст " + ("ru" if "русский" in p else "de"))
+    client, feature = make(
+        tmp_path, lambda p: "текст " + ("ru" if "русский" in p else "de")
+    )
     assert await feature.run(VID, "русский") == "текст ru"
     assert await feature.run(VID, "русский") == "текст ru"
     assert len(client.prompts) == 1
@@ -32,7 +34,9 @@ async def test_summary_cached_per_language(tmp_path):
     assert len(client.prompts) == 2
     assert await feature.run(VID, "русский", use_cache=False) == "текст ru"
     assert len(client.prompts) == 3
-    stored = await Cache(tmp_path / "cache").get(CacheKey(VID, "summary", "русский", "chat", PROMPT_VERSION))
+    stored = await Cache(tmp_path / "cache").get(
+        CacheKey(VID, "summary", "русский", "chat", PROMPT_VERSION)
+    )
     assert stored == {"text": "текст ru"}
 
 

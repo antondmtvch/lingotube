@@ -32,8 +32,12 @@ def echo_upper(request: httpx.Request) -> httpx.Response:
     return completion("\n".join(f"{n}\t{t.upper()}" for n, t in user_lines(request)))
 
 
-def make(client: httpx.AsyncClient, batch_size: int = 40, base: str = BASE) -> OpenAICompatTranslator:
-    return OpenAICompatTranslator(client, TranslatorSettings(base, "m1", "MY_KEY_ENV", batch_size), KEY)
+def make(
+    client: httpx.AsyncClient, batch_size: int = 40, base: str = BASE
+) -> OpenAICompatTranslator:
+    return OpenAICompatTranslator(
+        client, TranslatorSettings(base, "m1", "MY_KEY_ENV", batch_size), KEY
+    )
 
 
 @respx.mock
@@ -43,7 +47,9 @@ async def test_translates_in_batches_keeping_ids_and_times():
     async with httpx.AsyncClient() as client:
         out = await make(client).translate(source, "ru")
     assert route.call_count == 3
-    assert [(c.id, c.start, c.end) for c in out] == [(c.id, c.start, c.end) for c in source]
+    assert [(c.id, c.start, c.end) for c in out] == [
+        (c.id, c.start, c.end) for c in source
+    ]
     assert [c.text for c in out] == [c.text.upper() for c in source]
     req = route.calls[0].request
     assert req.headers["Authorization"] == f"Bearer {KEY}"
@@ -59,12 +65,16 @@ async def test_timecodes_not_sent_to_model():
         await make(client).translate(cues(3), "ru")
     raw = route.calls[0].request.content.decode()
     assert "start" not in raw and "0.5" not in raw
-    assert json.loads(raw)["messages"][1]["content"] == "1\tline 1\n2\tline 2\n3\tline 3"
+    assert (
+        json.loads(raw)["messages"][1]["content"] == "1\tline 1\n2\tline 2\n3\tline 3"
+    )
 
 
 @respx.mock
 async def test_count_mismatch_retries_batch_once_then_fails():
-    route = respx.post(URL).mock(return_value=completion("\n".join(f"{i}\tx" for i in range(1, 40))))
+    route = respx.post(URL).mock(
+        return_value=completion("\n".join(f"{i}\tx" for i in range(1, 40)))
+    )
     async with httpx.AsyncClient() as client:
         with pytest.raises(ValidationError) as exc:
             await make(client).translate(cues(40), "ru")
@@ -84,7 +94,9 @@ async def test_mismatch_then_ok_succeeds():
 
 @respx.mock
 async def test_duplicate_or_empty_is_mismatch():
-    route = respx.post(URL).mock(side_effect=[completion("1\ta\n1\tb"), completion("1\ta\n2\t  ")])
+    route = respx.post(URL).mock(
+        side_effect=[completion("1\ta\n1\tb"), completion("1\ta\n2\t  ")]
+    )
     async with httpx.AsyncClient() as client:
         with pytest.raises(ValidationError):
             await make(client).translate(cues(2), "ru")
@@ -92,7 +104,9 @@ async def test_duplicate_or_empty_is_mismatch():
 
 
 @respx.mock
-@pytest.mark.parametrize("status,exc", [(401, AuthError), (403, AuthError), (500, NetworkError)])
+@pytest.mark.parametrize(
+    "status,exc", [(401, AuthError), (403, AuthError), (500, NetworkError)]
+)
 async def test_api_key_in_header_not_in_error(status, exc):
     respx.post(URL).mock(return_value=httpx.Response(status, text=f"bad key {KEY}"))
     async with httpx.AsyncClient() as client:
@@ -180,9 +194,13 @@ async def test_extra_number_is_still_mismatch():
 
 @respx.mock
 async def test_redirect_is_refused():
-    target = respx.get("https://evil.example.test/x").mock(return_value=httpx.Response(200))
+    target = respx.get("https://evil.example.test/x").mock(
+        return_value=httpx.Response(200)
+    )
     respx.post(URL).mock(
-        return_value=httpx.Response(302, headers={"Location": "https://evil.example.test/x"})
+        return_value=httpx.Response(
+            302, headers={"Location": "https://evil.example.test/x"}
+        )
     )
     async with httpx.AsyncClient() as client:
         with pytest.raises(NetworkError) as e:
@@ -194,7 +212,9 @@ async def test_redirect_is_refused():
 async def test_invalid_base_url_is_validation_error():
     async with httpx.AsyncClient() as client:
         with pytest.raises(ValidationError) as e:
-            await make(client, base="http://user:pw@exa mple:bad/v1").translate(cues(2), "ru")
+            await make(client, base="http://user:pw@exa mple:bad/v1").translate(
+                cues(2), "ru"
+            )
     assert e.value.exit_code == 7
     assert "translator.base_url" in f"{e.value} {e.value.hint}"
     assert "pw" not in f"{e.value} {e.value.hint}"

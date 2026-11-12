@@ -10,7 +10,12 @@ from dataclasses import asdict, dataclass
 
 from lingotube.ask.client import AskClient
 from lingotube.auth.base import EXPORT_HINT, CookieSource, Credentials
-from lingotube.errors import AuthError, ChatUnavailableError, LingotubeError, NetworkError
+from lingotube.errors import (
+    AuthError,
+    ChatUnavailableError,
+    LingotubeError,
+    NetworkError,
+)
 
 DEFAULT_TEST_VIDEO = "-n5MqamatXE"  # public video with the chat confirmed by the probe
 FILE_SOURCE = "файл cookies"
@@ -78,7 +83,12 @@ async def run_doctor(
         try:
             await make_ask(_Loaded(creds)).open(test_video_id)
         except AuthError as e:  # stale cookies: try the next source
-            checks[index] = Check(name, False, f"cookies прочитаны, но YouTube их не принял: {e.message}", e.hint)
+            checks[index] = Check(
+                name,
+                False,
+                f"cookies прочитаны, но YouTube их не принял: {e.message}",
+                e.hint,
+            )
             continue
         except ChatUnavailableError as e:
             login = Check(LOGIN, True, f"вход выполнен ({name})", None)
@@ -119,8 +129,13 @@ def doctor_error(checks: list[Check]) -> LingotubeError | None:
     if _failed(checks, NETWORK):
         return NetworkError("Не удалось связаться с YouTube.", hint=NETWORK_HINT)
     if _passed(checks, LOGIN):
-        return ChatUnavailableError("Вход выполнен, но чат YouTube на тестовом видео недоступен.", hint=CHAT_HINT)
-    return AuthError("Ни один источник cookies не дал входа в YouTube.", hint=COOKIES_FILE_HINT)
+        return ChatUnavailableError(
+            "Вход выполнен, но чат YouTube на тестовом видео недоступен.",
+            hint=CHAT_HINT,
+        )
+    return AuthError(
+        "Ни один источник cookies не дал входа в YouTube.", hint=COOKIES_FILE_HINT
+    )
 
 
 def doctor_exit_code(checks: list[Check]) -> int:
@@ -139,7 +154,12 @@ def render_table(checks: list[Check], error: LingotubeError | None = None) -> st
     lines = [f"{a.ljust(w0)}  {b.ljust(w1)}  {c}".rstrip() for a, b, c in rows]
     hints: list[str] = []
     for check in checks:
-        if not check.ok and check.hint and check.hint not in hints and (error is None or check.hint != error.hint):
+        if (
+            not check.ok
+            and check.hint
+            and check.hint not in hints
+            and (error is None or check.hint != error.hint)
+        ):
             hints.append(check.hint)
     if hints:
         lines += ["", "Подсказки:", *(f"- {hint}" for hint in hints)]
@@ -156,10 +176,15 @@ def register(app, get_context) -> None:
 
     VideoOpt = Annotated[
         str,
-        typer.Option("--video", help="Видео для проверки чата (ссылка или идентификатор)."),
+        typer.Option(
+            "--video", help="Видео для проверки чата (ссылка или идентификатор)."
+        ),
     ]
 
-    @app.command("doctor", help="Проверка готовности: cookies, вход в аккаунт, чат на тестовом видео.")
+    @app.command(
+        "doctor",
+        help="Проверка готовности: cookies, вход в аккаунт, чат на тестовом видео.",
+    )
     def doctor(
         video: VideoOpt = DEFAULT_TEST_VIDEO,
         cookies_file: c.CookiesFileOpt = None,
@@ -173,7 +198,10 @@ def register(app, get_context) -> None:
             sources = await ctx.provide(ctx.container.doctor_sources)
             make_ask = await ctx.provide(ctx.container.ask_factory)
             checks = await run_doctor(sources, make_ask, video_id)
-            result = {"video_id": video_id, "checks": [asdict(check) for check in checks]}
+            result = {
+                "video_id": video_id,
+                "checks": [asdict(check) for check in checks],
+            }
             error = doctor_error(checks)
             return c.Outcome(result, text=render_table(checks, error), error=error)
 

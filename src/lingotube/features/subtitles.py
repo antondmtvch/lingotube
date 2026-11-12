@@ -25,12 +25,19 @@ def _primary(language: str | None) -> str:
 
 
 class SubtitlesFeature:
-    def __init__(self, transcripts: TranscriptFeature, translator: Translator | None, cache: Cache) -> None:
+    def __init__(
+        self,
+        transcripts: TranscriptFeature,
+        translator: Translator | None,
+        cache: Cache,
+    ) -> None:
         self._transcripts = transcripts
         self._translator = translator
         self._cache = cache
 
-    async def run(self, video_id: str, language: str, *, use_cache: bool = True) -> TranscriptResult:
+    async def run(
+        self, video_id: str, language: str, *, use_cache: bool = True
+    ) -> TranscriptResult:
         if self._translator is None:
             return await self._transcripts.run(video_id, language, use_cache=use_cache)
 
@@ -51,7 +58,11 @@ class SubtitlesFeature:
         if original.completeness.complete:
             await self._cache.put(
                 key,
-                {"complete": True, "warnings": list(result.warnings), "transcript": transcript.to_dict()},
+                {
+                    "complete": True,
+                    "warnings": list(result.warnings),
+                    "transcript": transcript.to_dict(),
+                },
             )
         return result
 
@@ -67,7 +78,9 @@ def _load(data: dict | None) -> TranscriptResult | None:
     except ValidationError:
         return None
     return TranscriptResult(
-        transcript, check_completeness(transcript.cues, transcript.duration), tuple(warnings)
+        transcript,
+        check_completeness(transcript.cues, transcript.duration),
+        tuple(warnings),
     )
 
 
@@ -97,6 +110,8 @@ def register(app, get_context) -> None:
             shift = c.require_offset(offset)
             feature = await ctx.provide(ctx.container.subtitles_feature)
             result = await feature.run(video_id, language, use_cache=common.use_cache)
-            return await c.transcript_outcome(ctx, result, render(result.transcript, fmt_, shift), fmt_, output)
+            return await c.transcript_outcome(
+                ctx, result, render(result.transcript, fmt_, shift), fmt_, output
+            )
 
         c.execute(get_context, common, video, body)

@@ -50,7 +50,9 @@ class TranscriptResult:
 class _Part:
     lines: tuple[ParsedLine, ...]
     truncated: bool
-    exhausted: bool = False  # the chat had nothing more to add: never re-asked on later runs
+    exhausted: bool = (
+        False  # the chat had nothing more to add: never re-asked on later runs
+    )
 
 
 def transcript_key(video_id: str, lang_key: str = "orig") -> CacheKey:
@@ -62,7 +64,9 @@ async def load_cached_transcript(
     cache: Cache, video_id: str, lang_key: str = "orig", *, require_complete: bool
 ) -> Transcript | None:
     """Cached final transcript, or None if absent/malformed (or incomplete when required)."""
-    return _parse_final(await cache.get(transcript_key(video_id, lang_key)), require_complete)
+    return _parse_final(
+        await cache.get(transcript_key(video_id, lang_key)), require_complete
+    )
 
 
 def _parse_final(data: dict | None, require_complete: bool) -> Transcript | None:
@@ -89,7 +93,10 @@ def keep_second_of_identical(lines: Sequence[ParsedLine]) -> list[ParsedLine]:
     out: list[ParsedLine] = []
     i = 0
     while i < len(lines):
-        if i + 1 < len(lines) and (lines[i].start, lines[i].end) == (lines[i + 1].start, lines[i + 1].end):
+        if i + 1 < len(lines) and (lines[i].start, lines[i].end) == (
+            lines[i + 1].start,
+            lines[i + 1].end,
+        ):
             out.append(lines[i + 1])
             i += 2
         else:
@@ -134,11 +141,18 @@ class TranscriptFeature:
         for index, (start, end) in enumerate(ranges):
             is_last = index == len(ranges) - 1
             part_key = CacheKey(
-                video_id, KIND_PART, lang_key, MODE, PROMPT_VERSION, part=f"{start}-{end}"
+                video_id,
+                KIND_PART,
+                lang_key,
+                MODE,
+                PROMPT_VERSION,
+                part=f"{start}-{end}",
             )
             prior = _load_part(await self._cache.get(part_key)) if use_cache else None
             if prior is None or (prior.truncated and not prior.exhausted):
-                prior = await self._collect(session, start, end, language, prior, is_last)
+                prior = await self._collect(
+                    session, start, end, language, prior, is_last
+                )
                 await self._cache.put(part_key, _dump_part(prior))
             if prior.truncated and not prior.exhausted:
                 # re-request budget ran out while the chat was still progressing; an exhausted
@@ -198,8 +212,17 @@ class TranscriptFeature:
             if not is_truncated(lines, end):
                 break
             resume_at = lines[-1].start if lines else start
-            more = [x for x in await self._ask_range(session, resume_at, end, language) if x.start >= resume_at]
-            if more and more[0].start == resume_at and lines and lines[-1].start == resume_at:
+            more = [
+                x
+                for x in await self._ask_range(session, resume_at, end, language)
+                if x.start >= resume_at
+            ]
+            if (
+                more
+                and more[0].start == resume_at
+                and lines
+                and lines[-1].start == resume_at
+            ):
                 lines.pop()  # the line at the cut may be incomplete: the continuation re-delivers it
             lines.extend(more)
             if not more or max(x.start for x in more) <= resume_at:
@@ -208,7 +231,9 @@ class TranscriptFeature:
 
         truncated = is_truncated(lines, end)
         if not is_last:
-            lines = [x for x in lines if x.start < end]  # overshoot belongs to the next range
+            lines = [
+                x for x in lines if x.start < end
+            ]  # overshoot belongs to the next range
         return _Part(tuple(lines), truncated, exhausted and truncated)
 
     async def _ask_range(
@@ -218,13 +243,17 @@ class TranscriptFeature:
         if language is None:
             prompt = load_prompt("transcript", **variables)
         else:
-            prompt = load_prompt("transcript_translated", language=language, **variables)
+            prompt = load_prompt(
+                "transcript_translated", language=language, **variables
+            )
         lines = parse_answer(await session.ask(prompt))
         return keep_second_of_identical(lines) if language is not None else lines
 
 
 def _completeness_warnings(completeness: Completeness, duration: float) -> list[str]:
-    warnings = [f"пропуск {format_time(a)}–{format_time(b)}" for a, b in completeness.gaps]
+    warnings = [
+        f"пропуск {format_time(a)}–{format_time(b)}" for a, b in completeness.gaps
+    ]
     if not completeness.complete:
         warnings.insert(
             0,
@@ -248,16 +277,26 @@ def _is_num(v: object) -> bool:
 
 def _load_part(data: dict | None) -> _Part | None:
     """A malformed cached part is treated as missing."""
-    if data is None or not isinstance(data.get("truncated"), bool) or not isinstance(data.get("lines"), list):
+    if (
+        data is None
+        or not isinstance(data.get("truncated"), bool)
+        or not isinstance(data.get("lines"), list)
+    ):
         return None
     lines: list[ParsedLine] = []
     for item in data["lines"]:
         if not (isinstance(item, list) and len(item) == 3):
             return None
         start, end, text = item
-        if not _is_num(start) or not (end is None or _is_num(end)) or not isinstance(text, str):
+        if (
+            not _is_num(start)
+            or not (end is None or _is_num(end))
+            or not isinstance(text, str)
+        ):
             return None
-        lines.append(ParsedLine(float(start), None if end is None else float(end), text))
+        lines.append(
+            ParsedLine(float(start), None if end is None else float(end), text)
+        )
     exhausted = data.get("exhausted", False)
     if not isinstance(exhausted, bool):
         return None
@@ -281,7 +320,10 @@ def register(app, get_context) -> None:
     from lingotube import commands as c
     from lingotube.writers import render
 
-    @app.command("transcript", help="Транскрипция на языке оригинала с тайм-кодами (по умолчанию JSON).")
+    @app.command(
+        "transcript",
+        help="Транскрипция на языке оригинала с тайм-кодами (по умолчанию JSON).",
+    )
     def transcript(
         video: c.VideoArg,
         fmt: c.FormatOpt = None,
@@ -300,6 +342,8 @@ def register(app, get_context) -> None:
             shift = c.require_offset(offset)
             feature = await ctx.provide(ctx.container.transcript_feature)
             result = await feature.run(video_id, None, use_cache=common.use_cache)
-            return await c.transcript_outcome(ctx, result, render(result.transcript, fmt_, shift), fmt_, output)
+            return await c.transcript_outcome(
+                ctx, result, render(result.transcript, fmt_, shift), fmt_, output
+            )
 
         c.execute(get_context, common, video, body)

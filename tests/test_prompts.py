@@ -22,7 +22,9 @@ def test_transcript_hour_format_kept():
 
 
 def test_translated_mentions_language_and_forbids_original():
-    text = load_prompt("transcript_translated", start="0:00", end="5:00", language="Russian")
+    text = load_prompt(
+        "transcript_translated", start="0:00", end="5:00", language="Russian"
+    )
     assert "Russian" in text and "{" not in text
     assert "только" in text and "оригинал" in text
 

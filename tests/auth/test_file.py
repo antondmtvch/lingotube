@@ -14,7 +14,12 @@ def row(domain, name, value):
 
 async def test_file_source_reads_netscape(tmp_path):
     p = tmp_path / "c.txt"
-    p.write_text(H + row(".youtube.com", "SAPISID", "a") + row(".google.com", "SID", "b") + row(".example.com", "X", "c"))
+    p.write_text(
+        H
+        + row(".youtube.com", "SAPISID", "a")
+        + row(".google.com", "SID", "b")
+        + row(".example.com", "X", "c")
+    )
     creds = await FileCookieSource(p).load()
     assert set(creds.cookies) == {"SAPISID", "SID"}
 
@@ -22,8 +27,13 @@ async def test_file_source_reads_netscape(tmp_path):
 async def test_httponly_and_bare_domains(tmp_path):
     p = tmp_path / "c.txt"
     p.write_text(
-        H + "\n" + row("#HttpOnly_.youtube.com", "HSID", "h") + row("www.youtube.com", "SAPISID", "a")
-        + row("google.com", "G", "g") + row("accounts.google.com", "AG", "x") + row("evilyoutube.com", "E", "e")
+        H
+        + "\n"
+        + row("#HttpOnly_.youtube.com", "HSID", "h")
+        + row("www.youtube.com", "SAPISID", "a")
+        + row("google.com", "G", "g")
+        + row("accounts.google.com", "AG", "x")
+        + row("evilyoutube.com", "E", "e")
         + "# comment\n"
     )
     creds = await FileCookieSource(p).load()

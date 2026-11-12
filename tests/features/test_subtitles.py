@@ -18,7 +18,11 @@ def make_transcript(language: str | None) -> Transcript:
 
 
 class FakeTranscripts:
-    def __init__(self, original_language: str | None = "en", result: TranscriptResult | None = None):
+    def __init__(
+        self,
+        original_language: str | None = "en",
+        result: TranscriptResult | None = None,
+    ):
         self.calls: list[tuple[str, str | None]] = []
         self.original_language = original_language
         self.result = result
@@ -54,7 +58,10 @@ async def test_own_model_mode_requests_original_then_translates(tmp_path):
     assert tl.calls == ["ru"]
     assert res.transcript.language == "ru"
     assert [c.text for c in res.transcript.cues] == ["[ru] hello", "[ru] bye"]
-    assert [(c.id, c.start, c.end) for c in res.transcript.cues] == [(1, 0.0, 5.0), (2, 5.0, 10.0)]
+    assert [(c.id, c.start, c.end) for c in res.transcript.cues] == [
+        (1, 0.0, 5.0),
+        (2, 5.0, 10.0),
+    ]
     assert res.completeness.complete
 
 
@@ -91,14 +98,19 @@ async def test_translation_cached_per_language_and_mode(tmp_path):
 
 async def test_incomplete_original_propagates_completeness(tmp_path):
     incomplete = Completeness(False, 5.0, ())
-    tr = FakeTranscripts(result=TranscriptResult(make_transcript("en"), incomplete, ("обрыв",)))
+    tr = FakeTranscripts(
+        result=TranscriptResult(make_transcript("en"), incomplete, ("обрыв",))
+    )
     tl = FakeTranslator()
     feature = SubtitlesFeature(tr, tl, Cache(tmp_path))
     res = await feature.run(VID, "ru")
     assert not res.completeness.complete
     assert res.warnings == ("обрыв",)
     await feature.run(VID, "ru")
-    assert tl.calls == ["ru", "ru"]  # an incomplete translation is never served as ready
+    assert tl.calls == [
+        "ru",
+        "ru",
+    ]  # an incomplete translation is never served as ready
 
 
 async def test_unknown_original_language_is_translated(tmp_path):

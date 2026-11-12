@@ -16,6 +16,8 @@ lingotube = "lingotube.cli:main"
 
 [dependency-groups]
 dev = [
+    "black>=26.10.1",
+    "isort>=9.0.2",
     "pytest",
     "pytest-asyncio",
     "respx",
@@ -28,3 +30,11 @@ build-backend = "uv_build"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+
+[tool.black]
+line-length = 88
+target-version = ["py314"]
+
+[tool.isort]
+profile = "black"
+src_paths = ["src", "tests", "probe"]

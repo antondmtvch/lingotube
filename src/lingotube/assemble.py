@@ -19,7 +19,9 @@ def plan_ranges(duration: float, chunk_seconds: int) -> list[tuple[float, float]
     return ranges
 
 
-def is_truncated(lines: Sequence[ParsedLine], range_end: float, tolerance: float = 60.0) -> bool:
+def is_truncated(
+    lines: Sequence[ParsedLine], range_end: float, tolerance: float = 60.0
+) -> bool:
     """Ответ оборван: последняя реплика заканчивается заметно раньше конца запрошенного отрезка."""
     if not lines:
         return True
@@ -30,7 +32,9 @@ def is_truncated(lines: Sequence[ParsedLine], range_end: float, tolerance: float
 
 def merge(chunks: Sequence[Sequence[ParsedLine]]) -> list[Cue]:
     """Склейка отрезков: сортировка по началу, удаление дублей на стыках, номера с 1."""
-    lines = sorted((line for chunk in chunks for line in chunk), key=lambda line: line.start)
+    lines = sorted(
+        (line for chunk in chunks for line in chunk), key=lambda line: line.start
+    )
     kept: list[ParsedLine] = []
     for line in lines:
         text = line.text.strip()
@@ -42,7 +46,9 @@ def merge(chunks: Sequence[Sequence[ParsedLine]]) -> list[Cue]:
         if joined and joined[-1].start == line.start:
             prev = joined[-1]
             ends = [e for e in (prev.end, line.end) if e is not None]
-            joined[-1] = ParsedLine(prev.start, max(ends) if ends else None, f"{prev.text} {line.text}")
+            joined[-1] = ParsedLine(
+                prev.start, max(ends) if ends else None, f"{prev.text} {line.text}"
+            )
         else:
             joined.append(line)
     return [Cue(i, line.start, line.end, line.text) for i, line in enumerate(joined, 1)]

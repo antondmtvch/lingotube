@@ -10,7 +10,9 @@ VID = "vid123"
 
 
 def original(n=8) -> Transcript:
-    cues = tuple(Cue(i, float(i * 10), float(i * 10 + 9), f"orig {i}") for i in range(1, n + 1))
+    cues = tuple(
+        Cue(i, float(i * 10), float(i * 10 + 9), f"orig {i}") for i in range(1, n + 1)
+    )
     return Transcript(VID, 100.0, "en", PROMPT_VERSION, cues)
 
 
@@ -133,7 +135,9 @@ async def test_build_malformed_cached_original_is_missing(tmp_path):
 
 async def test_build_cached_payload_without_transcript_key_is_missing(tmp_path):
     cache = Cache(tmp_path / "cache")
-    await cache.put(CacheKey(VID, "transcript", "orig", "chat", PROMPT_VERSION), {"complete": True})
+    await cache.put(
+        CacheKey(VID, "transcript", "orig", "chat", PROMPT_VERSION), {"complete": True}
+    )
     with pytest.raises(ValidationError) as e:
         await BuildFeature(cache).run(VID, "ru", translated())
     assert "lingotube transcript" in (e.value.hint or "")

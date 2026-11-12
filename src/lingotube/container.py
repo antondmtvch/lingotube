@@ -15,7 +15,12 @@ from dependency_injector import containers, providers
 
 from lingotube.ask.client import AskClient, Pacer, YouTubeAskClient
 from lingotube.auth.base import CookieSource
-from lingotube.auth.browser import BROWSERS, BrowserCookieSource, ChainCookieSource, default_loader
+from lingotube.auth.browser import (
+    BROWSERS,
+    BrowserCookieSource,
+    ChainCookieSource,
+    default_loader,
+)
 from lingotube.auth.file import FileCookieSource
 from lingotube.cache import Cache
 from lingotube.config import Settings
@@ -35,14 +40,18 @@ async def youtube_http() -> AsyncIterator[httpx.AsyncClient]:
     """No redirects, no proxy env, and a jar that rejects every Set-Cookie: cookies
     travel only in the explicit header built by the chat client."""
     jar = CookieJar(policy=DefaultCookiePolicy(allowed_domains=[]))
-    async with httpx.AsyncClient(follow_redirects=False, cookies=jar, trust_env=False) as client:
+    async with httpx.AsyncClient(
+        follow_redirects=False, cookies=jar, trust_env=False
+    ) as client:
         yield client
 
 
 @asynccontextmanager
 async def translator_http() -> AsyncIterator[httpx.AsyncClient]:
     """The translator's own client: never carries YouTube cookies."""
-    async with httpx.AsyncClient(follow_redirects=False, timeout=TRANSLATOR_TIMEOUT) as client:
+    async with httpx.AsyncClient(
+        follow_redirects=False, timeout=TRANSLATOR_TIMEOUT
+    ) as client:
         yield client
 
 
@@ -63,7 +72,9 @@ BrowserLoader = Callable[[str], Mapping[str, str]]
 
 
 def make_cookie_source(
-    settings: Settings, warn: Callable[[str], None], loader: BrowserLoader = default_loader
+    settings: Settings,
+    warn: Callable[[str], None],
+    loader: BrowserLoader = default_loader,
 ) -> CookieSource:
     if settings.cookies_file is not None:
         return FileCookieSource(settings.cookies_file, warn=warn)
@@ -73,17 +84,23 @@ def make_cookie_source(
 
 
 def make_doctor_sources(
-    settings: Settings, warn: Callable[[str], None], loader: BrowserLoader = default_loader
+    settings: Settings,
+    warn: Callable[[str], None],
+    loader: BrowserLoader = default_loader,
 ) -> dict[str, CookieSource]:
     """Every cookie source `doctor` checks separately: the file, then each browser
     (only the chosen one when a browser is set)."""
     sources: dict[str, CookieSource] = {
-        FILE_SOURCE: FileCookieSource(settings.cookies_file, warn=warn)
-        if settings.cookies_file is not None
-        else UnsetCookieFile()
+        FILE_SOURCE: (
+            FileCookieSource(settings.cookies_file, warn=warn)
+            if settings.cookies_file is not None
+            else UnsetCookieFile()
+        )
     }
     for browser in (settings.browser,) if settings.browser is not None else BROWSERS:
-        sources[browser_source_name(browser)] = BrowserCookieSource(browser, loader=loader)
+        sources[browser_source_name(browser)] = BrowserCookieSource(
+            browser, loader=loader
+        )
     return sources
 
 
@@ -123,13 +140,23 @@ class Container(containers.DeclarativeContainer):
     translator_http = providers.Resource(translator_http)
 
     browser_loader = providers.Object(default_loader)
-    cookie_source = providers.Singleton(make_cookie_source, settings, warn, browser_loader)
-    doctor_sources = providers.Singleton(make_doctor_sources, settings, warn, browser_loader)
+    cookie_source = providers.Singleton(
+        make_cookie_source, settings, warn, browser_loader
+    )
+    doctor_sources = providers.Singleton(
+        make_doctor_sources, settings, warn, browser_loader
+    )
     pacer = providers.Singleton(Pacer, settings.provided.min_interval)
     ask_client = providers.Singleton(
-        YouTubeAskClient, http, cookie_source, pacer, max_retries=settings.provided.max_retries
+        YouTubeAskClient,
+        http,
+        cookie_source,
+        pacer,
+        max_retries=settings.provided.max_retries,
     )
-    ask_factory = providers.Singleton(make_ask_factory, http, pacer, settings.provided.max_retries)
+    ask_factory = providers.Singleton(
+        make_ask_factory, http, pacer, settings.provided.max_retries
+    )
     cache = providers.Singleton(Cache, cache_dir)
 
     translator = providers.Selector(
@@ -143,8 +170,12 @@ class Container(containers.DeclarativeContainer):
         none=providers.Object(None),
     )
 
-    transcript_feature = providers.Factory(TranscriptFeature, ask_client, cache, settings, progress)
-    subtitles_feature = providers.Factory(SubtitlesFeature, transcript_feature, translator, cache)
+    transcript_feature = providers.Factory(
+        TranscriptFeature, ask_client, cache, settings, progress
+    )
+    subtitles_feature = providers.Factory(
+        SubtitlesFeature, transcript_feature, translator, cache
+    )
     summary_feature = providers.Factory(SummaryFeature, ask_client, cache)
     build_feature = providers.Factory(BuildFeature, cache)
 

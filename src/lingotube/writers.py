@@ -14,7 +14,9 @@ def _shift(t: Transcript, offset: float) -> Transcript:
     for c in t.cues:
         if c.end is None:
             raise ValidationError(f"Cue {c.id} has no end time")
-        cues.append(replace(c, start=max(0.0, c.start + offset), end=max(0.0, c.end + offset)))
+        cues.append(
+            replace(c, start=max(0.0, c.start + offset), end=max(0.0, c.end + offset))
+        )
     return replace(t, cues=tuple(cues))
 
 

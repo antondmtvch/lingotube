@@ -15,7 +15,9 @@ def _hello_feature(app: typer.Typer, get_context) -> None:
 
 def _run(registry: FeatureRegistry, *argv: str) -> tuple[int, str, str]:
     out, err = io.StringIO(), io.StringIO()
-    code = cli.run(list(argv), out=out, err=err, context_factory=_no_container, registry=registry)
+    code = cli.run(
+        list(argv), out=out, err=err, context_factory=_no_container, registry=registry
+    )
     return code, out.getvalue(), err.getvalue()
 
 

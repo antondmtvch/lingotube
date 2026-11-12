@@ -4,7 +4,12 @@ import asyncio
 import sys
 from collections.abc import Callable, Mapping, Sequence
 
-from lingotube.auth.base import EXPORT_HINT, CookieSource, Credentials, is_allowed_domain
+from lingotube.auth.base import (
+    EXPORT_HINT,
+    CookieSource,
+    Credentials,
+    is_allowed_domain,
+)
 from lingotube.errors import AuthError
 
 BROWSERS = ("firefox", "chrome", "edge", "brave")
@@ -44,11 +49,14 @@ class BrowserCookieSource:
             cookies = self._loader(browser)
         except Exception:  # never propagate text: may contain paths or values
             raise AuthError(
-                f"Не удалось прочитать cookies из браузера {browser}.", self._hint(browser)
+                f"Не удалось прочитать cookies из браузера {browser}.",
+                self._hint(browser),
             ) from None
         creds = Credentials(cookies)
         if not creds.sapisid():
-            raise AuthError(f"В браузере {browser} нет входа в YouTube.", self._hint(browser))
+            raise AuthError(
+                f"В браузере {browser} нет входа в YouTube.", self._hint(browser)
+            )
         return creds
 
     def _load_all(self) -> Credentials:
@@ -59,7 +67,9 @@ class BrowserCookieSource:
                 return self._load_one(browser)
             except AuthError:
                 continue
-        raise AuthError("Не удалось получить cookies ни из одного браузера.", EXPORT_HINT)
+        raise AuthError(
+            "Не удалось получить cookies ни из одного браузера.", EXPORT_HINT
+        )
 
     async def load(self) -> Credentials:
         return await asyncio.to_thread(self._load_all)
@@ -75,4 +85,6 @@ class ChainCookieSource:
                 return await source.load()
             except AuthError:
                 continue
-        raise AuthError("Не удалось получить cookies ни из одного источника.", EXPORT_HINT)
+        raise AuthError(
+            "Не удалось получить cookies ни из одного источника.", EXPORT_HINT
+        )

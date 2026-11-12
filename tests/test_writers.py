@@ -6,17 +6,26 @@ from lingotube.errors import ValidationError
 from lingotube.models import Cue, Transcript
 from lingotube.writers import render
 
-T = Transcript("vid", 100.0, "ru", "1", (Cue(1, 2.0, 4.0, "Помогите!"), Cue(2, 3723.0, 3727.5, "b")))
+T = Transcript(
+    "vid",
+    100.0,
+    "ru",
+    "1",
+    (Cue(1, 2.0, 4.0, "Помогите!"), Cue(2, 3723.0, 3727.5, "b")),
+)
 
 
 def test_srt():
     assert render(T, "srt") == (
         "1\n00:00:02,000 --> 00:00:04,000\nПомогите!\n\n"
-        "2\n01:02:03,000 --> 01:02:07,500\nb\n")
+        "2\n01:02:03,000 --> 01:02:07,500\nb\n"
+    )
 
 
 def test_vtt():
-    assert render(T, "vtt").startswith("WEBVTT\n\n00:00:02.000 --> 00:00:04.000\nПомогите!\n")
+    assert render(T, "vtt").startswith(
+        "WEBVTT\n\n00:00:02.000 --> 00:00:04.000\nПомогите!\n"
+    )
 
 
 def test_json_roundtrip():
@@ -52,16 +61,24 @@ def test_missing_end_raises():
 
 
 def _t(*texts):
-    return Transcript("v", 10, "ru", "1", tuple(Cue(i + 7, i, i + 1, x) for i, x in enumerate(texts)))
+    return Transcript(
+        "v", 10, "ru", "1", tuple(Cue(i + 7, i, i + 1, x) for i, x in enumerate(texts))
+    )
 
 
 @pytest.mark.parametrize("empty", ["  ", "\n\n", "\r"])
 def test_empty_text_cues_are_skipped_and_srt_renumbered(empty):
     t = _t("a", empty, "b")
     srt = render(t, "srt")
-    assert srt == "1\n00:00:00,000 --> 00:00:01,000\na\n\n2\n00:00:02,000 --> 00:00:03,000\nb\n"
+    assert (
+        srt
+        == "1\n00:00:00,000 --> 00:00:01,000\na\n\n2\n00:00:02,000 --> 00:00:03,000\nb\n"
+    )
     vtt = render(t, "vtt")
-    assert vtt == "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\na\n\n00:00:02.000 --> 00:00:03.000\nb\n"
+    assert (
+        vtt
+        == "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\na\n\n00:00:02.000 --> 00:00:03.000\nb\n"
+    )
     assert len(json.loads(render(t, "json"))["cues"]) == 3
 
 

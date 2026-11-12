@@ -33,7 +33,9 @@ class Credentials:
     def require_sapisid(self) -> str:
         value = self.sapisid()
         if not value:
-            raise AuthError("В cookies нет SAPISID (вход в YouTube не найден).", EXPORT_HINT)
+            raise AuthError(
+                "В cookies нет SAPISID (вход в YouTube не найден).", EXPORT_HINT
+            )
         return value
 
     def __repr__(self) -> str:

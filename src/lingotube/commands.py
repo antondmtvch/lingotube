@@ -38,7 +38,9 @@ class AppContext:
     out: TextIO
     err: TextIO
     cwd: Path  # where default output files go and relative paths resolve
-    settings_path: Path | None  # where --cookies-file is remembered (None: not remembered)
+    settings_path: (
+        Path | None
+    )  # where --cookies-file is remembered (None: not remembered)
     json_mode: bool = False
 
     @property
@@ -79,7 +81,9 @@ class Outcome:
     result: Any
     text: str | None = None  # what goes to `out` without --json
     warnings: tuple[str, ...] = ()
-    error: LingotubeError | None = None  # a result delivered with a problem (e.g. incomplete)
+    error: LingotubeError | None = (
+        None  # a result delivered with a problem (e.g. incomplete)
+    )
 
 
 Body = Callable[[AppContext, str | None], Awaitable[Outcome]]
@@ -87,29 +91,61 @@ Body = Callable[[AppContext, str | None], Awaitable[Outcome]]
 # --- options shared by the commands (spec §6) ---
 
 VideoArg = Annotated[
-    str, typer.Argument(metavar="URL", help="Ссылка на видео YouTube или его идентификатор.", show_default=False)
+    str,
+    typer.Argument(
+        metavar="URL",
+        help="Ссылка на видео YouTube или его идентификатор.",
+        show_default=False,
+    ),
 ]
 LangOpt = Annotated[
-    str | None, typer.Option("--lang", help="Язык результата (ru, en, es…); по умолчанию — из настроек.")
+    str | None,
+    typer.Option(
+        "--lang", help="Язык результата (ru, en, es…); по умолчанию — из настроек."
+    ),
 ]
-FormatOpt = Annotated[str | None, typer.Option("--format", help="Формат: srt, vtt или json.")]
+FormatOpt = Annotated[
+    str | None, typer.Option("--format", help="Формат: srt, vtt или json.")
+]
 OutputOpt = Annotated[
     str | None,
-    typer.Option("-o", "--output", help="Куда писать; по умолчанию файл <id>.<язык>.<формат>; «-» — в stdout."),
+    typer.Option(
+        "-o",
+        "--output",
+        help="Куда писать; по умолчанию файл <id>.<язык>.<формат>; «-» — в stdout.",
+    ),
 ]
-OffsetOpt = Annotated[float, typer.Option("--offset", help="Сдвиг всех субтитров в секундах (можно дробный и отрицательный).")]
+OffsetOpt = Annotated[
+    float,
+    typer.Option(
+        "--offset",
+        help="Сдвиг всех субтитров в секундах (можно дробный и отрицательный).",
+    ),
+]
 CookiesFileOpt = Annotated[
-    Path | None, typer.Option("--cookies-file", help="Файл cookies.txt (путь запоминается в настройках).")
+    Path | None,
+    typer.Option(
+        "--cookies-file", help="Файл cookies.txt (путь запоминается в настройках)."
+    ),
 ]
-BrowserOpt = Annotated[str | None, typer.Option("--browser", help=f"Браузер для cookies: {', '.join(BROWSERS)}.")]
-NoCacheOpt = Annotated[bool, typer.Option("--no-cache", help="Не использовать сохранённые результаты.")]
-JsonOpt = Annotated[bool, typer.Option("--json", help="Машинный вывод: один JSON-документ в stdout.")]
+BrowserOpt = Annotated[
+    str | None,
+    typer.Option("--browser", help=f"Браузер для cookies: {', '.join(BROWSERS)}."),
+]
+NoCacheOpt = Annotated[
+    bool, typer.Option("--no-cache", help="Не использовать сохранённые результаты.")
+]
+JsonOpt = Annotated[
+    bool, typer.Option("--json", help="Машинный вывод: один JSON-документ в stdout.")
+]
 
 
 # --- running a command ---
 
 
-def execute(get_context: Callable[[], AppContext], common: Common, video: str | None, body: Body) -> None:
+def execute(
+    get_context: Callable[[], AppContext], common: Common, video: str | None, body: Body
+) -> None:
     ctx = get_context()
     ctx.json_mode = common.json
     try:
@@ -120,25 +156,36 @@ def execute(get_context: Callable[[], AppContext], common: Common, video: str | 
     raise typer.Exit(code)
 
 
-async def _execute(ctx: AppContext, common: Common, video: str | None, body: Body) -> int:
+async def _execute(
+    ctx: AppContext, common: Common, video: str | None, body: Body
+) -> int:
     try:
         try:
-            video_id = parse_video_id(video) if video is not None else None  # before any network
+            video_id = (
+                parse_video_id(video) if video is not None else None
+            )  # before any network
             await _configure(ctx, common)
             outcome = await body(ctx, video_id)
         finally:
             await ctx.close()
     except LingotubeError as e:
         return report(ctx.out, ctx.err, ctx.json_mode, error=e)
-    except Exception as e:  # never a traceback, never the exception text (may hold secrets)
+    except (
+        Exception
+    ) as e:  # never a traceback, never the exception text (may hold secrets)
         error = LingotubeError(
             f"Внутренняя ошибка ({type(e).__name__}).",
             hint="Повторите команду; если ошибка повторяется — сообщите о ней.",
         )
         return report(ctx.out, ctx.err, ctx.json_mode, error=error)
     return report(
-        ctx.out, ctx.err, ctx.json_mode,
-        result=outcome.result, text=outcome.text, warnings=outcome.warnings, error=outcome.error,
+        ctx.out,
+        ctx.err,
+        ctx.json_mode,
+        result=outcome.result,
+        text=outcome.text,
+        warnings=outcome.warnings,
+        error=outcome.error,
     )
 
 
@@ -155,9 +202,15 @@ async def _configure(ctx: AppContext, common: Common) -> None:
     elif cookies_file is not None:
         cookies_file = ctx.path(cookies_file)
     if browser is not None and browser not in BROWSERS:
-        raise UsageError(f"Неизвестный браузер: {browser}.", hint=f"Доступны: {', '.join(BROWSERS)}.")
+        raise UsageError(
+            f"Неизвестный браузер: {browser}.", hint=f"Доступны: {', '.join(BROWSERS)}."
+        )
     ctx.use_settings(replace(settings, cookies_file=cookies_file, browser=browser))
-    if common.cookies_file is not None and cookies_file is not None and ctx.settings_path is not None:
+    if (
+        common.cookies_file is not None
+        and cookies_file is not None
+        and ctx.settings_path is not None
+    ):
         if await asyncio.to_thread(cookies_file.is_file):
             await remember_cookies_file(cookies_file, ctx.settings_path)
 
@@ -178,7 +231,11 @@ def report(
             "ok": error is None,
             "result": result,
             "warnings": list(warnings),
-            "error": None if error is None else {"code": error.code, "message": error.message, "hint": error.hint},
+            "error": (
+                None
+                if error is None
+                else {"code": error.code, "message": error.message, "hint": error.hint}
+            ),
         }
         out.write(json.dumps(envelope, ensure_ascii=False) + "\n")
     else:
@@ -208,10 +265,18 @@ def require_lang(lang: str | None, settings: Settings) -> str:
     return value
 
 
-def require_format(fmt: str | None, settings: Settings | None = None, default: str = "srt") -> str:
-    value = fmt if fmt is not None else (settings.format if settings is not None else default)
+def require_format(
+    fmt: str | None, settings: Settings | None = None, default: str = "srt"
+) -> str:
+    value = (
+        fmt
+        if fmt is not None
+        else (settings.format if settings is not None else default)
+    )
     if value not in FORMATS:
-        raise UsageError(f"Неизвестный формат: {value}.", hint=f"Доступны: {', '.join(FORMATS)}.")
+        raise UsageError(
+            f"Неизвестный формат: {value}.", hint=f"Доступны: {', '.join(FORMATS)}."
+        )
     return value
 
 
@@ -236,7 +301,9 @@ def _write_utf8(path: Path, text: str) -> None:
         raise
 
 
-async def deliver(ctx: AppContext, text: str, output: str | None, default_name: str) -> Path | None:
+async def deliver(
+    ctx: AppContext, text: str, output: str | None, default_name: str
+) -> Path | None:
     """Writes `text` to a file (UTF-8) and returns its path; `-o -` → None (the caller prints it)."""
     if output == "-":
         return None
@@ -260,7 +327,11 @@ async def transcript_outcome(
 ) -> Outcome:
     """Delivers a rendered transcript; an incomplete one is still delivered, with exit code 5."""
     if isinstance(result, TranscriptResult):
-        transcript, complete, warnings = result.transcript, result.completeness.complete, result.warnings
+        transcript, complete, warnings = (
+            result.transcript,
+            result.completeness.complete,
+            result.warnings,
+        )
     else:
         transcript, complete, warnings = result, True, ()
     language = transcript.language or "orig"
@@ -282,4 +353,9 @@ async def transcript_outcome(
             f"Результат неполный: {where}, но транскрипция не доходит до конца видео (см. предупреждения).",
             hint="Повторите команду позже: готовые части возьмутся из кэша, недостающие будут дозапрошены.",
         )
-    return Outcome(payload, text=text if path is None else None, warnings=tuple(warnings), error=error)
+    return Outcome(
+        payload,
+        text=text if path is None else None,
+        warnings=tuple(warnings),
+        error=error,
+    )

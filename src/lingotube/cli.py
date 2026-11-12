@@ -44,11 +44,21 @@ def default_context(out: TextIO, err: TextIO) -> AppContext:
 
     settings_path, cache_dir = default_paths()
     settings = load_settings(settings_path, os.environ)  # sync, before asyncio.run
-    container = build_container(settings=settings, env=os.environ, cache_dir=cache_dir, err=err)
-    return AppContext(container=container, out=out, err=err, cwd=Path.cwd(), settings_path=settings_path)
+    container = build_container(
+        settings=settings, env=os.environ, cache_dir=cache_dir, err=err
+    )
+    return AppContext(
+        container=container,
+        out=out,
+        err=err,
+        cwd=Path.cwd(),
+        settings_path=settings_path,
+    )
 
 
-def build_app(registry: FeatureRegistry, get_context: Callable[[], AppContext]) -> typer.Typer:
+def build_app(
+    registry: FeatureRegistry, get_context: Callable[[], AppContext]
+) -> typer.Typer:
     app = typer.Typer(
         name=PROG,
         add_completion=False,
@@ -76,7 +86,9 @@ class _ReplacingStream(io.TextIOBase):
         try:
             return self._stream.write(s)
         except UnicodeEncodeError:
-            return self._stream.write(s.encode(self._encoding, "replace").decode(self._encoding))
+            return self._stream.write(
+                s.encode(self._encoding, "replace").decode(self._encoding)
+            )
 
     def flush(self) -> None:
         self._stream.flush()
@@ -88,7 +100,7 @@ def _utf8(stream: TextIO) -> TextIO:
         try:
             reconfigure(encoding="utf-8", errors="replace")
             return stream
-        except (OSError, ValueError, io.UnsupportedOperation):
+        except OSError, ValueError, io.UnsupportedOperation:
             pass
     if getattr(stream, "encoding", None) is None:  # e.g. StringIO: any text is fine
         return stream
@@ -97,7 +109,8 @@ def _utf8(stream: TextIO) -> TextIO:
 
 def _move_dash_ids(argv: list[str], command: Any) -> list[str]:
     """`subs -n5MqamatXE --lang ru`: a bare token shaped like a video id that starts
-    with '-' would be parsed as options; move it after `--` so it stays the URL argument."""
+    with '-' would be parsed as options; move it after `--` so it stays the URL argument.
+    """
     if "--" in argv:
         return argv
     index = next((i for i, t in enumerate(argv) if not t.startswith("-")), None)
@@ -161,17 +174,27 @@ def run(
         return e.exit_code
     except typer.Abort:
         return _report_safely(out, err, json_mode, LingotubeError("Прервано."), 1)
-    except typer.TyperException as e:  # parser errors: unknown option, missing argument…
+    except (
+        typer.TyperException
+    ) as e:  # parser errors: unknown option, missing argument…
         message = e.format_message().strip()
-        if not message and not json_mode:  # no arguments at all: the help is already shown
+        if (
+            not message and not json_mode
+        ):  # no arguments at all: the help is already shown
             return e.exit_code
-        error = UsageError(message or "Не указана команда.", hint=f"Справка: {PROG} --help")
+        error = UsageError(
+            message or "Не указана команда.", hint=f"Справка: {PROG} --help"
+        )
         return _report_safely(out, err, json_mode, error, e.exit_code)
-    except LingotubeError as e:  # e.g. a broken settings file while building the context
+    except (
+        LingotubeError
+    ) as e:  # e.g. a broken settings file while building the context
         return _report_safely(out, err, json_mode, e, e.exit_code)
     except KeyboardInterrupt:
         return 130
-    except Exception as e:  # never a traceback, never the exception text (may hold secrets)
+    except (
+        Exception
+    ) as e:  # never a traceback, never the exception text (may hold secrets)
         error = LingotubeError(
             f"Внутренняя ошибка ({type(e).__name__}).",
             hint="Повторите команду; если ошибка повторяется — сообщите о ней.",
@@ -180,7 +203,9 @@ def run(
     return rv if isinstance(rv, int) else 0
 
 
-def _report_safely(out: TextIO, err: TextIO, json_mode: bool, error: LingotubeError, code: int) -> int:
+def _report_safely(
+    out: TextIO, err: TextIO, json_mode: bool, error: LingotubeError, code: int
+) -> int:
     """Reports an error; if the streams themselves fail, only the exit code remains."""
     try:
         report(out, err, json_mode, error=error)

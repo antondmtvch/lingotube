@@ -48,7 +48,9 @@ class _Ok:
 
 
 async def test_chain_falls_back():
-    assert (await ChainCookieSource([_Fail(), _Ok()]).load()).cookies == {"SAPISID": "s"}
+    assert (await ChainCookieSource([_Fail(), _Ok()]).load()).cookies == {
+        "SAPISID": "s"
+    }
 
 
 async def test_chain_all_fail():
