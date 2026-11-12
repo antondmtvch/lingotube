@@ -141,3 +141,60 @@ async def test_at_most_three_batches_in_flight():
         out = await make(client, batch_size=1).translate(cues(10), "ru")
     assert state["peak"] == 3
     assert [c.id for c in out] == list(range(1, 11))
+
+
+@respx.mock
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "1\tA\r\n2\tB\r\n3\tC",
+        "\n1\tA\n\n2\tB\n\n3\tC\n\n",
+        "  1\t A  \n\t2 \tB\t\n 3\tC  ",
+        "1.\tA\n2) B\n3:C",
+        "Here is the translation:\n```\n1\tA\n2\tB\n3\tC\n```",
+    ],
+)
+async def test_lenient_response_formats(answer):
+    respx.post(URL).mock(return_value=completion(answer))
+    async with httpx.AsyncClient() as client:
+        out = await make(client).translate(cues(3), "ru")
+    assert [c.text for c in out] == ["A", "B", "C"]
+
+
+@respx.mock
+async def test_tab_and_line_separator_inside_text_preserved():
+    respx.post(URL).mock(return_value=completion("1\ta\tb c\n2\tz"))
+    async with httpx.AsyncClient() as client:
+        out = await make(client).translate(cues(2), "ru")
+    assert [c.text for c in out] == ["a\tb c", "z"]
+
+
+@respx.mock
+async def test_extra_number_is_still_mismatch():
+    route = respx.post(URL).mock(return_value=completion("1\ta\n2\tb\n3\tc"))
+    async with httpx.AsyncClient() as client:
+        with pytest.raises(ValidationError):
+            await make(client).translate(cues(2), "ru")
+    assert route.call_count == 2
+
+
+@respx.mock
+async def test_redirect_is_refused():
+    target = respx.get("https://evil.example.test/x").mock(return_value=httpx.Response(200))
+    respx.post(URL).mock(
+        return_value=httpx.Response(302, headers={"Location": "https://evil.example.test/x"})
+    )
+    async with httpx.AsyncClient() as client:
+        with pytest.raises(NetworkError) as e:
+            await make(client).translate(cues(2), "ru")
+    assert "evil.example.test" not in str(e.value)
+    assert not target.called
+
+
+async def test_invalid_base_url_is_validation_error():
+    async with httpx.AsyncClient() as client:
+        with pytest.raises(ValidationError) as e:
+            await make(client, base="http://user:pw@exa mple:bad/v1").translate(cues(2), "ru")
+    assert e.value.exit_code == 7
+    assert "translator.base_url" in f"{e.value} {e.value.hint}"
+    assert "pw" not in f"{e.value} {e.value.hint}"

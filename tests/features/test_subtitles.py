@@ -99,3 +99,10 @@ async def test_incomplete_original_propagates_completeness(tmp_path):
     assert res.warnings == ("обрыв",)
     await feature.run(VID, "ru")
     assert tl.calls == ["ru", "ru"]  # an incomplete translation is never served as ready
+
+
+async def test_unknown_original_language_is_translated(tmp_path):
+    tr, tl = FakeTranscripts(original_language=None), FakeTranslator()
+    res = await SubtitlesFeature(tr, tl, Cache(tmp_path)).run(VID, "ru")
+    assert tl.calls == ["ru"]
+    assert res.transcript.cues[0].text == "[ru] hello"

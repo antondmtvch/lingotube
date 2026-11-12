@@ -22,7 +22,7 @@ from lingotube.redact import redact
 
 MAX_IN_FLIGHT = 3
 ATTEMPTS = 2  # one retry of a mismatched batch
-_LINE = re.compile(r"^\s*(\d+)[\t ]+(.*?)\s*$")
+_LINE = re.compile(r"^\s*(\d+)(?:[\t ]+|[.):]\s*)(.*?)\s*$")
 
 
 class OpenAICompatTranslator:
@@ -75,8 +75,15 @@ class OpenAICompatTranslator:
         }
         try:
             response = await self._http.post(
-                url, json=body, headers={"Authorization": f"Bearer {self._api_key}"}
+                url,
+                json=body,
+                headers={"Authorization": f"Bearer {self._api_key}"},
+                follow_redirects=False,
             )
+        except httpx.InvalidURL:
+            raise ValidationError(
+                "Некорректный адрес модели перевода.", hint="Проверьте настройку translator.base_url."
+            ) from None
         except httpx.HTTPError as e:
             raise NetworkError(
                 redact(f"Не удалось обратиться к модели перевода: {type(e).__name__}: {e}", [self._api_key])
@@ -87,6 +94,8 @@ class OpenAICompatTranslator:
                 f"Модель перевода отклонила ключ (HTTP {status}).",
                 hint=f"Проверьте ключ в переменной окружения {self._settings.api_key_env}.",
             ) from None
+        if 300 <= status < 400:
+            raise NetworkError("Модель перевода ответила перенаправлением; перенаправления не выполняются.") from None
         if status >= 400:
             raise NetworkError(
                 redact(f"Модель перевода вернула ошибку HTTP {status}.", [self._api_key])
@@ -101,12 +110,10 @@ class OpenAICompatTranslator:
 def _parse(answer: str, count: int) -> list[str] | None:
     """Texts in batch order, or None when numbers/count/text do not match."""
     found: dict[int, str] = {}
-    for line in answer.splitlines():
-        if not line.strip():
-            continue
+    for line in answer.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
         m = _LINE.match(line)
         if m is None:
-            return None
+            continue  # blank lines, preamble, code fences
         number, text = int(m.group(1)), m.group(2)
         if number in found or not text:
             return None
