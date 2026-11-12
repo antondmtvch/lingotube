@@ -40,7 +40,7 @@ def _stamp(
     seconds: float,
     sep: str,
 ) -> str:
-    ms = round(number=seconds * 1000)
+    ms = round(seconds * 1000)
     h, ms = divmod(
         ms,
         3_600_000,

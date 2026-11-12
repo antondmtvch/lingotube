@@ -125,7 +125,7 @@ async def test_no_temp_files_left_after_put(tmp_path):
             cache.put(
                 key=dataclasses.replace(
                     KEY,
-                    part=str(object=i),
+                    part=str(i),
                 ),
                 value={"i": i},
             )

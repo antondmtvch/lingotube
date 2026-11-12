@@ -34,7 +34,7 @@ class CacheKey:
             ],
             ensure_ascii=True,
         )
-        return hashlib.sha256(data=raw.encode(encoding="ascii")).hexdigest()
+        return hashlib.sha256(data=raw.encode("ascii")).hexdigest()
 
 
 class Cache:

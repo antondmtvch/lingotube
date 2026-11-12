@@ -175,8 +175,8 @@ def load_settings(
     if path is not None:
         try:
             with open(
-                file=path,
-                mode="rb",
+                path,
+                "rb",
             ) as f:
                 data = tomllib.load(f)
         except FileNotFoundError:
@@ -295,7 +295,7 @@ def _remember(
         raise ValidationError(
             message=f"Cannot update settings file {settings_path}: {e}"
         ) from e
-    data["cookies_file"] = str(object=path.resolve())
+    data["cookies_file"] = str(path.resolve())
     text = _dump_toml(data=data)
     settings_path.parent.mkdir(
         parents=True,

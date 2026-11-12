@@ -21,7 +21,7 @@ async def test_browser_loader_failure_is_auth_error_with_hint():
             browser="chrome",
             loader=boom,
         ).load()
-    assert "cookies-file" in e.value.hint and "SECRETVALUE" not in str(object=e.value)
+    assert "cookies-file" in e.value.hint and "SECRETVALUE" not in str(e.value)
     assert "SECRETVALUE" not in e.value.hint
 
 

@@ -108,9 +108,9 @@ class _ReplacingStream(io.TextIOBase):
         except UnicodeEncodeError:
             return self._stream.write(
                 s.encode(
-                    encoding=self._encoding,
-                    errors="replace",
-                ).decode(encoding=self._encoding)
+                    self._encoding,
+                    "replace",
+                ).decode(self._encoding)
             )
 
     def flush(self) -> None:
@@ -154,7 +154,7 @@ def _move_dash_ids(
     if "--" in argv:
         return argv
     index = next(
-        (i for i, t in enumerate(iterable=argv) if not t.startswith("-")),
+        (i for i, t in enumerate(argv) if not t.startswith("-")),
         None,
     )
     if index is None or argv[index] not in getattr(
@@ -246,13 +246,11 @@ def run(
             error=LingotubeError(message="Прервано."),
             code=1,
         )
-    except (
-        typer.TyperException
-    ) as e:  # parser errors: unknown option, missing argument…
+    except typer.TyperException as e:
+        # parser errors: unknown option, missing argument…
         message = e.format_message().strip()
-        if (
-            not message and not json_mode
-        ):  # no arguments at all: the help is already shown
+        # no arguments at all: the help is already shown
+        if not message and not json_mode:
             return e.exit_code
         error = UsageError(
             message=message or "Не указана команда.",
@@ -265,9 +263,8 @@ def run(
             error=error,
             code=e.exit_code,
         )
-    except (
-        LingotubeError
-    ) as e:  # e.g. a broken settings file while building the context
+    except LingotubeError as e:
+        # e.g. a broken settings file while building the context
         return _report_safely(
             out=out,
             err=err,
@@ -277,9 +274,8 @@ def run(
         )
     except KeyboardInterrupt:
         return 130
-    except (
-        Exception
-    ) as e:  # never a traceback, never the exception text (may hold secrets)
+    except Exception as e:
+        # never a traceback, never the exception text (may hold secrets)
         error = LingotubeError(
             message=f"Внутренняя ошибка ({type(e).__name__}).",
             hint="Повторите команду; если ошибка повторяется — сообщите о ней.",

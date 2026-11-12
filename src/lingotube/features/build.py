@@ -14,7 +14,7 @@ MAX_IDS = 20
 
 def _ids(ids: list[int]) -> str:
     ordered = sorted(ids)
-    text = ", ".join(str(object=i) for i in ordered[:MAX_IDS])
+    text = ", ".join(str(i) for i in ordered[:MAX_IDS])
     if len(ordered) > MAX_IDS:
         text += f" … и ещё {len(ordered) - MAX_IDS}"
     return text
@@ -120,7 +120,7 @@ def _read_json(path) -> Any:
 
     try:
         with open(
-            file=path,
+            path,
             encoding="utf-8",
         ) as f:
             return json.load(fp=f)

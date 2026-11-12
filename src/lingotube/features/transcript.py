@@ -183,7 +183,7 @@ class TranscriptFeature:
         )
         chunks: list[Sequence[ParsedLine]] = []
         warnings: list[str] = []
-        for index, (start, end) in enumerate(iterable=ranges):
+        for index, (start, end) in enumerate(ranges):
             is_last = index == len(ranges) - 1
             part_key = CacheKey(
                 video_id=video_id,

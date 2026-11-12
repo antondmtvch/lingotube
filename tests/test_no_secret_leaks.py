@@ -39,7 +39,7 @@ _RANGE = re.compile(pattern=r"с (\d+(?::\d\d)+) по (\d+(?::\d\d)+)")
 
 def _secs(stamp: str) -> int:
     total = 0
-    for part in stamp.split(sep=":"):
+    for part in stamp.split(":"):
         total = total * 60 + int(part)
     return total
 
@@ -92,7 +92,7 @@ def watch_page(duration: int) -> str:
         "videoDetails": {
             "videoId": VID,
             "title": "Видео",
-            "lengthSeconds": str(object=duration),
+            "lengthSeconds": str(duration),
         },
         "captions": {
             "playerCaptionsTracklistRenderer": {
@@ -310,10 +310,10 @@ def route_translator(
         user = json.loads(s=request.content)["messages"][1]["content"]
         lines = [
             line.split(
-                sep="\t",
-                maxsplit=1,
+                "\t",
+                1,
             )
-            for line in user.split(sep="\n")
+            for line in user.split("\n")
         ]
         content = "\n".join(f"{n}\tперевод {text}" for n, text in lines)
         return httpx.Response(
@@ -746,9 +746,8 @@ def test_doctor_never_leaks(
         err=err,
         json_mode=json_mode,
     )
-    assert (
-        leak.loaded_browsers
-    )  # browser sources were checked with secret-bearing failures
+    # browser sources were checked with secret-bearing failures
+    assert leak.loaded_browsers
     if scenario not in ("no_cookies", "browser_fails"):
         assert youtube_saw_cookies(router=router)
     assert not any(

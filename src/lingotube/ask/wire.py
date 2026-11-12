@@ -175,7 +175,7 @@ def build_ask_body(
         "formData": {
             "inputComposerFormData": {
                 "clientMessageId": f"youchat-{now_ms}",
-                "playerOffsetMs": str(object=player_offset_ms),
+                "playerOffsetMs": str(player_offset_ms),
                 "userInputText": prompt,
             }
         },
@@ -288,7 +288,7 @@ def extract_page(html: str) -> tuple[dict[str, Any], VideoInfo]:
             length,
             str | int,
         )
-        or not str(object=length).isdigit()
+        or not str(length).isdigit()
     ):
         raise unavailable
     return context, VideoInfo(

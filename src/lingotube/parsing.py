@@ -25,7 +25,7 @@ class ParsedLine:
 
 def _seconds(stamp: str) -> float | None:
     """Секунды из м:сс / ч:мм:сс; None, если части вне диапазона 0-59."""
-    parts = [int(p) for p in stamp.split(sep=":")]
+    parts = [int(p) for p in stamp.split(":")]
     if any(p > 59 for p in parts[1:]) or (len(parts) == 3 and parts[0] > 99):
         return None
     total = 0

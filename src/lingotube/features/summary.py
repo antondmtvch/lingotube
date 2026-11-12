@@ -114,7 +114,7 @@ def register(
             )
             result = {"video_id": video_id, "language": language, "text": text}
             if path is not None:
-                result["path"] = str(object=path)
+                result["path"] = str(path)
             return c.Outcome(
                 result=result,
                 text=text if path is None else None,

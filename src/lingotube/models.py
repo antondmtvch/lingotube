@@ -107,7 +107,7 @@ class Transcript:
         ):
             raise _fail(what="cues must be a list")
         cues: list[Cue] = []
-        for i, c in enumerate(iterable=raw):
+        for i, c in enumerate(raw):
             if not isinstance(
                 c,
                 dict,

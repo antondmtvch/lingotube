@@ -84,8 +84,8 @@ def merge(chunks: Sequence[Sequence[ParsedLine]]) -> list[Cue]:
             text=line.text,
         )
         for i, line in enumerate(
-            iterable=joined,
-            start=1,
+            joined,
+            1,
         )
     ]
 
@@ -117,7 +117,7 @@ def fix_ends(
     """
     cues = [c for c in cues if c.start < duration]
     out: list[Cue] = []
-    for i, cue in enumerate(iterable=cues):
+    for i, cue in enumerate(cues):
         limit = duration
         next_start = next(
             (c.start for c in cues[i + 1 :] if c.start > cue.start),

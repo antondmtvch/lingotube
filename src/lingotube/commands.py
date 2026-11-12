@@ -38,9 +38,8 @@ class AppContext:
     out: TextIO
     err: TextIO
     cwd: Path  # where default output files go and relative paths resolve
-    settings_path: (
-        Path | None
-    )  # where --cookies-file is remembered (None: not remembered)
+    # where --cookies-file is remembered (None: not remembered)
+    settings_path: Path | None
     json_mode: bool = False
 
     @property
@@ -196,9 +195,8 @@ async def _execute(
 ) -> int:
     try:
         try:
-            video_id = (
-                parse_video_id(value=video) if video is not None else None
-            )  # before any network
+            # before any network
+            video_id = parse_video_id(value=video) if video is not None else None
             await _configure(
                 ctx=ctx,
                 common=common,
@@ -216,9 +214,8 @@ async def _execute(
             json_mode=ctx.json_mode,
             error=e,
         )
-    except (
-        Exception
-    ) as e:  # never a traceback, never the exception text (may hold secrets)
+    except Exception as e:
+        # never a traceback, never the exception text (may hold secrets)
         error = LingotubeError(
             message=f"Внутренняя ошибка ({type(e).__name__}).",
             hint="Повторите команду; если ошибка повторяется — сообщите о ней.",
@@ -446,7 +443,7 @@ async def transcript_outcome(
         "video_id": transcript.video_id,
         "language": transcript.language,
         "format": fmt,
-        "path": None if path is None else str(object=path),
+        "path": None if path is None else str(path),
         "complete": complete,
         "cues": len(transcript.cues),
     }

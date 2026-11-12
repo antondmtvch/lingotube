@@ -35,6 +35,8 @@ asyncio_default_fixture_loop_scope = "function"
 line-length = 88
 target-version = ["py314"]
 
+# On a non-UTF-8 Windows console run isort with PYTHONUTF8=1: isort --check-only writes to
+# os.devnull in the locale encoding and skips files with non-ASCII text ('charmap' warnings).
 [tool.isort]
 profile = "black"
 src_paths = ["src", "tests", "probe"]

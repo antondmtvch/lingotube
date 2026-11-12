@@ -20,7 +20,7 @@ def _parse(text: str) -> dict[str, str]:
             line = line[len(_HTTP_ONLY) :]
         elif not line or line.startswith("#"):
             continue
-        parts = line.split(sep="	")
+        parts = line.split("	")
         if len(parts) != 7:
             continue
         domain, name, value = parts[0], parts[5], parts[6]

@@ -27,7 +27,7 @@ def _primary(language: str | None) -> str:
             "_",
             "-",
         )
-        .split(sep="-")[0]
+        .split("-")[0]
         .strip()
         .lower()
     )

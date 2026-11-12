@@ -150,12 +150,12 @@ class _Channel:
             values=[
                 authorization,
                 authorization.split(
-                    sep=" ",
-                    maxsplit=1,
+                    " ",
+                    1,
                 )[-1],
                 authorization.rsplit(
-                    sep="_",
-                    maxsplit=1,
+                    "_",
+                    1,
                 )[-1],
             ]
         )
@@ -167,7 +167,7 @@ class _Channel:
         headers.update(
             {
                 "Content-Type": "application/json",
-                "Referer": str(object=referer),
+                "Referer": str(referer),
                 "X-Goog-AuthUser": "0",
                 "X-YouTube-Client-Name": WEB_CLIENT_NAME_ID,
             }

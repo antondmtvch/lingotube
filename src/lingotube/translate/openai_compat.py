@@ -84,8 +84,8 @@ class OpenAICompatTranslator:
         user = "\n".join(
             f"{n}\t{' '.join(c.text.split())}"
             for n, c in enumerate(
-                iterable=batch,
-                start=1,
+                batch,
+                1,
             )
         )
         for _ in range(ATTEMPTS):
@@ -192,7 +192,7 @@ def _parse(
             "\r",
             "\n",
         )
-        .split(sep="\n")
+        .split("\n")
     ):
         m = _LINE.match(string=line)
         if m is None:

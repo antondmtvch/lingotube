@@ -149,7 +149,7 @@ def _t(*texts):
                 end=i + 1,
                 text=x,
             )
-            for i, x in enumerate(iterable=texts)
+            for i, x in enumerate(texts)
         ),
     )
 

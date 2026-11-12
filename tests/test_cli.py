@@ -35,7 +35,7 @@ SUMMARY = "Краткое содержание: Привет 日本 ✓"
 
 def _secs(stamp: str) -> int:
     total = 0
-    for part in stamp.split(sep=":"):
+    for part in stamp.split(":"):
         total = total * 60 + int(part)
     return total
 
@@ -219,7 +219,7 @@ def test_subs_writes_srt_file_default_name(tmp_path):
     )
     assert code == 0, err
     path = tmp_path / f"{VID}.ru.srt"
-    text = path.read_bytes().decode(encoding="utf-8")
+    text = path.read_bytes().decode("utf-8")
     assert text.startswith("1\n00:00:00,000 --> ")
     assert "реплика 10" in text
     assert out == ""
@@ -529,7 +529,7 @@ def test_json_envelope_success_and_error(tmp_path):
     )
     doc = json.loads(s=out)
     assert code == 0 and doc["ok"] is True
-    assert doc["result"]["path"] == str(object=tmp_path / f"{VID}.ru.srt")
+    assert doc["result"]["path"] == str(tmp_path / f"{VID}.ru.srt")
     assert doc["result"]["complete"] is True
 
     h2 = Harness(
@@ -643,7 +643,7 @@ def test_cyrillic_to_cp1251_stream_does_not_crash(tmp_path):
     )
     assert code == 0, err
     out.flush()
-    assert SUMMARY in raw.getvalue().decode(encoding="utf-8")
+    assert SUMMARY in raw.getvalue().decode("utf-8")
 
 
 def test_stream_without_reconfigure_falls_back_to_replace(tmp_path):
@@ -654,7 +654,7 @@ def test_stream_without_reconfigure_falls_back_to_replace(tmp_path):
             self.parts: list[str] = []
 
         def write(self, s: str) -> int:
-            s.encode(encoding="cp1251")  # strict
+            s.encode("cp1251")  # strict
             self.parts.append(s)
             return len(s)
 
@@ -689,7 +689,7 @@ def test_cookies_file_flag_is_remembered_in_settings(tmp_path):
     settings_text = (tmp_path / "settings.toml").read_text(encoding="utf-8")
     assert "cookies_file" in settings_text
     assert (
-        str(object=cookies.resolve()).replace(
+        str(cookies.resolve()).replace(
             "\\",
             "\\\\",
         )
@@ -1120,9 +1120,8 @@ def test_failed_write_keeps_previous_file(
             *args,
             **kwargs,
         )
-        if (
-            kwargs.get("newline") != ""
-        ):  # only the output writer (the cache writes stay real)
+        # only the output writer (the cache writes stay real)
+        if kwargs.get("newline") != "":
             return f
         real_write = f.write
 

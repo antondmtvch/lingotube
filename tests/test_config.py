@@ -169,10 +169,8 @@ async def test_remember_cookies_file_creates_and_preserves(tmp_path):
 
 def test_default_paths_creates_nothing():
     settings, cache = default_paths()
-    assert (
-        settings.name == "settings.toml" and "lingotube" in str(object=settings).lower()
-    )
-    assert "lingotube" in str(object=cache).lower()
+    assert settings.name == "settings.toml" and "lingotube" in str(settings).lower()
+    assert "lingotube" in str(cache).lower()
 
 
 @pytest.mark.parametrize(
@@ -210,13 +208,13 @@ def test_out_of_range_values_rejected(
     assert (
         not any(
             c.isdigit()
-            for c in str(object=ei.value).replace(
+            for c in str(ei.value).replace(
                 key,
                 "",
             )
         )
-        or "greater than 0" in str(object=ei.value)
-        or "at least 0" in str(object=ei.value)
+        or "greater than 0" in str(ei.value)
+        or "at least 0" in str(ei.value)
     )
 
 

@@ -41,10 +41,10 @@ def user_lines(request: httpx.Request) -> list[list[str]]:
     body = json.loads(s=request.content)
     return [
         line.split(
-            sep="\t",
-            maxsplit=1,
+            "\t",
+            1,
         )
-        for line in body["messages"][1]["content"].split(sep="\n")
+        for line in body["messages"][1]["content"].split("\n")
     ]
 
 
@@ -128,7 +128,7 @@ async def test_count_mismatch_retries_batch_once_then_fails():
             )
     assert exc.value.exit_code == 7
     assert route.call_count == 2
-    assert "1" in str(object=exc.value) and "40" in str(object=exc.value)
+    assert "1" in str(exc.value) and "40" in str(exc.value)
 
 
 @respx.mock
@@ -198,7 +198,7 @@ async def test_transport_error_is_network_error_without_key():
                 cues=cues(n=2),
                 target_language="ru",
             )
-    assert KEY not in str(object=e.value)
+    assert KEY not in str(e.value)
     assert e.value.__cause__ is None
 
 
@@ -314,7 +314,7 @@ async def test_redirect_is_refused():
                 cues=cues(n=2),
                 target_language="ru",
             )
-    assert "evil.example.test" not in str(object=e.value)
+    assert "evil.example.test" not in str(e.value)
     assert not target.called
 
 

@@ -421,7 +421,7 @@ async def test_transport_error_retried_then_network_error(
     ).open(video_id=VIDEO)
     with pytest.raises(expected_exception=NetworkError) as e:
         await session.ask(prompt="q")
-    assert "ReadTimeout" in str(object=e.value)
+    assert "ReadTimeout" in str(e.value)
     assert e.value.__cause__ is None and e.value.__suppress_context__
     assert panel.call_count == 3
 
@@ -541,8 +541,8 @@ async def test_error_message_has_no_secrets(
         now=int(NOW),
     )
     digest = header.split(
-        sep=" ",
-        maxsplit=1,
+        " ",
+        1,
     )[1]
     leak = f"boom {SAPISID} {SID} FAKE_CONTINUATION_1 FAKE_CTP_1 {header} {digest}"
     mock.post(url=PANEL).mock(side_effect=httpx.ConnectError(message=leak))
@@ -552,7 +552,7 @@ async def test_error_message_has_no_secrets(
     ).open(video_id=VIDEO)
     with pytest.raises(expected_exception=NetworkError) as e:
         await session.ask(prompt="q")
-    text = str(object=e.value) + (e.value.hint or "")
+    text = str(e.value) + (e.value.hint or "")
     for secret in (
         SAPISID,
         SID,
@@ -560,8 +560,8 @@ async def test_error_message_has_no_secrets(
         "FAKE_CTP_1",
         header,
         header.split(
-            sep="_",
-            maxsplit=1,
+            "_",
+            1,
         )[1],
     ):
         assert secret not in text

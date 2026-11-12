@@ -92,4 +92,4 @@ def test_errors(
         "boom",
         "try this",
     )
-    assert str(object=e) == "boom"
+    assert str(e) == "boom"

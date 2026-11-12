@@ -30,7 +30,7 @@ def parse_video_id(value: str) -> str:
     if url.scheme not in ("http", "https"):
         raise _bad(value=value)
     candidate: str | None = None
-    parts = [p for p in url.path.split(sep="/") if p]
+    parts = [p for p in url.path.split("/") if p]
     if host == _SHORT_HOST:
         candidate = parts[0] if parts else None
     elif host in _HOSTS:

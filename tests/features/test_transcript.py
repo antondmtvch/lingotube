@@ -17,7 +17,7 @@ _RANGE = re.compile(pattern=r"с (\d+(?::\d\d)+) по (\d+(?::\d\d)+)")
 
 def secs(stamp: str) -> int:
     total = 0
-    for part in stamp.split(sep=":"):
+    for part in stamp.split(":"):
         total = total * 60 + int(part)
     return total
 
@@ -275,9 +275,8 @@ async def test_rerequest_without_progress_stops_and_part_is_not_reasked(tmp_path
         client=client,
         tmp_path=tmp_path,
     ).run(video_id=VID)
-    assert (
-        len(client.prompts) == 2
-    )  # первый дозапрос без продвижения — дальше не спрашиваем
+    # первый дозапрос без продвижения — дальше не спрашиваем
+    assert len(client.prompts) == 2
     assert not result.completeness.complete
     assert not any(
         "оборван" in w for w in result.warnings
