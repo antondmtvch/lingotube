@@ -29,3 +29,13 @@ def test_multiple_secrets():
         )
         == "x *** y ***"
     )
+
+
+def test_overlapping_secrets_fully_masked():
+    assert (
+        redact(
+            text="xabcdefx",
+            secrets=["abcd", "cdef"],
+        )
+        == "x***x"
+    )
