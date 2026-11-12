@@ -5,6 +5,7 @@ The model API key is NOT a setting: only the *name* of the env var is stored
 """
 
 import asyncio
+import math
 import os
 import tempfile
 import tomllib
@@ -63,7 +64,27 @@ def _check(name: str, value: object, typ: str, where: str) -> object:
     }[typ]
     if not ok:
         raise ValidationError(f"Setting '{where}{name}' must be of type {typ}")
+    if typ == "float" and not math.isfinite(value):  # type: ignore[arg-type]
+        raise ValidationError(f"Setting '{where}{name}' must be a finite number")
     return float(value) if typ == "float" else value  # type: ignore[arg-type]
+
+
+_MIN = {
+    "chunk_seconds": (1, "greater than 0"),
+    "batch_size": (1, "greater than 0"),
+    "min_interval": (0, "at least 0"),
+    "max_retries": (0, "at least 0"),
+}
+FORMATS = ("srt", "vtt", "json")
+
+
+def _validated(name: str, value: object, typ: str, where: str) -> object:
+    value = _check(name, value, typ, where)
+    if name in _MIN and value < _MIN[name][0]:  # type: ignore[operator]
+        raise ValidationError(f"Setting '{where}{name}' must be {_MIN[name][1]}")
+    if name == "format" and value not in FORMATS:
+        raise ValidationError(f"Setting 'format' must be one of {', '.join(FORMATS)}")
+    return value
 
 
 def _parse_translator(raw: object) -> TranslatorSettings:
@@ -75,7 +96,7 @@ def _parse_translator(raw: object) -> TranslatorSettings:
     for req in ("base_url", "model"):
         if req not in raw:
             raise ValidationError(f"Setting 'translator.{req}' is required")
-    return TranslatorSettings(**{k: _check(k, v, _TR_TYPES[k], "translator.") for k, v in raw.items()})
+    return TranslatorSettings(**{k: _validated(k, v, _TR_TYPES[k], "translator.") for k, v in raw.items()})
 
 
 def load_settings(path: Path | None, env: Mapping[str, str]) -> Settings:
@@ -93,15 +114,15 @@ def load_settings(path: Path | None, env: Mapping[str, str]) -> Settings:
             if k == "translator":
                 values[k] = _parse_translator(v)
             elif k in _TOP_TYPES:
-                values[k] = _check(k, v, _TOP_TYPES[k], "")
+                values[k] = _validated(k, v, _TOP_TYPES[k], "")
             else:
                 raise ValidationError(
                     f"Unknown setting '{k}'", hint=f"Allowed: {sorted([*_TOP_TYPES, 'translator'])}"
                 )
-    if ENV_LANG in env:
-        values["lang"] = env[ENV_LANG]
-    if ENV_COOKIES_FILE in env:
-        values["cookies_file"] = env[ENV_COOKIES_FILE]
+    if env.get(ENV_LANG, "").strip():
+        values["lang"] = env[ENV_LANG].strip()
+    if env.get(ENV_COOKIES_FILE, "").strip():
+        values["cookies_file"] = env[ENV_COOKIES_FILE].strip()
     if isinstance(values.get("cookies_file"), str):
         values["cookies_file"] = Path(values["cookies_file"])
     return Settings(**values)  # type: ignore[arg-type]
