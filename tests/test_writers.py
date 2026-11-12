@@ -49,3 +49,28 @@ def test_missing_end_raises():
     t = Transcript("v", 10, None, "1", (Cue(1, 0, None, "a"),))
     with pytest.raises(ValidationError):
         render(t, "srt")
+
+
+def _t(*texts):
+    return Transcript("v", 10, "ru", "1", tuple(Cue(i + 7, i, i + 1, x) for i, x in enumerate(texts)))
+
+
+@pytest.mark.parametrize("empty", ["  ", "\n\n", "\r"])
+def test_empty_text_cues_are_skipped_and_srt_renumbered(empty):
+    t = _t("a", empty, "b")
+    srt = render(t, "srt")
+    assert srt == "1\n00:00:00,000 --> 00:00:01,000\na\n\n2\n00:00:02,000 --> 00:00:03,000\nb\n"
+    vtt = render(t, "vtt")
+    assert vtt == "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\na\n\n00:00:02.000 --> 00:00:03.000\nb\n"
+    assert len(json.loads(render(t, "json"))["cues"]) == 3
+
+
+@pytest.mark.parametrize("arrow", ["--->", "---->", "-->"])
+def test_arrow_variants_neutralized(arrow):
+    for fmt in ("srt", "vtt"):
+        assert render(_t(f"a {arrow} b"), fmt).count("-->") == 1
+
+
+def test_lone_cr_is_a_line_break():
+    assert "a\nb\n" in render(_t("a\rb"), "srt")
+    assert "a\nb\n" in render(_t("a\r\nb"), "srt")

@@ -1,6 +1,7 @@
 """Render a Transcript as SRT, WebVTT or JSON text (no I/O)."""
 
 import json
+import re
 from dataclasses import replace
 from typing import Literal
 
@@ -25,17 +26,23 @@ def _stamp(seconds: float, sep: str) -> str:
     return f"{h:02d}:{m:02d}:{s:02d}{sep}{ms:03d}"
 
 
+_ARROW = re.compile(r"-{2,}>")
+
+
 def _clean(text: str) -> str:
-    lines = (ln.strip() for ln in text.replace("\r", "").split("\n"))
-    return "\n".join(ln for ln in lines if ln).replace("-->", "->")
+    lines = (ln.strip() for ln in re.split(r"\r\n|\r|\n", text))
+    return _ARROW.sub("->", "\n".join(ln for ln in lines if ln))
 
 
 def _blocks(t: Transcript, sep: str, numbered: bool) -> list[str]:
     out = []
     for c in t.cues:
         assert c.end is not None
-        head = f"{c.id}\n" if numbered else ""
-        out.append(f"{head}{_stamp(c.start, sep)} --> {_stamp(c.end, sep)}\n{_clean(c.text)}\n")
+        text = _clean(c.text)
+        if not text:
+            continue
+        head = f"{len(out) + 1}\n" if numbered else ""
+        out.append(f"{head}{_stamp(c.start, sep)} --> {_stamp(c.end, sep)}\n{text}\n")
     return out
 
 
