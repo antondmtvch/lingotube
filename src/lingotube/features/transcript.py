@@ -62,7 +62,11 @@ async def load_cached_transcript(
     cache: Cache, video_id: str, lang_key: str = "orig", *, require_complete: bool
 ) -> Transcript | None:
     """Cached final transcript, or None if absent/malformed (or incomplete when required)."""
-    data = await cache.get(transcript_key(video_id, lang_key))
+    return _parse_final(await cache.get(transcript_key(video_id, lang_key)), require_complete)
+
+
+def _parse_final(data: dict | None, require_complete: bool) -> Transcript | None:
+    """The one place a cached final payload is parsed; malformed → None."""
     if data is None or (require_complete and data.get("complete") is not True):
         return None
     try:
@@ -262,14 +266,11 @@ def _load_part(data: dict | None) -> _Part | None:
 
 def _load_final(data: dict | None) -> TranscriptResult | None:
     """Only a well-formed result marked complete is served; anything else is re-asked."""
-    if data is None or data.get("complete") is not True:
+    transcript = _parse_final(data, require_complete=True)
+    if transcript is None or data is None:
         return None
     warnings = data.get("warnings")
     if not isinstance(warnings, list) or not all(isinstance(w, str) for w in warnings):
-        return None
-    try:
-        transcript = Transcript.from_dict(data.get("transcript"))  # type: ignore[arg-type]
-    except ValidationError:
         return None
     completeness = check_completeness(transcript.cues, transcript.duration)
     return TranscriptResult(transcript, completeness, tuple(warnings))

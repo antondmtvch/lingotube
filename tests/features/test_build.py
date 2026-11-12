@@ -129,3 +129,11 @@ async def test_build_malformed_cached_original_is_missing(tmp_path):
     with pytest.raises(ValidationError) as e:
         await BuildFeature(cache).run(VID, "ru", translated())
     assert "lingotube transcript" in (e.value.hint or "")
+
+
+async def test_build_cached_payload_without_transcript_key_is_missing(tmp_path):
+    cache = Cache(tmp_path / "cache")
+    await cache.put(CacheKey(VID, "transcript", "orig", "chat", PROMPT_VERSION), {"complete": True})
+    with pytest.raises(ValidationError) as e:
+        await BuildFeature(cache).run(VID, "ru", translated())
+    assert "lingotube transcript" in (e.value.hint or "")

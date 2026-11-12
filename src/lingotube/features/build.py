@@ -4,8 +4,8 @@ from dataclasses import replace
 from typing import Any
 
 from lingotube.cache import Cache, CacheKey
-from lingotube.features.transcript import load_cached_transcript
 from lingotube.errors import ValidationError
+from lingotube.features.transcript import load_cached_transcript
 from lingotube.models import Cue, Transcript
 from lingotube.prompts import PROMPT_VERSION
 
