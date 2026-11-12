@@ -142,32 +142,49 @@ def run(
     """Runs one invocation and returns its exit code (parser usage errors → 2)."""
     out, err = _utf8(out), _utf8(err)
     json_mode = _json_requested(argv)
-    try:
-        ctx = context_factory(out, err)
-    except LingotubeError as e:
-        return report(out, err, json_mode, error=e)
-    except Exception as e:
-        error = LingotubeError(f"Не удалось запуститься ({type(e).__name__}).")
-        return report(out, err, json_mode, error=error)
+    built: list[AppContext] = []
 
-    app = build_app(registry if registry is not None else build_registry(), lambda: ctx)
-    command = typer.main.get_command(app)
-    args = _move_dash_ids(list(argv), command)
+    def get_context() -> AppContext:
+        """Built lazily (help never needs settings) and once per invocation."""
+        if not built:
+            built.append(context_factory(out, err))
+        return built[0]
+
+    app = build_app(registry if registry is not None else build_registry(), get_context)
     try:
+        command = typer.main.get_command(app)
+        args = _move_dash_ids(list(argv), command)
         rv = command.main(args=args, prog_name=PROG, standalone_mode=False)
     except typer.Exit as e:
         return e.exit_code
     except typer.Abort:
-        return report(out, err, json_mode, error=LingotubeError("Прервано."))
+        return _report_safely(out, err, json_mode, LingotubeError("Прервано."), 1)
     except typer.TyperException as e:  # parser errors: unknown option, missing argument…
         message = e.format_message().strip()
-        if message or json_mode:  # an empty one = no arguments at all: the help is already shown
-            error = UsageError(message or "Не указана команда.", hint=f"Справка: {PROG} --help")
-            report(out, err, json_mode, error=error)
-        return e.exit_code
+        if not message and not json_mode:  # no arguments at all: the help is already shown
+            return e.exit_code
+        error = UsageError(message or "Не указана команда.", hint=f"Справка: {PROG} --help")
+        return _report_safely(out, err, json_mode, error, e.exit_code)
+    except LingotubeError as e:  # e.g. a broken settings file while building the context
+        return _report_safely(out, err, json_mode, e, e.exit_code)
     except KeyboardInterrupt:
         return 130
+    except Exception as e:  # never a traceback, never the exception text (may hold secrets)
+        error = LingotubeError(
+            f"Внутренняя ошибка ({type(e).__name__}).",
+            hint="Повторите команду; если ошибка повторяется — сообщите о ней.",
+        )
+        return _report_safely(out, err, json_mode, error, 1)
     return rv if isinstance(rv, int) else 0
+
+
+def _report_safely(out: TextIO, err: TextIO, json_mode: bool, error: LingotubeError, code: int) -> int:
+    """Reports an error; if the streams themselves fail, only the exit code remains."""
+    try:
+        report(out, err, json_mode, error=error)
+    except Exception:
+        pass
+    return code
 
 
 def main() -> None:

@@ -498,3 +498,111 @@ async def test_translator_selected_only_when_configured(tmp_path):
         assert "MY_KEY" in (info.value.hint or "")
     finally:
         await _shutdown(missing)
+
+
+# --- fix round 1 ---
+
+
+def _broken_settings_factory(tmp_path):
+    from lingotube.config import load_settings
+
+    bad = tmp_path / "settings.toml"
+    bad.write_text("format = 'docx'\n", encoding="utf-8")
+    calls: list[int] = []
+
+    def factory(out, err):
+        calls.append(1)
+        settings = load_settings(bad, {})  # raises ValidationError
+        raise AssertionError(f"unreachable {settings}")
+
+    return factory, calls
+
+
+def test_broken_settings_do_not_break_help(tmp_path):
+    factory, calls = _broken_settings_factory(tmp_path)
+    out, err = io.StringIO(), io.StringIO()
+    assert cli.run(["--help"], out=out, err=err, context_factory=factory) == 0
+    assert cli.run(["subs", "--help"], out=out, err=err, context_factory=factory) == 0
+    assert calls == []  # the context is built only when a command actually runs
+
+
+def test_broken_settings_fail_the_command_with_exit_7(tmp_path):
+    factory, calls = _broken_settings_factory(tmp_path)
+    out, err = io.StringIO(), io.StringIO()
+    assert cli.run(["subs", VID, "--lang", "ru"], out=out, err=err, context_factory=factory) == 7
+    assert "format" in err.getvalue() and "Traceback" not in err.getvalue()
+    assert out.getvalue() == ""
+
+    out, err = io.StringIO(), io.StringIO()
+    assert cli.run(["subs", VID, "--lang", "ru", "--json"], out=out, err=err, context_factory=factory) == 7
+    doc = json.loads(out.getvalue())
+    assert doc["ok"] is False and doc["error"]["code"] == "validation"
+    assert len(calls) == 2
+
+
+def test_context_built_once_per_invocation(tmp_path):
+    h = Harness(tmp_path)
+    assert h.run("summary", URL, "--lang", "ru")[0] == 0
+    assert len(h.containers) == 1
+
+
+def test_unexpected_failure_outside_command_body_is_generic_exit_1(tmp_path):
+    def factory(out, err):
+        raise RuntimeError("secret-xyz")
+
+    out, err = io.StringIO(), io.StringIO()
+    assert cli.run(["summary", URL, "--lang", "ru"], out=out, err=err, context_factory=factory) == 1
+    assert "RuntimeError" in err.getvalue()
+    assert "secret-xyz" not in out.getvalue() + err.getvalue()
+
+    class Broken(io.StringIO):
+        def write(self, s):
+            raise OSError("pipe closed secret-xyz")
+
+    h = Harness(tmp_path)
+    code = cli.run(["summary", URL, "--lang", "ru"], out=Broken(), err=Broken(), context_factory=h.factory)
+    assert code == 1
+
+
+def test_failed_write_keeps_previous_file(tmp_path, monkeypatch):
+    import lingotube.commands as commands_module
+
+    h = Harness(tmp_path)
+    target = tmp_path / f"{VID}.ru.srt"
+    target.write_text("old content", encoding="utf-8")
+
+    real_fdopen = commands_module.os.fdopen
+
+    def half_then_fail(fd, *args, **kwargs):
+        f = real_fdopen(fd, *args, **kwargs)
+        if kwargs.get("newline") != "":  # only the output writer (the cache writes stay real)
+            return f
+        real_write = f.write
+
+        def write(s):
+            real_write(s[: len(s) // 2])
+            raise OSError(28, "No space left on device")
+
+        f.write = write
+        return f
+
+    monkeypatch.setattr(commands_module.os, "fdopen", half_then_fail)
+    code, _, err = h.run("subs", URL, "--lang", "ru")
+    assert code == 1
+    assert "Не удалось записать файл" in err
+    assert target.read_text(encoding="utf-8") == "old content"
+    assert sorted(p.name for p in tmp_path.iterdir() if p.is_file()) == [target.name]
+    monkeypatch.undo()
+
+    real_replace = commands_module.os.replace
+
+    def fail_replace(src, dst):
+        if Path(dst) != target:
+            return real_replace(src, dst)
+        raise PermissionError(13, "Access is denied")
+
+    monkeypatch.setattr(commands_module.os, "replace", fail_replace)
+    code, _, _ = h.run("subs", URL, "--lang", "ru")
+    assert code == 1
+    assert target.read_text(encoding="utf-8") == "old content"
+    assert sorted(p.name for p in tmp_path.iterdir() if p.is_file()) == [target.name]

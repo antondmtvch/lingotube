@@ -9,6 +9,8 @@ import asyncio
 import inspect
 import json
 import math
+import os
+import tempfile
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -220,7 +222,18 @@ def require_offset(offset: float) -> float:
 
 
 def _write_utf8(path: Path, text: str) -> None:
-    path.write_text(text, encoding="utf-8", newline="")
+    """Atomic: a temp file next to the target, then os.replace; a failure leaves the old file."""
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".part")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
+            f.write(text)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 async def deliver(ctx: AppContext, text: str, output: str | None, default_name: str) -> Path | None:
