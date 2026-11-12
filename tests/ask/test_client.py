@@ -643,3 +643,39 @@ async def test_reprs_hide_secrets(
     for text in (repr(client), repr(session)):
         for secret in (SAPISID, SID, "FAKE_CONTINUATION_1", "FAKE_CTP_1"):
             assert secret not in text
+
+
+async def test_short_cookie_values_are_not_masked(
+    mock,
+    http,
+    ftime,
+):
+    class ShortCookies:
+        async def load(self) -> Credentials:
+            return Credentials(
+                cookies={
+                    "SAPISID": SAPISID,
+                    "SID": SID,
+                    "PREF": "1",
+                    "HSID": "abcd",
+                }
+            )
+
+    route_page(mock=mock)
+    mock.post(url=PANEL).mock(side_effect=httpx.ConnectError(message="HTTP 2019 abcd"))
+    client = YouTubeAskClient(
+        http=http,
+        cookies=ShortCookies(),
+        pacer=Pacer(
+            min_interval=5.0,
+            sleep=ftime.sleep,
+            clock=ftime.clock,
+        ),
+        max_retries=2,
+        wall_clock=lambda: NOW,
+    )
+    session = await client.open(video_id=VIDEO)
+    with pytest.raises(expected_exception=NetworkError) as e:
+        await session.ask(prompt="q")
+    assert "HTTP 2019" in str(e.value)
+    assert "abcd" not in str(e.value)

@@ -86,6 +86,9 @@ def _ensure_youtube(url: httpx.URL) -> None:
         )
 
 
+MIN_SECRET_LENGTH = 4
+
+
 class _Channel:
     """Per-open request state: credentials, innertube context, secrets to redact."""
 
@@ -108,11 +111,13 @@ class _Channel:
         self._max_retries = max_retries
         self._timeout = timeout
         self.wall_clock = wall_clock
-        self._secrets: set[str] = set(creds.secrets())
+        self._secrets: set[str] = set()
+        self.add_secrets(values=creds.secrets())
         self.context: dict[str, Any] = {}
 
     def add_secrets(self, values: Iterable[str]) -> None:
-        self._secrets.update(v for v in values if v)
+        # a 1-3 char value would mask digits and letters all over the error text
+        self._secrets.update(v for v in values if len(v) >= MIN_SECRET_LENGTH)
 
     def redact(self, text: str) -> str:
         return redact(
