@@ -68,3 +68,29 @@ def test_empty_text_line_skipped():
 
 def test_empty_input():
     assert parse_answer("") == []
+
+
+def test_long_whitespace_line_is_fast():
+    import time
+    t = time.perf_counter()
+    assert parse_answer(" " * 100_000 + "x") == []
+    assert parse_answer("- " + " " * 100_000 + "x") == []
+    assert parse_answer("(0:01) a\n" + "- " + " " * 100_000 + "x")[0].start == 1.0
+    assert time.perf_counter() - t < 0.5
+
+
+@pytest.mark.parametrize("line", ["(0:75) x", "(1:99:99-0:01) x", "(1:60:00) x", "(0:02-0:99) x"])
+def test_out_of_range_is_not_a_timecode(line):
+    assert parse_answer(line) == []
+
+
+def test_out_of_range_line_follows_text_rules():
+    assert parse_answer("(0:02) a\n(0:75) b") == [ParsedLine(2.0, None, "a (0:75) b")]
+
+
+def test_end_before_start_gives_none_end():
+    assert parse_answer("(0:10-0:05) x") == [ParsedLine(10.0, None, "x")]
+
+
+def test_minutes_over_99_in_ms_form():
+    assert parse_answer("(105:30) x") == [ParsedLine(6330.0, None, "x")]
