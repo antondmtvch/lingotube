@@ -1,0 +1,100 @@
+"""Планирование отрезков, склейка, исправление концов реплик, проверка полноты."""
+
+from collections.abc import Sequence
+from dataclasses import dataclass, replace
+
+from lingotube.models import Cue
+from lingotube.parsing import ParsedLine
+
+_SEAM_WINDOW = 2.0
+
+
+def plan_ranges(duration: float, chunk_seconds: int) -> list[tuple[float, float]]:
+    """Отрезки [начало, конец) подряд длиной chunk_seconds; последний обрезан по длительности."""
+    ranges: list[tuple[float, float]] = []
+    start = 0.0
+    while start < duration:
+        ranges.append((start, min(start + chunk_seconds, duration)))
+        start += chunk_seconds
+    return ranges
+
+
+def is_truncated(lines: Sequence[ParsedLine], range_end: float, tolerance: float = 60.0) -> bool:
+    """Ответ оборван: последняя реплика заканчивается заметно раньше конца запрошенного отрезка."""
+    if not lines:
+        return True
+    last = lines[-1]
+    reached = last.end if last.end is not None else last.start
+    return reached < range_end - tolerance
+
+
+def merge(chunks: Sequence[Sequence[ParsedLine]]) -> list[Cue]:
+    """Склейка отрезков: сортировка по началу, удаление дублей на стыках, номера с 1."""
+    lines = sorted((line for chunk in chunks for line in chunk), key=lambda line: line.start)
+    kept: list[ParsedLine] = []
+    for line in lines:
+        text = line.text.strip()
+        if _is_duplicate(kept, line.start, text):
+            continue
+        kept.append(replace(line, text=text))
+    return [Cue(i, line.start, line.end, line.text) for i, line in enumerate(kept, 1)]
+
+
+def _is_duplicate(kept: Sequence[ParsedLine], start: float, text: str) -> bool:
+    for prev in reversed(kept):
+        if start - prev.start > _SEAM_WINDOW:
+            return False
+        if prev.text == text:
+            return True
+    return False
+
+
+def fix_ends(
+    cues: Sequence[Cue],
+    duration: float,
+    *,
+    min_s: float = 1.5,
+    max_s: float = 7.0,
+    cps: float = 15.0,
+) -> list[Cue]:
+    """Оставляет конец чата, если он верен; иначе обрезает по границам или считает по времени чтения."""
+    out: list[Cue] = []
+    for i, cue in enumerate(cues):
+        limit = duration
+        if i + 1 < len(cues):
+            limit = min(limit, cues[i + 1].start)
+        if cue.end is not None and cue.end > cue.start:
+            end = min(cue.end, limit)
+        else:
+            reading = min(max(len(cue.text) / cps, min_s), max_s)
+            end = min(cue.start + reading, limit)
+        out.append(replace(cue, end=end))
+    return out
+
+
+@dataclass(frozen=True)
+class Completeness:
+    complete: bool
+    last_end: float
+    gaps: tuple[tuple[float, float], ...]
+
+
+def check_completeness(
+    cues: Sequence[Cue],
+    duration: float,
+    *,
+    tail_tolerance: float | None = None,
+    gap_warn: float = 120.0,
+) -> Completeness:
+    """Доходит ли последняя реплика до конца видео; пустоты длиннее gap_warn — только предупреждение."""
+    if not cues:
+        return Completeness(False, 0.0, ())
+    if tail_tolerance is None:
+        tail_tolerance = max(60.0, 0.05 * duration)
+    gaps: list[tuple[float, float]] = []
+    reached = 0.0
+    for i, cue in enumerate(cues):
+        if i and cue.start - reached > gap_warn:
+            gaps.append((reached, cue.start))
+        reached = max(reached, cue.end if cue.end is not None else cue.start)
+    return Completeness(reached >= duration - tail_tolerance, reached, tuple(gaps))
