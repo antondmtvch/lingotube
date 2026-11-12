@@ -1,0 +1,29 @@
+[project]
+name = "lingotube"
+version = "0.1.0"
+description = "CLI for YouTube live-chat transcription, summary and translation"
+requires-python = ">=3.14"
+dependencies = [
+    "httpx",
+    "dependency-injector",
+    "typer",
+    "platformdirs",
+    "browser-cookie3",
+]
+
+[project.scripts]
+lingotube = "lingotube.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "respx",
+]
+
+[build-system]
+requires = ["uv_build>=0.13.7,<0.14"]
+build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
