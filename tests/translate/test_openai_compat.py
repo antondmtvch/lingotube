@@ -343,3 +343,17 @@ async def test_line_without_number_is_appended_to_previous_item():
         )
     assert "A" in out[0].text and "B" in out[0].text
     assert out[1].text == "C"
+
+
+@respx.mock
+async def test_trailing_prose_after_last_item_is_dropped():
+    respx.post(url=URL).mock(
+        return_value=completion(content="1\tA\n2\tC\nHope this helps!")
+    )
+    async with httpx.AsyncClient() as client:
+        out = await make(client=client).translate(
+            cues=cues(n=2),
+            target_language="ru",
+        )
+    assert out[0].text == "A"
+    assert out[1].text == "C"

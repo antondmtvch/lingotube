@@ -184,6 +184,7 @@ def _parse(
     """Texts in batch order, or None when numbers/count/text do not match."""
     found: dict[int, str] = {}
     last: int | None = None
+    pending: list[str] = []  # unnumbered lines awaiting a following numbered item
     for line in (
         answer.replace(
             "\r\n",
@@ -199,8 +200,11 @@ def _parse(
         if m is None:
             stripped = line.strip()
             if last is not None and stripped and not stripped.startswith("```"):
-                found[last] += " " + stripped  # wrapped text of the previous item
+                pending.append(stripped)
             continue  # blank lines, preamble, code fences
+        if last is not None and pending:
+            found[last] += " " + " ".join(pending)  # wrapped text of the previous item
+        pending = []
         number, text = int(m.group(1)), m.group(2)
         if number in found or not text:
             return None
