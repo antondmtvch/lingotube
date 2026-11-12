@@ -1,6 +1,7 @@
 """Render a Transcript as SRT, WebVTT or JSON text (no I/O)."""
 
 import json
+import math
 import re
 from dataclasses import replace
 from typing import Literal
@@ -17,6 +18,8 @@ def _shift(
     for c in t.cues:
         if c.end is None:
             raise ValidationError(message=f"Cue {c.id} has no end time")
+        if c.end + offset <= 0.0:
+            continue  # entirely before the new zero point
         cues.append(
             replace(
                 c,
@@ -104,6 +107,8 @@ def render(
 ) -> str:
     if fmt not in ("srt", "vtt", "json"):
         raise ValidationError(message=f"Unknown output format: {fmt!r}")
+    if not math.isfinite(offset):
+        raise ValidationError(message=f"Offset must be a finite number: {offset!r}")
     t = _shift(
         t=transcript,
         offset=offset,

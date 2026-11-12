@@ -775,7 +775,7 @@ def test_negative_offset_value_is_not_taken_for_an_id(tmp_path):
         "-1000000000",
     )
     assert code == 0, err
-    assert json.loads(s=out)["cues"][0]["start"] == 0.0
+    assert json.loads(s=out)["cues"] == []  # every cue ends before the shifted zero
 
 
 def test_translator_key_missing_is_auth_error(tmp_path):

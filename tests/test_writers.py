@@ -217,3 +217,76 @@ def test_lone_cr_is_a_line_break():
         transcript=_t("a\r\nb"),
         fmt="srt",
     )
+
+
+def test_cue_entirely_before_negative_offset_is_dropped():
+    out = render(
+        transcript=T,
+        fmt="srt",
+        offset=-4.0,
+    )
+    assert out == "1\n01:01:59,000 --> 01:02:03,500\nb\n"
+    data = json.loads(
+        s=render(
+            transcript=T,
+            fmt="json",
+            offset=-4.0,
+        )
+    )
+    assert [c["id"] for c in data["cues"]] == [2]
+
+
+@pytest.mark.parametrize(
+    argnames="offset",
+    argvalues=[float("nan"), float("inf"), float("-inf")],
+)
+def test_non_finite_offset_is_rejected(offset):
+    with pytest.raises(expected_exception=ValidationError) as ei:
+        render(
+            transcript=T,
+            fmt="srt",
+            offset=offset,
+        )
+    assert ei.value.exit_code == 7
+
+
+def test_millisecond_rounding_carries_into_seconds():
+    t = Transcript(
+        video_id="vid",
+        duration=100.0,
+        language=None,
+        prompt_version="1",
+        cues=(
+            Cue(
+                id=1,
+                start=0.9996,
+                end=59.9996,
+                text="a",
+            ),
+        ),
+    )
+    assert "00:00:01,000 --> 00:01:00,000" in render(
+        transcript=t,
+        fmt="srt",
+    )
+
+
+def test_hours_of_100_or_more_keep_all_digits():
+    t = Transcript(
+        video_id="vid",
+        duration=400000.0,
+        language=None,
+        prompt_version="1",
+        cues=(
+            Cue(
+                id=1,
+                start=360000.0,
+                end=360001.5,
+                text="a",
+            ),
+        ),
+    )
+    assert "100:00:00.000 --> 100:00:01.500" in render(
+        transcript=t,
+        fmt="vtt",
+    )
