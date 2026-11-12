@@ -7,7 +7,11 @@ from fakes import FakeAskClient
 from lingotube.cache import Cache, CacheKey
 from lingotube.config import Settings
 from lingotube.errors import ChatUnavailableError, NetworkError
-from lingotube.features.transcript import TranscriptFeature, TranscriptResult
+from lingotube.features.transcript import (
+    MAX_GAP_REREQUESTS,
+    TranscriptFeature,
+    TranscriptResult,
+)
 from lingotube.models import VideoInfo
 from lingotube.prompts import PROMPT_VERSION
 
@@ -775,3 +779,197 @@ async def test_ends_fixed_and_ids_sequential(tmp_path):
     ):
         assert cue.end is not None and cue.start < cue.end <= nxt.start
     assert cues[-1].end is not None and cues[-1].end <= 900
+
+
+def holey(
+    first: str,
+    gaps: list[tuple[int, int]],
+    reply=None,
+):
+    """Первый запрос — реплики 0..300 кроме пустот; запросы пустот — `reply(start, end)`."""
+
+    def answer(prompt: str) -> str:
+        start, end = requested(prompt=prompt)
+        if (start, end) == (0, 300):
+            return "\n".join(
+                f"({stamp(t=t)}) реплика {t}"
+                for t in range(
+                    0,
+                    300,
+                    10,
+                )
+                if not any(a < t < b for a, b in gaps)
+            )
+        return reply(
+            start,
+            end,
+        )
+
+    return answer
+
+
+async def test_inner_gap_is_asked_again_with_gap_bounds(tmp_path):
+    client = FakeAskClient(
+        info=info(duration=300),
+        answer=holey(
+            first="",
+            gaps=[(90, 200)],
+            reply=lambda a, b: body(
+                start=a,
+                end=b + 1,
+                step=20,
+            ),
+        ),
+    )
+    result = await feature(
+        client=client,
+        tmp_path=tmp_path,
+    ).run(video_id=VID)
+    assert len(client.prompts) == 2
+    assert requested(prompt=client.prompts[1]) == (90, 200)
+    starts = [c.start for c in result.transcript.cues]
+    assert starts == sorted(starts)
+    assert len(starts) == len(set(starts))
+    assert 110 in starts and 190 in starts
+    assert starts.count(90) == 1 and starts.count(200) == 1
+
+
+async def test_inner_gap_stays_when_second_request_brings_nothing(tmp_path):
+    client = FakeAskClient(
+        info=info(duration=300),
+        answer=holey(
+            first="",
+            gaps=[(90, 200)],
+            reply=lambda a, b: "Нет речи.",
+        ),
+    )
+    result = await feature(
+        client=client,
+        tmp_path=tmp_path,
+    ).run(video_id=VID)
+    assert len(client.prompts) == 2
+    assert result.completeness.gaps
+
+
+async def test_gap_requests_are_limited_per_range(tmp_path):
+    gaps = [(a, a + 50) for a in range(10, 290, 60)]  # 5 пустот по 60 с
+    client = FakeAskClient(
+        info=info(duration=300),
+        answer=holey(
+            first="",
+            gaps=gaps,
+            reply=lambda a, b: "",
+        ),
+    )
+    await feature(
+        client=client,
+        tmp_path=tmp_path,
+    ).run(video_id=VID)
+    assert len(gaps) > MAX_GAP_REREQUESTS
+    assert len(client.prompts) == 1 + MAX_GAP_REREQUESTS
+
+
+async def test_small_gap_is_not_asked_again(tmp_path):
+    client = FakeAskClient(
+        info=info(duration=300),
+        answer=holey(
+            first="",
+            gaps=[(90, 130)],
+            reply=lambda a, b: "",
+        ),
+    )
+    await feature(
+        client=client,
+        tmp_path=tmp_path,
+    ).run(video_id=VID)
+    assert len(client.prompts) == 1
+
+
+def part_key() -> CacheKey:
+    return CacheKey(
+        video_id=VID,
+        kind="transcript-part",
+        language="orig",
+        mode="chat",
+        prompt_version=PROMPT_VERSION,
+        part="0.0-300.0",
+    )
+
+
+async def cached_part(
+    tmp_path,
+    checked: bool | None,
+) -> None:
+    data = {
+        "truncated": False,
+        "exhausted": False,
+        "lines": [[0, None, "a"], [100, None, "b"], [290, None, "c"]],
+    }
+    if checked is not None:
+        data["gaps_checked"] = checked
+    await Cache(root=tmp_path / "cache").put(
+        key=part_key(),
+        value=data,
+    )
+
+
+async def test_cached_part_without_gaps_checked_is_filled_once(tmp_path):
+    await cached_part(
+        tmp_path=tmp_path,
+        checked=None,
+    )
+    client = FakeAskClient(
+        info=info(duration=300),
+        answer=lambda p: "",
+    )
+    await feature(
+        client=client,
+        tmp_path=tmp_path,
+    ).run(video_id=VID)
+    assert len(client.prompts) == 2  # две пустоты: 0:00–1:40 и 1:40–4:50
+    stored = await Cache(root=tmp_path / "cache").get(key=part_key())
+    assert stored["gaps_checked"] is True
+    again = FakeAskClient(
+        info=info(duration=300),
+        answer=lambda p: "",
+    )
+    await feature(
+        client=again,
+        tmp_path=tmp_path,
+    ).run(
+        video_id=VID,
+        language=None,
+    )
+    assert len(again.prompts) == 0  # итог закэширован; часть тоже проверена
+
+
+async def test_cached_part_with_gaps_checked_is_not_asked(tmp_path):
+    await cached_part(
+        tmp_path=tmp_path,
+        checked=True,
+    )
+    client = FakeAskClient(
+        info=info(duration=300),
+        answer=lambda p: "",
+    )
+    await feature(
+        client=client,
+        tmp_path=tmp_path,
+    ).run(video_id=VID)
+    assert client.prompts == []
+
+
+async def test_remaining_61s_gap_is_reported(tmp_path):
+    client = FakeAskClient(
+        info=info(duration=300),
+        answer=holey(
+            first="",
+            gaps=[(100, 170)],  # реплики 100 и 170: пустота 70 с
+            reply=lambda a, b: "",
+        ),
+    )
+    result = await feature(
+        client=client,
+        tmp_path=tmp_path,
+    ).run(video_id=VID)
+    assert any(b - a > 60 for a, b in result.completeness.gaps)

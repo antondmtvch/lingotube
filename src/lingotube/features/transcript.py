@@ -34,6 +34,8 @@ from lingotube.parsing import ParsedLine, parse_answer
 from lingotube.prompts import PROMPT_VERSION, load_prompt
 
 MAX_REREQUESTS = 3  # per range
+GAP_REREQUEST = 45.0  # an inner silence longer than this is asked for once more
+MAX_GAP_REREQUESTS = 4  # per range
 MODE = "chat"
 KIND_PART = "transcript-part"
 KIND_FINAL = "transcript"
@@ -53,6 +55,7 @@ class _Part:
     exhausted: bool = (
         False  # the chat had nothing more to add: never re-asked on later runs
     )
+    gaps_checked: bool = False  # inner silences were already asked for once
 
 
 def transcript_key(
@@ -198,7 +201,11 @@ class TranscriptFeature:
                 if use_cache
                 else None
             )
-            if prior is None or (prior.truncated and not prior.exhausted):
+            if (
+                prior is None
+                or (prior.truncated and not prior.exhausted)
+                or (not prior.truncated and not prior.gaps_checked)
+            ):
                 prior = await self._collect(
                     session=session,
                     start=start,
@@ -334,10 +341,55 @@ class TranscriptFeature:
             lines = [
                 x for x in lines if x.start < end
             ]  # overshoot belongs to the next range
+        if not truncated:
+            lines = await self._fill_gaps(
+                session=session,
+                lines=lines,
+                start=start,
+                end=end,
+                language=language,
+            )
         return _Part(
             lines=tuple(lines),
             truncated=truncated,
             exhausted=exhausted and truncated,
+            gaps_checked=not truncated,
+        )
+
+    async def _fill_gaps(
+        self,
+        session: AskSession,
+        lines: list[ParsedLine],
+        start: float,
+        end: float,
+        language: str | None,
+    ) -> list[ParsedLine]:
+        """Asks once for each long inner silence (the chat sometimes skips speech inside a range)."""
+        bounds = [start] + [x.start for x in lines] + [end]
+        gaps = [(a, b) for a, b in zip(bounds, bounds[1:]) if b - a > GAP_REREQUEST]
+        gaps = sorted(
+            sorted(
+                gaps,
+                key=lambda g: g[0] - g[1],
+            )[:MAX_GAP_REREQUESTS]
+        )
+        found: list[ParsedLine] = []
+        for a, b in gaps:
+            found.extend(
+                x
+                for x in await self._ask_range(
+                    session=session,
+                    start=a,
+                    end=b,
+                    language=language,
+                )
+                if a < x.start < b
+            )
+        if not found:
+            return lines
+        return sorted(
+            lines + found,
+            key=lambda x: x.start,
         )
 
     async def _ask_range(
@@ -394,6 +446,7 @@ def _dump_part(part: _Part) -> dict[str, Any]:
     return {
         "truncated": part.truncated,
         "exhausted": part.exhausted,
+        "gaps_checked": part.gaps_checked,
         "lines": [[x.start, x.end, x.text] for x in part.lines],
     }
 
@@ -458,10 +511,20 @@ def _load_part(data: dict | None) -> _Part | None:
         bool,
     ):
         return None
+    gaps_checked = data.get(
+        "gaps_checked",
+        False,
+    )
+    if not isinstance(
+        gaps_checked,
+        bool,
+    ):
+        return None
     return _Part(
         lines=tuple(lines),
         truncated=data["truncated"],
         exhausted=exhausted,
+        gaps_checked=gaps_checked,
     )
 
 

@@ -167,7 +167,7 @@ def check_completeness(
     duration: float,
     *,
     tail_tolerance: float | None = None,
-    gap_warn: float = 120.0,
+    gap_warn: float = 60.0,
 ) -> Completeness:
     """Доходит ли последняя реплика до конца видео; пустоты длиннее gap_warn — только предупреждение."""
     if not cues:
