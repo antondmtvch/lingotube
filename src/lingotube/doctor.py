@@ -6,7 +6,7 @@ values, tokens or exception texts.
 """
 
 from collections.abc import Callable, Mapping
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 
 from lingotube.ask.client import AskClient
 from lingotube.auth.base import EXPORT_HINT, CookieSource, Credentials
@@ -42,6 +42,7 @@ class Check:
     ok: bool
     detail: str
     hint: str | None
+    critical: bool = True  # False: failed, but another source works, so not an error
 
 
 class UnsetCookieFile:
@@ -96,6 +97,7 @@ async def run_doctor(
 
     login: Check | None = None
     chat: Check | None = None
+    network_down = False
     for index, name, creds in loaded:
         try:
             await make_ask(_Loaded(creds=creds)).open(video_id=test_video_id)
@@ -121,6 +123,7 @@ async def run_doctor(
                 hint=e.hint or CHAT_HINT,
             )
         except NetworkError as e:
+            network_down = True
             checks.append(
                 Check(
                     name=NETWORK,
@@ -174,10 +177,26 @@ async def run_doctor(
         or Check(
             name=CHAT,
             ok=False,
-            detail="не проверен: нет входа в аккаунт",
+            detail=(
+                "не проверен: нет соединения с YouTube"
+                if network_down
+                else "не проверен: нет входа в аккаунт"
+            ),
             hint=None,
         )
     )
+    if login.ok:  # some source works: the other sources failing is not an error
+        checks = [
+            (
+                replace(
+                    c,
+                    critical=False,
+                )
+                if c.name in sources and not c.ok
+                else c
+            )
+            for c in checks
+        ]
     return checks
 
 
@@ -229,6 +248,12 @@ def doctor_exit_code(checks: list[Check]) -> int:
     return 0 if error is None else error.exit_code
 
 
+def _verdict(check: Check) -> str:
+    if check.ok:
+        return "ок"
+    return "ошибка" if check.critical else "нет"
+
+
 def render_table(
     checks: list[Check],
     error: LingotubeError | None = None,
@@ -236,7 +261,7 @@ def render_table(
     """The checks as a table, then the distinct hints of failed checks (the final
     error's own hint is printed with the error)."""
     rows = [("ПРОВЕРКА", "ИТОГ", "ПОДРОБНОСТИ")] + [
-        (c.name, "ок" if c.ok else "ошибка", c.detail) for c in checks
+        (c.name, _verdict(check=c), c.detail) for c in checks
     ]
     w0 = max(len(r[0]) for r in rows)
     w1 = max(len(r[1]) for r in rows)
@@ -245,6 +270,7 @@ def render_table(
     for check in checks:
         if (
             not check.ok
+            and check.critical
             and check.hint
             and check.hint not in hints
             and (error is None or check.hint != error.hint)

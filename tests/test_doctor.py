@@ -525,3 +525,68 @@ def test_table_lists_hints_of_failed_checks_once():
     )
     assert text.count("сделайте A") == 1
     assert "общая" not in text
+
+
+async def test_failed_browsers_are_not_critical_when_a_source_works():
+    from lingotube.doctor import render_table
+
+    checks = await run_doctor(
+        sources={"файл cookies": GoodSource(), "браузер chrome": BadSource()},
+        make_ask=ask_factory(),
+        test_video_id="abcdefghijk",
+    )
+    chrome = by_name(
+        checks=checks,
+        name="браузер chrome",
+    )
+    assert not chrome.ok and not chrome.critical
+    text = render_table(
+        checks=checks,
+        error=None,
+    )
+    assert "ошибка" not in text
+    assert "нет" in text
+    assert "Подсказки" not in text and "cookies.txt" not in text
+    assert doctor_exit_code(checks=checks) == 0
+
+
+async def test_failed_sources_stay_critical_when_none_works():
+    from lingotube.doctor import doctor_error, render_table
+
+    checks = await run_doctor(
+        sources={"файл cookies": BadSource(), "браузер edge": BadSource()},
+        make_ask=ask_factory(),
+        test_video_id="abcdefghijk",
+    )
+    assert all(c.critical for c in checks)
+    text = render_table(
+        checks=checks,
+        error=doctor_error(checks=checks),
+    )
+    assert "ошибка" in text and "Подсказки" in text
+    assert doctor_exit_code(checks=checks) == 4
+
+
+async def test_network_error_does_not_claim_missing_login():
+    from lingotube.doctor import NETWORK_HINT
+
+    checks = await run_doctor(
+        sources={"файл cookies": GoodSource()},
+        make_ask=ask_factory(outcome=NetworkError(message="сеть")),
+        test_video_id="abcdefghijk",
+    )
+    for name in (LOGIN, CHAT):
+        detail = by_name(
+            checks=checks,
+            name=name,
+        ).detail
+        assert "нет входа" not in detail
+        assert "соединени" in detail
+    assert NETWORK_HINT in (
+        by_name(
+            checks=checks,
+            name=NETWORK,
+        ).hint
+        or ""
+    )
+    assert doctor_exit_code(checks=checks) == 6
