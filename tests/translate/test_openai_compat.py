@@ -331,3 +331,15 @@ async def test_invalid_base_url_is_validation_error():
     assert e.value.exit_code == 7
     assert "translator.base_url" in f"{e.value} {e.value.hint}"
     assert "pw" not in f"{e.value} {e.value.hint}"
+
+
+@respx.mock
+async def test_line_without_number_is_appended_to_previous_item():
+    respx.post(url=URL).mock(return_value=completion(content="1\tA\nB\n2\tC"))
+    async with httpx.AsyncClient() as client:
+        out = await make(client=client).translate(
+            cues=cues(n=2),
+            target_language="ru",
+        )
+    assert "A" in out[0].text and "B" in out[0].text
+    assert out[1].text == "C"

@@ -183,6 +183,7 @@ def _parse(
 ) -> list[str] | None:
     """Texts in batch order, or None when numbers/count/text do not match."""
     found: dict[int, str] = {}
+    last: int | None = None
     for line in (
         answer.replace(
             "\r\n",
@@ -196,11 +197,15 @@ def _parse(
     ):
         m = _LINE.match(string=line)
         if m is None:
+            stripped = line.strip()
+            if last is not None and stripped and not stripped.startswith("```"):
+                found[last] += " " + stripped  # wrapped text of the previous item
             continue  # blank lines, preamble, code fences
         number, text = int(m.group(1)), m.group(2)
         if number in found or not text:
             return None
         found[number] = text
+        last = number
     if set(found) != set(
         range(
             1,
