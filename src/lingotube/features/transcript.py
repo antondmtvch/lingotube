@@ -4,10 +4,10 @@ Flow (spec §6, §7, §16):
 - a complete cached result is served without opening the chat;
 - otherwise one chat is opened per run and the video is asked in planned ranges;
 - a range whose answer stops early is re-asked from the last received timecode
-  (at most MAX_REREQUESTS times);
+  (at most MAX_REREQUESTS times, and no further once a re-request brings nothing new);
 - every finished range is cached at once, so a failed or cancelled run resumes
   from the first missing range; a range that stayed truncated is cached as such
-  and continued on the next run;
+  and continued on the next run, unless the chat already had nothing more to add;
 - the final result is cached with a `complete` flag; an incomplete one is never
   served as ready.
 """
@@ -50,6 +50,7 @@ class TranscriptResult:
 class _Part:
     lines: tuple[ParsedLine, ...]
     truncated: bool
+    exhausted: bool = False  # the chat had nothing more to add: never re-asked on later runs
 
 
 def format_time(seconds: float, *, ceil: bool = False) -> str:
@@ -114,10 +115,12 @@ class TranscriptFeature:
                 video_id, KIND_PART, lang_key, MODE, PROMPT_VERSION, part=f"{start}-{end}"
             )
             prior = _load_part(await self._cache.get(part_key)) if use_cache else None
-            if prior is None or prior.truncated:
+            if prior is None or (prior.truncated and not prior.exhausted):
                 prior = await self._collect(session, start, end, language, prior, is_last)
                 await self._cache.put(part_key, _dump_part(prior))
-            if prior.truncated:
+            if prior.truncated and not prior.exhausted:
+                # re-request budget ran out while the chat was still progressing; an exhausted
+                # part (no further speech from the chat) is left to the completeness warnings
                 reached = prior.lines[-1].start if prior.lines else start
                 warnings.append(
                     f"отрезок {format_time(start)}–{format_time(end, ceil=True)} остался оборванным: "
@@ -168,22 +171,23 @@ class TranscriptFeature:
         else:
             lines = list(prior.lines)
 
+        exhausted = False
         for _ in range(MAX_REREQUESTS):
             if not is_truncated(lines, end):
                 break
             resume_at = lines[-1].start if lines else start
             more = [x for x in await self._ask_range(session, resume_at, end, language) if x.start >= resume_at]
-            if not more:
-                break  # the chat has nothing to add
-            if more[0].start == resume_at:
-                # the last line before the cut may be incomplete: the continuation re-delivers it
-                lines = [x for x in lines if x.start != resume_at]
+            if more and more[0].start == resume_at and lines and lines[-1].start == resume_at:
+                lines.pop()  # the line at the cut may be incomplete: the continuation re-delivers it
             lines.extend(more)
+            if not more or max(x.start for x in more) <= resume_at:
+                exhausted = True  # no progress: asking again would not help
+                break
 
         truncated = is_truncated(lines, end)
         if not is_last:
             lines = [x for x in lines if x.start < end]  # overshoot belongs to the next range
-        return _Part(tuple(lines), truncated)
+        return _Part(tuple(lines), truncated, exhausted and truncated)
 
     async def _ask_range(
         self, session: AskSession, start: float, end: float, language: str | None
@@ -211,6 +215,7 @@ def _completeness_warnings(completeness: Completeness, duration: float) -> list[
 def _dump_part(part: _Part) -> dict[str, Any]:
     return {
         "truncated": part.truncated,
+        "exhausted": part.exhausted,
         "lines": [[x.start, x.end, x.text] for x in part.lines],
     }
 
@@ -231,7 +236,10 @@ def _load_part(data: dict | None) -> _Part | None:
         if not _is_num(start) or not (end is None or _is_num(end)) or not isinstance(text, str):
             return None
         lines.append(ParsedLine(float(start), None if end is None else float(end), text))
-    return _Part(tuple(lines), data["truncated"])
+    exhausted = data.get("exhausted", False)
+    if not isinstance(exhausted, bool):
+        return None
+    return _Part(tuple(lines), data["truncated"], exhausted)
 
 
 def _load_final(data: dict | None) -> TranscriptResult | None:
