@@ -50,4 +50,4 @@ def test_build_registry_lists_all_features():
     app = typer.Typer()
     cli.build_registry().apply(app, lambda: None)  # type: ignore[arg-type]
     names = {c.name for c in app.registered_commands}
-    assert names == {"transcript", "subs", "summary", "build"}
+    assert names == {"transcript", "subs", "summary", "build", "doctor"}

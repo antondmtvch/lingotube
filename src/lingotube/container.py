@@ -13,12 +13,13 @@ from typing import TextIO
 import httpx
 from dependency_injector import containers, providers
 
-from lingotube.ask.client import Pacer, YouTubeAskClient
+from lingotube.ask.client import AskClient, Pacer, YouTubeAskClient
 from lingotube.auth.base import CookieSource
-from lingotube.auth.browser import BrowserCookieSource, ChainCookieSource
+from lingotube.auth.browser import BROWSERS, BrowserCookieSource, ChainCookieSource, default_loader
 from lingotube.auth.file import FileCookieSource
 from lingotube.cache import Cache
 from lingotube.config import Settings
+from lingotube.doctor import FILE_SOURCE, UnsetCookieFile, browser_source_name
 from lingotube.errors import AuthError
 from lingotube.features.build import BuildFeature
 from lingotube.features.subtitles import SubtitlesFeature
@@ -58,12 +59,39 @@ def progress_writer(stream: TextIO) -> Callable[[int, int], None]:
     return lambda done, total: write(f"часть {done} из {total}")
 
 
-def make_cookie_source(settings: Settings, warn: Callable[[str], None]) -> CookieSource:
+BrowserLoader = Callable[[str], Mapping[str, str]]
+
+
+def make_cookie_source(
+    settings: Settings, warn: Callable[[str], None], loader: BrowserLoader = default_loader
+) -> CookieSource:
     if settings.cookies_file is not None:
         return FileCookieSource(settings.cookies_file, warn=warn)
     if settings.browser is not None:
-        return BrowserCookieSource(settings.browser)
-    return ChainCookieSource([BrowserCookieSource(None)])
+        return BrowserCookieSource(settings.browser, loader=loader)
+    return ChainCookieSource([BrowserCookieSource(None, loader=loader)])
+
+
+def make_doctor_sources(
+    settings: Settings, warn: Callable[[str], None], loader: BrowserLoader = default_loader
+) -> dict[str, CookieSource]:
+    """Every cookie source `doctor` checks separately: the file, then each browser
+    (only the chosen one when a browser is set)."""
+    sources: dict[str, CookieSource] = {
+        FILE_SOURCE: FileCookieSource(settings.cookies_file, warn=warn)
+        if settings.cookies_file is not None
+        else UnsetCookieFile()
+    }
+    for browser in (settings.browser,) if settings.browser is not None else BROWSERS:
+        sources[browser_source_name(browser)] = BrowserCookieSource(browser, loader=loader)
+    return sources
+
+
+def make_ask_factory(
+    http: httpx.AsyncClient, pacer: Pacer, max_retries: int
+) -> Callable[[CookieSource], AskClient]:
+    """A chat client per cookie source (doctor tries sources one by one); one shared pacer."""
+    return lambda source: YouTubeAskClient(http, source, pacer, max_retries=max_retries)
 
 
 def translator_mode(settings: Settings) -> str:
@@ -94,11 +122,14 @@ class Container(containers.DeclarativeContainer):
     http = providers.Resource(youtube_http)
     translator_http = providers.Resource(translator_http)
 
-    cookie_source = providers.Singleton(make_cookie_source, settings, warn)
+    browser_loader = providers.Object(default_loader)
+    cookie_source = providers.Singleton(make_cookie_source, settings, warn, browser_loader)
+    doctor_sources = providers.Singleton(make_doctor_sources, settings, warn, browser_loader)
     pacer = providers.Singleton(Pacer, settings.provided.min_interval)
     ask_client = providers.Singleton(
         YouTubeAskClient, http, cookie_source, pacer, max_retries=settings.provided.max_retries
     )
+    ask_factory = providers.Singleton(make_ask_factory, http, pacer, settings.provided.max_retries)
     cache = providers.Singleton(Cache, cache_dir)
 
     translator = providers.Selector(

@@ -15,6 +15,7 @@ from typing import Any, TextIO
 import typer
 import typer.main
 
+from lingotube import doctor
 from lingotube.commands import AppContext, report
 from lingotube.config import default_paths, load_settings
 from lingotube.errors import LingotubeError, UsageError
@@ -33,6 +34,7 @@ def build_registry() -> FeatureRegistry:
     registry.add(subtitles.register)
     registry.add(summary.register)
     registry.add(build.register)
+    registry.add(doctor.register)
     return registry
 
 
