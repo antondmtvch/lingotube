@@ -295,7 +295,10 @@ def _remember(
         raise ValidationError(
             message=f"Cannot update settings file {settings_path}: {e}"
         ) from e
-    data["cookies_file"] = str(path.resolve())
+    value = str(path.resolve())
+    if data.get("cookies_file") == value:
+        return  # unchanged: keep the user's file (comments, formatting) as is
+    data["cookies_file"] = value
     text = _dump_toml(data=data)
     settings_path.parent.mkdir(
         parents=True,

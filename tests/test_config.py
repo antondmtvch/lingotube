@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -264,3 +265,18 @@ def test_empty_env_values_are_unset(tmp_path):
         env={"LINGOTUBE_LANG": "", "LINGOTUBE_COOKIES_FILE": " "},
     )
     assert s == Settings()
+
+
+async def test_remember_same_value_does_not_rewrite_file(tmp_path):
+    sp = tmp_path / "settings.toml"
+    cookies = tmp_path / "c.txt"
+    original = (
+        '# my comment\nlang = "ru"\n'
+        f"cookies_file = {json.dumps(obj=str(cookies.resolve()))}\n"
+    )
+    sp.write_bytes(original.encode("utf-8"))
+    await remember_cookies_file(
+        path=cookies,
+        settings_path=sp,
+    )
+    assert sp.read_bytes() == original.encode("utf-8")
