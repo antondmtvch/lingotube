@@ -107,3 +107,25 @@ test('cache: storage that never answers → load resolves null after the bridge 
   assert.equal(await cache.load('cache:a'), null);
   await cache.save('cache:a', { translations: { 0: 'a' } });
 });
+
+test('cache: a chat transcript entry {chunks} is saved and loaded', async () => {
+  const cache = new TranslationCache(fakeStorage());
+  const entry = { chunks: { 0: [{ startMs: 1000, endMs: 2500, text: 'привет' }], 3: [{ startMs: 901000, endMs: 903000, text: 'b' }] } };
+  await cache.save('cache:chat', entry);
+  assert.deepEqual(await cache.load('cache:chat'), entry);
+});
+
+test('cache: malformed chunk entries load as null and are not saved', async () => {
+  const bad = [
+    { chunks: 'x' }, { chunks: [] }, { chunks: null }, { chunks: { 0: 'x' } }, { chunks: { 0: [null] } },
+    { chunks: { 0: [{ startMs: 1, endMs: 2 }] } }, { chunks: { 0: [{ startMs: 'a', endMs: 2, text: 't' }] } },
+    { chunks: { 0: [{ startMs: 1, endMs: Infinity, text: 't' }] } }, { chunks: { x: [{ startMs: 1, endMs: 2, text: 't' }] } },
+  ];
+  const initial = {};
+  bad.forEach((value, index) => { initial[`cache:${index}`] = value; });
+  const storage = fakeStorage(initial);
+  const cache = new TranslationCache(storage);
+  for (let index = 0; index < bad.length; index += 1) assert.equal(await cache.load(`cache:${index}`), null, String(index));
+  await cache.save('cache:new', bad[4]);
+  assert.ok(!storage.data.has('cache:new'));
+});

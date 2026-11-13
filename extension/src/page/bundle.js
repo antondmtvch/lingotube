@@ -512,8 +512,379 @@ function fillPrompt(name, variables) {
 return Object.freeze({ PROMPT_VERSION: PROMPT_VERSION, PROMPT_TEXTS: PROMPT_TEXTS, fillPrompt: fillPrompt });
 })();
 
-// Module: src/shared/translation_batch.js
+// Module: src/shared/timestamped_transcript.js
 const bundledModule5Exports = (function () {
+// Port of the chat answer format of src/lingotube/prompts/FORMAT.md: `parse_answer`
+// (src/lingotube/parsing.py), `keep_second_of_identical` (features/transcript.py) and
+// `fix_ends` (assemble.py).
+
+/** @typedef {{startMs: number, endMs: number|null, text: string}} TimestampedLine */
+/** @typedef {{startMs: number, endMs: number, text: string}} TimedLine */
+
+const TIME_PATTERN = String.raw`\d{1,3}:\d{2}(?::\d{2})?`;
+// The Python pattern uses possessive quantifiers; JavaScript has none, so the runs of spaces
+// and asterisks are matched atomically with the (?=(x))\k<x> idiom. Without it a long run of
+// spaces makes the overlapping \s+ / \s* backtrack quadratically.
+const TIMESTAMPED_LINE_PATTERN = new RegExp(
+  String.raw`^(?:(?:[-*•–—]|\d{1,3}[.)])(?=(?<listSpace>\s+))\k<listSpace>)?`
+  + String.raw`(?=(?<bold>\**))\k<bold>(?=(?<boldSpace>\s*))\k<boldSpace>[(\[]\s*`
+  + `(?<start>${TIME_PATTERN})(?:\\s*[-–—]\\s*(?<end>${TIME_PATTERN}))?`
+  + String.raw`\s*[)\]]\s*\**\s*(?<text>.*)$`,
+  'u',
+);
+// The line breaks of Python's str.splitlines().
+const LINE_BREAK_PATTERN = /\r\n|[\n\r\v\f\x1c-\x1e\x85\u2028\u2029]/;
+
+const READING_MIN_MS = 1500;
+const READING_MAX_MS = 7000;
+const READING_CHARACTERS_PER_SECOND = 15;
+
+/** Milliseconds of `m:ss` / `h:mm:ss`; null when a part is out of range (0-59, hours 0-99). */
+function timestampMs(stamp) {
+  const parts = stamp.split(':').map(Number);
+  if (parts.slice(1).some((part) => part > 59) || (parts.length === 3 && parts[0] > 99)) return null;
+  return parts.reduce((total, part) => total * 60 + part, 0) * 1000;
+}
+
+/**
+ * Of two consecutive lines with the same start and end only the second is kept: the chat
+ * sometimes gives the original and then the translation under one timestamp.
+ * @param {TimestampedLine[]} lines
+ * @returns {TimestampedLine[]}
+ */
+function keepSecondOfIdentical(lines) {
+  const kept = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const next = lines[index + 1];
+    if (next && next.startMs === lines[index].startMs && next.endMs === lines[index].endMs) {
+      kept.push(next);
+      index += 1;
+    } else {
+      kept.push(lines[index]);
+    }
+  }
+  return kept;
+}
+
+/**
+ * Lines of a chat answer in the `(m:ss) text` format; [] when it has no timestamps. Never throws.
+ * Intro before the first timestamp and outro after a blank line are dropped; a line without a
+ * timestamp joins the previous one.
+ * @param {string} text
+ * @returns {TimestampedLine[]}
+ */
+function parseTimestampedAnswer(text) {
+  const lines = [];
+  let isAfterBlankLine = false;
+  for (const rawLine of String(text).split(LINE_BREAK_PATTERN)) {
+    const line = rawLine.trim();
+    const match = TIMESTAMPED_LINE_PATTERN.exec(line);
+    if (match) {
+      const { bold, start, end, text: body } = match.groups;
+      const startMs = timestampMs(start);
+      let endMs = end ? timestampMs(end) : null;
+      if (startMs !== null && (endMs !== null || !end)) {
+        if (endMs !== null && endMs < startMs) endMs = null; // the reading time decides the end
+        let lineText = body.trim();
+        if (bold) lineText = lineText.replace(/\*+$/, '').trim(); // "**(0:02) x**": closing bold
+        lines.push({ startMs, endMs, text: lineText });
+        isAfterBlankLine = false;
+        continue;
+      }
+    }
+    if (lines.length === 0) continue; // intro before the first timestamp
+    if (!line) isAfterBlankLine = true;
+    else if (!isAfterBlankLine) lines.at(-1).text = `${lines.at(-1).text} ${line}`.trim();
+    // else: outro after a blank line, dropped
+  }
+  return keepSecondOfIdentical(lines.filter((parsed) => parsed.text));
+}
+
+/**
+ * Gives every line an end: the chat's own end when it is after the start, else the reading
+ * time (1.5-7 s at 15 characters per second); never past the next later start or `chunkEndMs`.
+ * Lines starting at or after `chunkEndMs` are dropped.
+ * @param {TimestampedLine[]} lines sorted by start
+ * @param {number} chunkEndMs
+ * @returns {TimedLine[]}
+ */
+function withReadingTimeEnds(lines, chunkEndMs) {
+  const kept = lines.filter((line) => line.startMs < chunkEndMs);
+  return kept.map((line, index) => {
+    const nextStart = kept.slice(index + 1).find((later) => later.startMs > line.startMs)?.startMs;
+    const limitMs = nextStart === undefined ? chunkEndMs : Math.min(chunkEndMs, nextStart);
+    let endMs;
+    if (line.endMs !== null && line.endMs > line.startMs) {
+      endMs = Math.min(line.endMs, limitMs);
+    } else {
+      const characters = [...line.text].length;
+      const readingMs = Math.min(
+        Math.max((characters / READING_CHARACTERS_PER_SECOND) * 1000, READING_MIN_MS),
+        READING_MAX_MS,
+      );
+      endMs = Math.min(line.startMs + readingMs, limitMs);
+    }
+    return { startMs: line.startMs, endMs, text: line.text };
+  });
+}
+
+/**
+ * Time for the transcript prompt: `m:ss` below one hour, `h:mm:ss` from one hour.
+ * @param {number} ms
+ * @param {{roundUp?: boolean}} [options] roundUp: whole seconds rounded up (for a range end)
+ * @returns {string}
+ */
+function formatPromptTime(ms, { roundUp = false } = {}) {
+  const seconds = ms / 1000;
+  const total = Math.max(roundUp ? Math.ceil(seconds) : Math.floor(seconds), 0);
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const secondsPart = String(total % 60).padStart(2, '0');
+  if (hours > 0) return `${hours}:${String(minutes).padStart(2, '0')}:${secondsPart}`;
+  return `${minutes}:${secondsPart}`;
+}
+return Object.freeze({ parseTimestampedAnswer: parseTimestampedAnswer, withReadingTimeEnds: withReadingTimeEnds, formatPromptTime: formatPromptTime });
+})();
+
+// Module: src/shared/transcript_chunks.js
+const bundledModule6Exports = (function () {
+/** @typedef {import('./timestamped_transcript.js').TimedLine} TimedLine */
+
+/** Length of one transcript request: longer chunks were seen cut off by the chat. */
+const CHUNK_MS = 300000;
+/** The next chunk is requested when less than this remains in the current one. */
+const TRANSCRIPT_RESERVE_AHEAD_MS = 120000;
+
+/**
+ * @param {number} index
+ * @param {number} durationMs
+ * @returns {{startMs: number, endMs: number}} the last chunk ends with the video
+ */
+function chunkBounds(index, durationMs) {
+  return { startMs: index * CHUNK_MS, endMs: Math.min((index + 1) * CHUNK_MS, durationMs) };
+}
+
+/**
+ * Lines of one chunk answer placed on the video timeline. The chat answers with video times
+ * (as the CLI sees them); if every line starts before the chunk, it counted from the chunk
+ * start instead, and the chunk start is added. Lines outside the chunk are dropped: cues
+ * never move from one chunk to another.
+ * @template {{startMs: number, endMs: number|null, text: string}} Line
+ * @param {Line[]} lines
+ * @param {{startMs: number, endMs: number}} bounds
+ * @returns {Line[]}
+ */
+function linesInsideChunk(lines, { startMs, endMs }) {
+  const isChunkRelative = startMs > 0 && lines.length > 0 && lines.every((line) => line.startMs < startMs);
+  const offsetMs = isChunkRelative ? startMs : 0;
+  return lines
+    .map((line) => ({
+      ...line,
+      startMs: line.startMs + offsetMs,
+      endMs: line.endMs === null ? null : line.endMs + offsetMs,
+    }))
+    .filter((line) => line.startMs >= startMs && line.startMs < endMs);
+}
+
+function isPlainObject(value) {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isWellFormedLine(line) {
+  return isPlainObject(line) && Number.isFinite(line.startMs) && Number.isFinite(line.endMs)
+    && typeof line.text === 'string';
+}
+
+/**
+ * The chat transcript of one video, in chunks of CHUNK_MS. A chunk is missing, loaded (its
+ * cues) or failed (the chat gave no lines for it).
+ */
+class TranscriptChunkStore {
+  #durationMs;
+  #chunkCount;
+  /** @type {Map<number, TimedLine[]>} */
+  #cuesByChunkIndex = new Map();
+  #failedChunkIndexes = new Set();
+
+  /** @param {number} durationMs */
+  constructor(durationMs) {
+    this.#durationMs = Math.max(0, Number(durationMs) || 0);
+    this.#chunkCount = Math.ceil(this.#durationMs / CHUNK_MS);
+  }
+
+  get durationMs() {
+    return this.#durationMs;
+  }
+
+  get chunkCount() {
+    return this.#chunkCount;
+  }
+
+  /** @returns {number} index of the chunk holding timeMs (may be past the last chunk) */
+  chunkIndexAt(timeMs) {
+    return Math.floor(Math.max(0, timeMs) / CHUNK_MS);
+  }
+
+  hasChunk(index) {
+    return this.#cuesByChunkIndex.has(index);
+  }
+
+  isChunkFailed(index) {
+    return this.#failedChunkIndexes.has(index);
+  }
+
+  /**
+   * Stores the cues of a chunk, clamped to its bounds: cues starting outside it are dropped,
+   * ends past it are cut.
+   * @param {number} index
+   * @param {TimedLine[]} cues
+   */
+  addChunk(index, cues) {
+    if (!this.#isChunkIndex(index)) return;
+    const { startMs, endMs } = chunkBounds(index, this.#durationMs);
+    const kept = cues
+      .filter((cue) => cue.startMs >= startMs && cue.startMs < endMs)
+      .map((cue) => ({ startMs: cue.startMs, endMs: Math.min(cue.endMs, endMs), text: cue.text }))
+      .sort((first, second) => first.startMs - second.startMs);
+    this.#cuesByChunkIndex.set(index, kept);
+    this.#failedChunkIndexes.delete(index);
+  }
+
+  markChunkFailed(index) {
+    if (this.#isChunkIndex(index) && !this.hasChunk(index)) this.#failedChunkIndexes.add(index);
+  }
+
+  /** Turns every failed chunk back into missing (the "retry" action). */
+  resetFailed() {
+    this.#failedChunkIndexes.clear();
+  }
+
+  /** @returns {boolean} true when the video has chunks and every one of them failed */
+  areAllChunksFailed() {
+    return this.#chunkCount > 0 && this.#failedChunkIndexes.size === this.#chunkCount;
+  }
+
+  /** @returns {number} chunks with cues */
+  get loadedChunkCount() {
+    return this.#cuesByChunkIndex.size;
+  }
+
+  /** @returns {{kind:'nothing'}|{kind:'text',text:string}|{kind:'waiting'}|{kind:'failed'}} */
+  displayAt(timeMs) {
+    if (timeMs < 0 || timeMs >= this.#durationMs) return { kind: 'nothing' };
+    const index = this.chunkIndexAt(timeMs);
+    const cues = this.#cuesByChunkIndex.get(index);
+    if (cues) {
+      const cue = cues.find((candidate) => candidate.startMs <= timeMs && timeMs < candidate.endMs);
+      return cue ? { kind: 'text', text: cue.text } : { kind: 'nothing' };
+    }
+    if (this.isChunkFailed(index)) return { kind: 'failed' };
+    return { kind: 'waiting' };
+  }
+
+  /**
+   * The chunk under the playhead when it is missing; else the next one when less than
+   * `reserveAheadMs` remain in the current chunk and the next one is missing; else null
+   * (past the end, or the chunk is loaded or failed).
+   * @returns {number|null}
+   */
+  nextChunkToRequest(positionMs, reserveAheadMs = TRANSCRIPT_RESERVE_AHEAD_MS) {
+    const index = this.chunkIndexAt(positionMs);
+    if (index >= this.#chunkCount) return null;
+    if (this.#isChunkMissing(index)) return index;
+    const nextIndex = index + 1;
+    if (nextIndex >= this.#chunkCount) return null;
+    const remainingMs = chunkBounds(index, this.#durationMs).endMs - positionMs;
+    if (remainingMs < reserveAheadMs && this.#isChunkMissing(nextIndex)) return nextIndex;
+    return null;
+  }
+
+  /** @returns {{chunks: Object<string, TimedLine[]>}} the loaded chunks, for the cache */
+  toCacheEntry() {
+    const chunks = {};
+    for (const [index, cues] of [...this.#cuesByChunkIndex].sort(([first], [second]) => first - second)) {
+      chunks[index] = cues.map(({ startMs, endMs, text }) => ({ startMs, endMs, text }));
+    }
+    return { chunks };
+  }
+
+  /**
+   * Loads the well-formed chunks of a cache entry; malformed ones, empty ones and those
+   * outside the video are skipped.
+   * @param {unknown} entry
+   * @returns {number} chunks loaded
+   */
+  loadCacheEntry(entry) {
+    if (!isPlainObject(entry) || !isPlainObject(entry.chunks)) return 0;
+    let loadedCount = 0;
+    for (const [key, cues] of Object.entries(entry.chunks)) {
+      if (!/^\d+$/.test(key)) continue;
+      const index = Number(key);
+      if (!this.#isChunkIndex(index)) continue;
+      if (!Array.isArray(cues) || cues.length === 0 || !cues.every(isWellFormedLine)) continue;
+      this.addChunk(index, cues);
+      loadedCount += 1;
+    }
+    return loadedCount;
+  }
+
+  #isChunkIndex(index) {
+    return Number.isInteger(index) && index >= 0 && index < this.#chunkCount;
+  }
+
+  #isChunkMissing(index) {
+    return !this.hasChunk(index) && !this.isChunkFailed(index);
+  }
+}
+return Object.freeze({ CHUNK_MS: CHUNK_MS, TRANSCRIPT_RESERVE_AHEAD_MS: TRANSCRIPT_RESERVE_AHEAD_MS, chunkBounds: chunkBounds, linesInsideChunk: linesInsideChunk, TranscriptChunkStore: TranscriptChunkStore });
+})();
+
+// Module: src/page/chat_transcript_source.js
+const bundledModule7Exports = (function () {
+const { fillPrompt } = bundledModule4Exports;
+const { formatPromptTime, parseTimestampedAnswer, withReadingTimeEnds } = bundledModule5Exports;
+const { chunkBounds, linesInsideChunk } = bundledModule6Exports;
+/**
+ * The fallback source without YouTube captions: asks the Ask chat for a literal translated
+ * transcript of one chunk (prompt `transcript_translated`). One call sends one message;
+ * a truncated answer is not asked again (a gap simply shows nothing).
+ */
+class ChatTranscriptSource {
+  #chatSession;
+  #languageName;
+  #durationMs;
+
+  /**
+   * @param {{chatSession: {ask: (prompt: string) => Promise<string>}, languageName: string, durationMs: number}} options
+   */
+  constructor({ chatSession, languageName, durationMs }) {
+    this.#chatSession = chatSession;
+    this.#languageName = languageName;
+    this.#durationMs = durationMs;
+  }
+
+  /**
+   * Cues of one chunk on the video timeline; [] when the answer has no timestamped lines.
+   * Errors of the chat session propagate unchanged.
+   * @param {number} index
+   * @returns {Promise<import('../shared/timestamped_transcript.js').TimedLine[]>}
+   */
+  async requestChunk(index) {
+    const bounds = chunkBounds(index, this.#durationMs);
+    const prompt = fillPrompt('transcript_translated', {
+      start: formatPromptTime(bounds.startMs),
+      end: formatPromptTime(bounds.endMs, { roundUp: true }),
+      language: this.#languageName,
+    });
+    const answer = await this.#chatSession.ask(prompt);
+    return withReadingTimeEnds(linesInsideChunk(parseTimestampedAnswer(answer), bounds), bounds.endMs);
+  }
+}
+return Object.freeze({ ChatTranscriptSource: ChatTranscriptSource });
+})();
+
+// Module: src/shared/translation_batch.js
+const bundledModule8Exports = (function () {
 const { fillPrompt } = bundledModule4Exports;
 /** @typedef {import('./sentence_cues.js').Cue} Cue */
 
@@ -574,8 +945,8 @@ return Object.freeze({ sanitizeLanguageName: sanitizeLanguageName, buildTranslat
 })();
 
 // Module: src/page/chat_translator.js
-const bundledModule6Exports = (function () {
-const { buildTranslationPrompt, parseTranslationReply } = bundledModule5Exports;
+const bundledModule9Exports = (function () {
+const { buildTranslationPrompt, parseTranslationReply } = bundledModule8Exports;
 /** @typedef {import('../shared/sentence_cues.js').Cue} Cue */
 
 /** Translates cue batches through the Ask chat; one call sends at most two messages. */
@@ -611,7 +982,7 @@ return Object.freeze({ ChatTranslator: ChatTranslator });
 })();
 
 // Module: src/shared/storage_messages.js
-const bundledModule7Exports = (function () {
+const bundledModule10Exports = (function () {
 const STORAGE_CHANNEL = 'lingotube-storage';
 
 const STORAGE_OPERATIONS = ['get', 'set', 'remove'];
@@ -650,8 +1021,8 @@ return Object.freeze({ STORAGE_CHANNEL: STORAGE_CHANNEL, createStorageRequest: c
 })();
 
 // Module: src/page/extension_storage.js
-const bundledModule8Exports = (function () {
-const { createStorageRequest, isStorageResponse } = bundledModule7Exports;
+const bundledModule11Exports = (function () {
+const { createStorageRequest, isStorageResponse } = bundledModule10Exports;
 /** Storage client for the MAIN world: talks to the storage host by window messages. */
 function createExtensionStorage({ window, timeoutMs = 3000 }) {
   let lastRequestId = 0;
@@ -691,8 +1062,27 @@ function createExtensionStorage({ window, timeoutMs = 3000 }) {
 return Object.freeze({ createExtensionStorage: createExtensionStorage });
 })();
 
+// Module: src/page/native_captions.js
+const bundledModule12Exports = (function () {
+// Hides YouTube's own caption text with CSS (the rule lives in overlay.css) without
+// touching the subtitles button or the user's caption settings.
+
+const HIDE_NATIVE_CAPTIONS_CLASS = 'lingotube-hide-native-captions';
+
+/** @param {Element|null|undefined} playerElement */
+function hideNativeCaptions(playerElement) {
+  playerElement?.classList.add(HIDE_NATIVE_CAPTIONS_CLASS);
+}
+
+/** @param {Element|null|undefined} playerElement */
+function showNativeCaptions(playerElement) {
+  playerElement?.classList.remove(HIDE_NATIVE_CAPTIONS_CLASS);
+}
+return Object.freeze({ HIDE_NATIVE_CAPTIONS_CLASS: HIDE_NATIVE_CAPTIONS_CLASS, hideNativeCaptions: hideNativeCaptions, showNativeCaptions: showNativeCaptions });
+})();
+
 // Module: src/shared/overlay_position.js
-const bundledModule9Exports = (function () {
+const bundledModule13Exports = (function () {
 /**
  * Pure geometry of the subtitle box. The position is stored as fractions of the
  * container so it survives resizing and fullscreen.
@@ -769,13 +1159,301 @@ function positionFromDrag(drag) {
 return Object.freeze({ DEFAULT_OVERLAY_POSITION: DEFAULT_OVERLAY_POSITION, clampOverlayPosition: clampOverlayPosition, positionFromDrag: positionFromDrag });
 })();
 
+// Module: src/shared/ui_strings.js
+const bundledModule14Exports = (function () {
+/** Interface languages of the overlay, as BCP 47 tags. */
+const UI_LANGUAGES = ['ru', 'en', 'zh-CN', 'es', 'hi', 'ar', 'pt-BR', 'ja', 'fr', 'de'];
+
+/** Interface language used when the browser language is missing or unsupported. */
+const FALLBACK_UI_LANGUAGE = 'en';
+
+const RIGHT_TO_LEFT_LANGUAGES = new Set(['ar']);
+
+/** Primary subtags that map to a language whose code carries a region. */
+const PRIMARY_SUBTAG_TO_UI_LANGUAGE = { zh: 'zh-CN', pt: 'pt-BR' };
+
+/** Texts per language; `rateLimited` holds a template with the {minutes} placeholder. */
+const TEXTS = {
+  ru: {
+    translating: 'Перевожу…',
+    translationDelayed: 'Перевод задерживается',
+    approximateTiming: 'Время приблизительное',
+    captionsNotFetched: 'Не удалось получить субтитры YouTube',
+    chatUnavailable: 'Чат «Спросить» недоступен для этого видео или аккаунта',
+    notSignedIn: 'Войдите в аккаунт YouTube',
+    repeatedFailures: 'Чат не отвечает. Включите субтитры заново, чтобы повторить',
+    noSpeech: 'У видео нет субтитров, и чат не дал транскрипцию',
+    rateLimited: 'Чат ограничил запросы. Повтор через {minutes} мин',
+    toggleOn: 'Включить субтитры',
+    toggleOff: 'Выключить субтитры',
+    waitOn: 'Ждать субтитры: вкл',
+    waitOff: 'Ждать субтитры: выкл',
+    targetLanguageLabel: 'Язык перевода:',
+    otherLanguagePlaceholder: 'Название языка',
+    otherLanguageOption: 'Другой язык…',
+    done: 'Готово',
+    smallerText: 'Уменьшить текст',
+    largerText: 'Увеличить текст',
+    textSizeLabel: 'Размер текста:',
+    retryNow: 'Повторить сейчас',
+  },
+  en: {
+    translating: 'Translating…',
+    translationDelayed: 'Translation is delayed',
+    approximateTiming: 'Approximate timing',
+    captionsNotFetched: 'Could not load YouTube captions',
+    chatUnavailable: 'The Ask chat is not available for this video or account',
+    notSignedIn: 'Sign in to your YouTube account',
+    repeatedFailures: 'The chat is not responding. Turn subtitles off and on again to retry',
+    noSpeech: 'The video has no captions, and the chat gave no transcript',
+    rateLimited: 'The chat limited requests. Retrying in {minutes} min',
+    toggleOn: 'Turn subtitles on',
+    toggleOff: 'Turn subtitles off',
+    waitOn: 'Wait for subtitles: on',
+    waitOff: 'Wait for subtitles: off',
+    targetLanguageLabel: 'Translation language:',
+    otherLanguagePlaceholder: 'Language name',
+    otherLanguageOption: 'Another language…',
+    done: 'Done',
+    smallerText: 'Decrease text size',
+    largerText: 'Increase text size',
+    textSizeLabel: 'Text size:',
+    retryNow: 'Retry now',
+  },
+  'zh-CN': {
+    translating: '正在翻译…',
+    translationDelayed: '翻译有延迟',
+    approximateTiming: '时间为近似值',
+    captionsNotFetched: '无法获取 YouTube 字幕',
+    chatUnavailable: '“提问”聊天对此视频或账号不可用',
+    notSignedIn: '请登录您的 YouTube 账号',
+    repeatedFailures: '聊天没有响应。请关闭字幕后重新开启以重试',
+    noSpeech: '该视频没有字幕，聊天也未提供文字记录',
+    rateLimited: '聊天限制了请求频率，{minutes} 分钟后重试',
+    toggleOn: '开启字幕',
+    toggleOff: '关闭字幕',
+    waitOn: '等待字幕：开',
+    waitOff: '等待字幕：关',
+    targetLanguageLabel: '翻译语言：',
+    otherLanguagePlaceholder: '语言名称',
+    otherLanguageOption: '其他语言…',
+    done: '完成',
+    smallerText: '缩小文字',
+    largerText: '放大文字',
+    textSizeLabel: '文字大小：',
+    retryNow: '立即重试',
+  },
+  es: {
+    translating: 'Traduciendo…',
+    translationDelayed: 'La traducción se retrasa',
+    approximateTiming: 'Tiempos aproximados',
+    captionsNotFetched: 'No se pudieron obtener los subtítulos de YouTube',
+    chatUnavailable: 'El chat «Preguntar» no está disponible para este vídeo o cuenta',
+    notSignedIn: 'Inicia sesión en tu cuenta de YouTube',
+    repeatedFailures: 'El chat no responde. Desactiva y vuelve a activar los subtítulos para reintentar',
+    noSpeech: 'El vídeo no tiene subtítulos y el chat no devolvió ninguna transcripción',
+    rateLimited: 'El chat limitó las solicitudes. Reintentando en {minutes} min',
+    toggleOn: 'Activar subtítulos',
+    toggleOff: 'Desactivar subtítulos',
+    waitOn: 'Esperar subtítulos: sí',
+    waitOff: 'Esperar subtítulos: no',
+    targetLanguageLabel: 'Idioma de traducción:',
+    otherLanguagePlaceholder: 'Nombre del idioma',
+    otherLanguageOption: 'Otro idioma…',
+    done: 'Listo',
+    smallerText: 'Reducir texto',
+    largerText: 'Aumentar texto',
+    textSizeLabel: 'Tamaño del texto:',
+    retryNow: 'Reintentar ahora',
+  },
+  hi: {
+    translating: 'अनुवाद हो रहा है…',
+    translationDelayed: 'अनुवाद में देरी हो रही है',
+    approximateTiming: 'समय लगभग सही है',
+    captionsNotFetched: 'YouTube के सबटाइटल नहीं मिल सके',
+    chatUnavailable: 'इस वीडियो या खाते के लिए "पूछें" चैट उपलब्ध नहीं है',
+    notSignedIn: 'अपने YouTube खाते में साइन इन करें',
+    repeatedFailures: 'चैट जवाब नहीं दे रहा है। दोबारा कोशिश करने के लिए सबटाइटल बंद करके फिर चालू करें',
+    noSpeech: 'इस वीडियो में सबटाइटल नहीं हैं, और चैट से ट्रांसक्रिप्ट नहीं मिला',
+    rateLimited: 'चैट ने अनुरोधों को सीमित कर दिया है। {minutes} मिनट बाद फिर कोशिश होगी',
+    toggleOn: 'सबटाइटल चालू करें',
+    toggleOff: 'सबटाइटल बंद करें',
+    waitOn: 'सबटाइटल की प्रतीक्षा: चालू',
+    waitOff: 'सबटाइटल की प्रतीक्षा: बंद',
+    targetLanguageLabel: 'अनुवाद की भाषा:',
+    otherLanguagePlaceholder: 'भाषा का नाम',
+    otherLanguageOption: 'अन्य भाषा…',
+    done: 'हो गया',
+    smallerText: 'टेक्स्ट छोटा करें',
+    largerText: 'टेक्स्ट बड़ा करें',
+    textSizeLabel: 'टेक्स्ट का आकार:',
+    retryNow: 'अभी दोबारा कोशिश करें',
+  },
+  ar: {
+    translating: 'جارٍ الترجمة…',
+    translationDelayed: 'الترجمة متأخرة',
+    approximateTiming: 'التوقيت تقريبي',
+    captionsNotFetched: 'تعذّر تحميل ترجمات يوتيوب',
+    chatUnavailable: 'دردشة «اسأل» غير متاحة لهذا الفيديو أو الحساب',
+    notSignedIn: 'سجّل الدخول إلى حسابك على يوتيوب',
+    repeatedFailures: 'الدردشة لا تستجيب. أوقف الترجمات ثم شغّلها مجددًا لإعادة المحاولة',
+    noSpeech: 'لا توجد ترجمات لهذا الفيديو، ولم تقدّم الدردشة نصًا مكتوبًا',
+    rateLimited: 'قيّدت الدردشة عدد الطلبات. إعادة المحاولة بعد {minutes} د',
+    toggleOn: 'تشغيل الترجمات',
+    toggleOff: 'إيقاف الترجمات',
+    waitOn: 'انتظار الترجمات: مفعّل',
+    waitOff: 'انتظار الترجمات: متوقف',
+    targetLanguageLabel: 'لغة الترجمة:',
+    otherLanguagePlaceholder: 'اسم اللغة',
+    otherLanguageOption: 'لغة أخرى…',
+    done: 'تم',
+    smallerText: 'تصغير النص',
+    largerText: 'تكبير النص',
+    textSizeLabel: 'حجم النص:',
+    retryNow: 'أعد المحاولة الآن',
+  },
+  'pt-BR': {
+    translating: 'Traduzindo…',
+    translationDelayed: 'A tradução está atrasada',
+    approximateTiming: 'Tempo aproximado',
+    captionsNotFetched: 'Não foi possível obter as legendas do YouTube',
+    chatUnavailable: 'O chat «Perguntar» não está disponível para este vídeo ou conta',
+    notSignedIn: 'Entre na sua conta do YouTube',
+    repeatedFailures: 'O chat não está respondendo. Desative e ative as legendas novamente para tentar de novo',
+    noSpeech: 'O vídeo não tem legendas e o chat não forneceu transcrição',
+    rateLimited: 'O chat limitou as solicitações. Nova tentativa em {minutes} min',
+    toggleOn: 'Ativar legendas',
+    toggleOff: 'Desativar legendas',
+    waitOn: 'Aguardar legendas: ativado',
+    waitOff: 'Aguardar legendas: desativado',
+    targetLanguageLabel: 'Idioma da tradução:',
+    otherLanguagePlaceholder: 'Nome do idioma',
+    otherLanguageOption: 'Outro idioma…',
+    done: 'Concluído',
+    smallerText: 'Diminuir texto',
+    largerText: 'Aumentar texto',
+    textSizeLabel: 'Tamanho do texto:',
+    retryNow: 'Tentar agora',
+  },
+  ja: {
+    translating: '翻訳中…',
+    translationDelayed: '翻訳が遅れています',
+    approximateTiming: 'タイミングは概算です',
+    captionsNotFetched: 'YouTube の字幕を取得できませんでした',
+    chatUnavailable: 'この動画またはアカウントでは「質問」チャットを利用できません',
+    notSignedIn: 'YouTube アカウントにログインしてください',
+    repeatedFailures: 'チャットが応答しません。字幕をオフにしてからもう一度オンにすると再試行できます',
+    noSpeech: 'この動画には字幕がなく、チャットからも文字起こしを取得できませんでした',
+    rateLimited: 'チャットがリクエストを制限しています。{minutes} 分後に再試行します',
+    toggleOn: '字幕をオンにする',
+    toggleOff: '字幕をオフにする',
+    waitOn: '字幕を待つ：オン',
+    waitOff: '字幕を待つ：オフ',
+    targetLanguageLabel: '翻訳言語：',
+    otherLanguagePlaceholder: '言語名',
+    otherLanguageOption: 'その他の言語…',
+    done: '完了',
+    smallerText: '文字を小さくする',
+    largerText: '文字を大きくする',
+    textSizeLabel: '文字サイズ：',
+    retryNow: '今すぐ再試行',
+  },
+  fr: {
+    translating: 'Traduction en cours…',
+    translationDelayed: 'La traduction est retardée',
+    approximateTiming: 'Synchronisation approximative',
+    captionsNotFetched: 'Impossible de récupérer les sous-titres YouTube',
+    chatUnavailable: 'Le chat « Demander » n’est pas disponible pour cette vidéo ou ce compte',
+    notSignedIn: 'Connectez-vous à votre compte YouTube',
+    repeatedFailures: 'Le chat ne répond pas. Désactivez puis réactivez les sous-titres pour réessayer',
+    noSpeech: 'La vidéo n’a pas de sous-titres et le chat n’a fourni aucune transcription',
+    rateLimited: 'Le chat a limité les requêtes. Nouvel essai dans {minutes} min',
+    toggleOn: 'Activer les sous-titres',
+    toggleOff: 'Désactiver les sous-titres',
+    waitOn: 'Attendre les sous-titres : oui',
+    waitOff: 'Attendre les sous-titres : non',
+    targetLanguageLabel: 'Langue de traduction :',
+    otherLanguagePlaceholder: 'Nom de la langue',
+    otherLanguageOption: 'Autre langue…',
+    done: 'Terminé',
+    smallerText: 'Réduire le texte',
+    largerText: 'Agrandir le texte',
+    textSizeLabel: 'Taille du texte :',
+    retryNow: 'Réessayer maintenant',
+  },
+  de: {
+    translating: 'Übersetze…',
+    translationDelayed: 'Die Übersetzung verzögert sich',
+    approximateTiming: 'Zeitangaben ungefähr',
+    captionsNotFetched: 'YouTube-Untertitel konnten nicht geladen werden',
+    chatUnavailable: 'Der Chat „Fragen“ ist für dieses Video oder Konto nicht verfügbar',
+    notSignedIn: 'Melde dich in deinem YouTube-Konto an',
+    repeatedFailures: 'Der Chat antwortet nicht. Schalte die Untertitel aus und wieder ein, um es erneut zu versuchen',
+    noSpeech: 'Das Video hat keine Untertitel und der Chat lieferte kein Transkript',
+    rateLimited: 'Der Chat hat die Anfragen begrenzt. Neuer Versuch in {minutes} Min.',
+    toggleOn: 'Untertitel einschalten',
+    toggleOff: 'Untertitel ausschalten',
+    waitOn: 'Auf Untertitel warten: an',
+    waitOff: 'Auf Untertitel warten: aus',
+    targetLanguageLabel: 'Übersetzungssprache:',
+    otherLanguagePlaceholder: 'Name der Sprache',
+    otherLanguageOption: 'Andere Sprache…',
+    done: 'Fertig',
+    smallerText: 'Text verkleinern',
+    largerText: 'Text vergrößern',
+    textSizeLabel: 'Textgröße:',
+    retryNow: 'Jetzt erneut versuchen',
+  },
+};
+
+/**
+ * Picks the interface language for a browser language tag.
+ * An exact tag wins over the primary subtag; anything unknown falls back to English.
+ * @param {unknown} navigatorLanguage value of `navigator.language`
+ * @returns {string} one of UI_LANGUAGES
+ */
+function pickUiLanguage(navigatorLanguage) {
+  if (typeof navigatorLanguage !== 'string') return FALLBACK_UI_LANGUAGE;
+  const tag = navigatorLanguage.trim().toLowerCase();
+  const exact = UI_LANGUAGES.find((code) => code.toLowerCase() === tag);
+  if (exact) return exact;
+  const primarySubtag = tag.split(/[-_]/)[0];
+  const mapped = Object.hasOwn(PRIMARY_SUBTAG_TO_UI_LANGUAGE, primarySubtag)
+    ? PRIMARY_SUBTAG_TO_UI_LANGUAGE[primarySubtag]
+    : undefined;
+  if (mapped) return mapped;
+  return UI_LANGUAGES.includes(primarySubtag) ? primarySubtag : FALLBACK_UI_LANGUAGE;
+}
+
+/**
+ * @param {string} languageCode interface language code
+ * @returns {boolean} true when the language is written right to left
+ */
+function isRightToLeft(languageCode) {
+  return RIGHT_TO_LEFT_LANGUAGES.has(languageCode);
+}
+
+/**
+ * @param {string} languageCode interface language code; unknown codes use English
+ * @returns {Record<string, any>} all interface texts; `rateLimited` is `(minutes) => string`
+ */
+function uiTexts(languageCode) {
+  const texts = Object.hasOwn(TEXTS, languageCode) ? TEXTS[languageCode] : TEXTS[FALLBACK_UI_LANGUAGE];
+  const { rateLimited: rateLimitedTemplate, ...plainTexts } = texts;
+  return {
+    ...plainTexts,
+    rateLimited: (minutes) => rateLimitedTemplate.replace('{minutes}', String(minutes)),
+  };
+}
+return Object.freeze({ UI_LANGUAGES: UI_LANGUAGES, FALLBACK_UI_LANGUAGE: FALLBACK_UI_LANGUAGE, pickUiLanguage: pickUiLanguage, isRightToLeft: isRightToLeft, uiTexts: uiTexts });
+})();
+
 // Module: src/page/overlay_view.js
-const bundledModule10Exports = (function () {
-const { DEFAULT_OVERLAY_POSITION, clampOverlayPosition, positionFromDrag } = bundledModule9Exports;
+const bundledModule15Exports = (function () {
+const { DEFAULT_OVERLAY_POSITION, clampOverlayPosition, positionFromDrag } = bundledModule13Exports;
+const { uiTexts } = bundledModule14Exports;
 /** A pointer movement shorter than this many pixels is a click, not a drag. */
 const DRAG_THRESHOLD_PX = 4;
-
-const APPROXIMATE_TIMING_LABEL_TEXT = 'Время приблизительное';
 
 /**
  * A draggable subtitle box over any element that wraps a video.
@@ -797,20 +1475,22 @@ class OverlayView {
   /**
    * @param {{document: Document, containerElement: HTMLElement,
    *   position: import('../shared/overlay_position.js').OverlayPosition|null,
-   *   textScale: number, onPositionChanged: (position: object) => void}} options
+   *   textScale: number, onPositionChanged: (position: object) => void,
+   *   texts?: Record<string, any>, isRightToLeft?: boolean}} options
    */
-  constructor({ document, containerElement, position, textScale, onPositionChanged }) {
+  constructor({ document, containerElement, position, textScale, onPositionChanged, texts = uiTexts('ru'), isRightToLeft = false }) {
     this.#container = containerElement;
     this.#onPositionChanged = onPositionChanged;
     this.#position = position ?? { ...DEFAULT_OVERLAY_POSITION };
 
     this.#boxElement = document.createElement('div');
     this.#boxElement.className = 'lingotube-overlay';
+    if (isRightToLeft) this.#boxElement.dir = 'rtl';
     this.#textElement = document.createElement('div');
     this.#textElement.className = 'lingotube-overlay-text';
     this.#labelElement = document.createElement('div');
     this.#labelElement.className = 'lingotube-overlay-label';
-    this.#labelElement.textContent = APPROXIMATE_TIMING_LABEL_TEXT;
+    this.#labelElement.textContent = texts.approximateTiming;
     this.#labelElement.hidden = true;
     this.#boxElement.append(this.#textElement, this.#labelElement);
     this.#boxElement.hidden = true;
@@ -970,11 +1650,10 @@ return Object.freeze({ OverlayView: OverlayView });
 })();
 
 // Module: src/page/player_caption_request.js
-const bundledModule11Exports = (function () {
+const bundledModule16Exports = (function () {
 // The caption URL and its `pot` token never leave the MAIN world and are never logged.
 
 const YOUTUBE_ORIGIN = 'https://www.youtube.com';
-const PLAYER_CLASS_HIDING_NATIVE_CAPTIONS = 'lingotube-hide-native-captions';
 const POLL_INTERVAL_MS = 100;
 const GRACE_PERIOD_MS = 300;
 const BUTTON_STATE_SETTLE_MS = 300;
@@ -1056,8 +1735,7 @@ async function activateSubtitleButton(button, sleep) {
 
 /**
  * Finds the player's caption request in the resource log, provoking one with
- * the subtitles button if there is none. Native captions are hidden by CSS
- * meanwhile, and the button is returned to its original state.
+ * the subtitles button if there is none. The button is returned to its original state.
  * Two captures must never run at once on the same button: use createSerialCaptionCapture.
  * @param {object} options
  * @param {Element} options.playerElement the visible player; its own subtitles button is the one clicked
@@ -1088,7 +1766,6 @@ async function capturePlayerCaptionRequestUrl({
     }
   };
 
-  const player = playerElement;
   const button = playerElement?.querySelector('.ytp-subtitles-button');
   const wasOn = button?.getAttribute('aria-pressed') === 'true';
   let buttonUsed = false;
@@ -1096,7 +1773,6 @@ async function capturePlayerCaptionRequestUrl({
     await waitForRequest(GRACE_PERIOD_MS);
     if (!capturedUrl && button) {
       buttonUsed = true;
-      player?.classList.add(PLAYER_CLASS_HIDING_NATIVE_CAPTIONS);
       await activateSubtitleButton(button, sleep);
       if (wasOn) await activateSubtitleButton(button, sleep);
       await waitForRequest(timeoutMs);
@@ -1107,7 +1783,6 @@ async function capturePlayerCaptionRequestUrl({
       const isOnNow = button.getAttribute('aria-pressed') === 'true';
       if (isOnNow !== wasOn) await activateSubtitleButton(button, sleep);
       await sleep(RESTORE_PAUSE_MS);
-      player?.classList.remove(PLAYER_CLASS_HIDING_NATIVE_CAPTIONS);
     }
   }
   return capturedUrl;
@@ -1133,8 +1808,8 @@ return Object.freeze({ mergePlayerRequestParameters: mergePlayerRequestParameter
 })();
 
 // Module: src/shared/language_choices.js
-const bundledModule12Exports = (function () {
-const { sanitizeLanguageName } = bundledModule5Exports;
+const bundledModule17Exports = (function () {
+const { sanitizeLanguageName } = bundledModule8Exports;
 /**
  * @typedef {{code: string|null, name: string}} TargetLanguage
  * A listed language has its list code and English name; a typed one has code null.
@@ -1181,13 +1856,14 @@ const LANGUAGE_CHOICES = [
 /**
  * Items of the language dropdown: typed names first, then the listed languages, then "other".
  * @param {string[]} customLanguageNames
+ * @param {string} [otherLanguageLabel] label of the "other language" item
  * @returns {{value: string, label: string}[]}
  */
-function buildLanguageMenu(customLanguageNames) {
+function buildLanguageMenu(customLanguageNames, otherLanguageLabel = 'Другой язык…') {
   return [
     ...customLanguageNames.map((name) => ({ value: `${CUSTOM_VALUE_PREFIX}${name}`, label: name })),
     ...LANGUAGE_CHOICES.map((choice) => ({ value: choice.code, label: choice.nativeName })),
-    { value: OTHER_LANGUAGE_VALUE, label: 'Другой язык…' },
+    { value: OTHER_LANGUAGE_VALUE, label: otherLanguageLabel },
   ];
 }
 
@@ -1218,8 +1894,8 @@ return Object.freeze({ OTHER_LANGUAGE_VALUE: OTHER_LANGUAGE_VALUE, LANGUAGE_CHOI
 })();
 
 // Module: src/shared/player_panel_logic.js
-const bundledModule13Exports = (function () {
-const { sanitizeLanguageName } = bundledModule5Exports;
+const bundledModule18Exports = (function () {
+const { sanitizeLanguageName } = bundledModule8Exports;
 const TEXT_SCALE_STEP = 0.2;
 const MIN_TEXT_SCALE = 0.6;
 const MAX_TEXT_SCALE = 2.0;
@@ -1310,9 +1986,10 @@ return Object.freeze({ TEXT_SCALE_STEP: TEXT_SCALE_STEP, MIN_TEXT_SCALE: MIN_TEX
 })();
 
 // Module: src/page/player_controls.js
-const bundledModule14Exports = (function () {
-const { OTHER_LANGUAGE_VALUE, buildLanguageMenu, targetLanguageFromMenuValue } = bundledModule12Exports;
-const { customNamesForMenu, languageFromTypedText, placeButtonNextToSubtitlesButton, selectValueAfterClose, steppedTextScale } = bundledModule13Exports;
+const bundledModule19Exports = (function () {
+const { OTHER_LANGUAGE_VALUE, buildLanguageMenu, targetLanguageFromMenuValue } = bundledModule17Exports;
+const { uiTexts } = bundledModule14Exports;
+const { customNamesForMenu, languageFromTypedText, placeButtonNextToSubtitlesButton, selectValueAfterClose, steppedTextScale } = bundledModule18Exports;
 const MAX_TYPED_LANGUAGE_LENGTH = 60;
 const KEYBOARD_EVENT_TYPES = ['keydown', 'keyup', 'keypress'];
 
@@ -1324,6 +2001,8 @@ class PlayerControls {
   #document;
   #playerElement;
   #settings;
+  #texts;
+  #isRightToLeft;
   #callbacks;
   #buttonElement;
   #panelElement;
@@ -1331,6 +2010,7 @@ class PlayerControls {
   #otherLanguageRow;
   #otherLanguageInput;
   #toggleEnabledButton;
+  #waitForSubtitlesButton;
   #textScaleValueElement;
   #statusLineElement;
   #retryButton;
@@ -1343,13 +2023,17 @@ class PlayerControls {
    *   onEnabledChanged: (isEnabled: boolean) => void,
    *   onLanguageChanged: (language: import('../shared/language_choices.js').TargetLanguage) => void,
    *   onTextScaleChanged: (scale: number) => void,
-   *   onRetryRequested: () => void}} options
+   *   onWaitForSubtitlesChanged: (isEnabled: boolean) => void,
+   *   onRetryRequested: () => void,
+   *   texts?: Record<string, any>, isRightToLeft?: boolean}} options
    */
-  constructor({ document, playerElement, settings, onEnabledChanged, onLanguageChanged, onTextScaleChanged, onRetryRequested }) {
+  constructor({ document, playerElement, settings, onEnabledChanged, onLanguageChanged, onTextScaleChanged, onWaitForSubtitlesChanged, onRetryRequested, texts = uiTexts('ru'), isRightToLeft = false }) {
     this.#document = document;
     this.#playerElement = playerElement;
     this.#settings = settings;
-    this.#callbacks = { onEnabledChanged, onLanguageChanged, onTextScaleChanged, onRetryRequested };
+    this.#texts = texts;
+    this.#isRightToLeft = isRightToLeft;
+    this.#callbacks = { onEnabledChanged, onLanguageChanged, onTextScaleChanged, onWaitForSubtitlesChanged, onRetryRequested };
 
     this.#buildButton();
     this.#buildPanel();
@@ -1374,9 +2058,12 @@ class PlayerControls {
   applySettings(settings) {
     this.#settings = settings;
     this.#renderLanguageMenu();
-    this.#toggleEnabledButton.textContent = settings.enabled ? 'Выключить субтитры' : 'Включить субтитры';
+    this.#toggleEnabledButton.textContent = settings.enabled ? this.#texts.toggleOff : this.#texts.toggleOn;
     this.#buttonElement.classList.toggle('lingotube-player-button-pressed', settings.enabled);
     this.#buttonElement.setAttribute('aria-pressed', String(settings.enabled));
+    const isWaiting = settings.waitForSubtitles !== false;
+    this.#waitForSubtitlesButton.textContent = isWaiting ? this.#texts.waitOn : this.#texts.waitOff;
+    this.#waitForSubtitlesButton.setAttribute('aria-pressed', String(isWaiting));
     this.#textScaleValueElement.textContent = `${Math.round(settings.textScale * 100)}%`;
   }
 
@@ -1413,11 +2100,12 @@ class PlayerControls {
     panel.setAttribute('role', 'dialog');
     panel.setAttribute('aria-label', 'lingotube');
     panel.hidden = true;
+    if (this.#isRightToLeft) panel.dir = 'rtl';
 
     const title = this.#createElement('div', 'lingotube-panel-title', 'lingotube');
 
     const languageRow = this.#createElement('label', 'lingotube-panel-row');
-    languageRow.append(this.#createElement('span', 'lingotube-panel-label', 'Язык перевода:'));
+    languageRow.append(this.#createElement('span', 'lingotube-panel-label', this.#texts.targetLanguageLabel));
     this.#languageSelect = this.#createElement('select', 'lingotube-language-select');
     this.#languageSelect.id = 'lingotube-language-select';
     this.#languageSelect.addEventListener('change', this.#handleLanguageSelected);
@@ -1428,11 +2116,11 @@ class PlayerControls {
     this.#otherLanguageInput = this.#createElement('input', 'lingotube-other-language-input');
     this.#otherLanguageInput.type = 'text';
     this.#otherLanguageInput.setAttribute('maxlength', String(MAX_TYPED_LANGUAGE_LENGTH));
-    this.#otherLanguageInput.placeholder = 'Название языка';
+    this.#otherLanguageInput.placeholder = this.#texts.otherLanguagePlaceholder;
     this.#otherLanguageInput.addEventListener('keydown', (event) => {
       if (event.key === 'Enter') this.#confirmTypedLanguage();
     });
-    const confirmButton = this.#createElement('button', 'lingotube-panel-button', 'Готово');
+    const confirmButton = this.#createElement('button', 'lingotube-panel-button', this.#texts.done);
     confirmButton.addEventListener('click', () => this.#confirmTypedLanguage());
     this.#otherLanguageRow.append(this.#otherLanguageInput, confirmButton);
 
@@ -1441,16 +2129,21 @@ class PlayerControls {
       this.#callbacks.onEnabledChanged(!this.#settings.enabled);
     });
 
+    this.#waitForSubtitlesButton = this.#createElement('button', 'lingotube-panel-button lingotube-wait-button');
+    this.#waitForSubtitlesButton.addEventListener('click', () => {
+      this.#callbacks.onWaitForSubtitlesChanged(this.#settings.waitForSubtitles === false);
+    });
+
     const scaleRow = this.#createElement('div', 'lingotube-panel-row');
     const smallerButton = this.#createElement('button', 'lingotube-panel-button lingotube-scale-button', '−');
-    smallerButton.setAttribute('aria-label', 'Уменьшить текст');
+    smallerButton.setAttribute('aria-label', this.#texts.smallerText);
     smallerButton.addEventListener('click', () => this.#changeTextScale(-1));
     const largerButton = this.#createElement('button', 'lingotube-panel-button lingotube-scale-button', '+');
-    largerButton.setAttribute('aria-label', 'Увеличить текст');
+    largerButton.setAttribute('aria-label', this.#texts.largerText);
     largerButton.addEventListener('click', () => this.#changeTextScale(1));
     this.#textScaleValueElement = this.#createElement('span', 'lingotube-scale-value');
     scaleRow.append(
-      this.#createElement('span', 'lingotube-panel-label', 'Размер текста:'),
+      this.#createElement('span', 'lingotube-panel-label', this.#texts.textSizeLabel),
       smallerButton,
       this.#textScaleValueElement,
       largerButton,
@@ -1460,7 +2153,7 @@ class PlayerControls {
     this.#statusLineElement.hidden = true;
     this.#statusLineElement.setAttribute('role', 'status');
 
-    this.#retryButton = this.#createElement('button', 'lingotube-panel-button lingotube-retry-button', 'Повторить сейчас');
+    this.#retryButton = this.#createElement('button', 'lingotube-panel-button lingotube-retry-button', this.#texts.retryNow);
     this.#retryButton.hidden = true;
     this.#retryButton.addEventListener('click', () => this.#callbacks.onRetryRequested());
 
@@ -1470,6 +2163,7 @@ class PlayerControls {
       this.#otherLanguageRow,
       this.#toggleEnabledButton,
       scaleRow,
+      this.#waitForSubtitlesButton,
       this.#statusLineElement,
       this.#retryButton,
     );
@@ -1506,7 +2200,7 @@ class PlayerControls {
 
   #renderLanguageMenu() {
     const language = this.#settings.language;
-    const items = buildLanguageMenu(customNamesForMenu(this.#settings.customLanguageNames, language));
+    const items = buildLanguageMenu(customNamesForMenu(this.#settings.customLanguageNames, language), this.#texts.otherLanguageOption);
     this.#languageSelect.replaceChildren();
     for (const item of items) {
       const option = this.#document.createElement('option');
@@ -1572,9 +2266,9 @@ return Object.freeze({ PlayerControls: PlayerControls });
 })();
 
 // Module: src/page/settings_store.js
-const bundledModule15Exports = (function () {
-const { LANGUAGE_CHOICES } = bundledModule12Exports;
-const { sanitizeLanguageName } = bundledModule5Exports;
+const bundledModule20Exports = (function () {
+const { LANGUAGE_CHOICES } = bundledModule17Exports;
+const { sanitizeLanguageName } = bundledModule8Exports;
 const SETTINGS_STORAGE_KEY = 'settings';
 const MIN_TEXT_SCALE = 0.6;
 const MAX_TEXT_SCALE = 2.0;
@@ -1582,7 +2276,8 @@ const MAX_CUSTOM_LANGUAGE_NAMES = 5;
 
 /**
  * @typedef {{enabled: boolean, language: import('../shared/language_choices.js').TargetLanguage,
- *   customLanguageNames: string[], textScale: number, overlayPosition: {centerXFraction: number, bottomYFraction: number}|null}} Settings
+ *   customLanguageNames: string[], textScale: number, overlayPosition: {centerXFraction: number, bottomYFraction: number}|null,
+ *   waitForSubtitles: boolean}} Settings
  */
 
 /** @type {Settings} */
@@ -1592,6 +2287,7 @@ const DEFAULT_SETTINGS = Object.freeze({
   customLanguageNames: Object.freeze([]),
   textScale: 1,
   overlayPosition: null,
+  waitForSubtitles: true,
 });
 
 function isPlainObject(value) {
@@ -1648,6 +2344,7 @@ function normalizeSettings(raw) {
     customLanguageNames: normalizeCustomLanguageNames(source.customLanguageNames),
     textScale: normalizeTextScale(source.textScale),
     overlayPosition: normalizeOverlayPosition(source.overlayPosition),
+    waitForSubtitles: typeof source.waitForSubtitles === 'boolean' ? source.waitForSubtitles : DEFAULT_SETTINGS.waitForSubtitles,
   };
 }
 
@@ -1730,8 +2427,113 @@ function createSettingsSaver(settingsStore) {
 return Object.freeze({ DEFAULT_SETTINGS: DEFAULT_SETTINGS, loadSettingsWithRetries: loadSettingsWithRetries, SettingsStore: SettingsStore, createSettingsSaver: createSettingsSaver });
 })();
 
+// Module: src/shared/json3_captions.js
+const bundledModule21Exports = (function () {
+/** A word is never shown as lasting longer than this before a pause. */
+const MAX_WORD_DURATION_MS = 1500;
+
+/**
+ * @typedef {{text: string, startMs: number, endMs: number}} TimedWord
+ */
+
+/**
+ * Turns a YouTube json3 caption document into timed words.
+ * Automatic captions carry per-word offsets (`tOffsetMs`); manual captions
+ * carry one whole line per event, which becomes a single TimedWord.
+ * @param {object} json3
+ * @returns {TimedWord[]}
+ */
+function timedWordsFromJson3(json3) {
+  const events = Array.isArray(json3?.events) ? json3.events : [];
+  const eventsWithText = events.filter(
+    (event) => Array.isArray(event?.segs) && Number.isFinite(event.tStartMs),
+  );
+  const hasWordOffsets = eventsWithText.some((event) =>
+    event.segs.some((seg) => typeof seg?.tOffsetMs === 'number'),
+  );
+  return hasWordOffsets ? wordsFromOffsets(eventsWithText) : wordsFromLines(eventsWithText);
+}
+
+function wordsFromOffsets(events) {
+  const words = [];
+  for (const event of events) {
+    for (const seg of event.segs) {
+      const text = typeof seg?.utf8 === 'string' ? seg.utf8.trim() : '';
+      if (!text) continue;
+      words.push({ text, startMs: event.tStartMs + (seg.tOffsetMs ?? 0), endMs: 0 });
+    }
+  }
+  words.forEach((word, index) => {
+    const nextStartMs = words[index + 1]?.startMs ?? Infinity;
+    word.endMs = Math.min(nextStartMs, word.startMs + MAX_WORD_DURATION_MS);
+  });
+  return words;
+}
+
+function wordsFromLines(events) {
+  const words = [];
+  for (const event of events) {
+    const text = event.segs
+      .map((seg) => (typeof seg?.utf8 === 'string' ? seg.utf8 : ''))
+      .join('')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!text) continue;
+    words.push({ text, startMs: event.tStartMs, endMs: event.tStartMs + (event.dDurationMs ?? 0) });
+  }
+  return words;
+}
+return Object.freeze({ MAX_WORD_DURATION_MS: MAX_WORD_DURATION_MS, timedWordsFromJson3: timedWordsFromJson3 });
+})();
+
+// Module: src/page/youtube_captions_source.js
+const bundledModule22Exports = (function () {
+const { timedWordsFromJson3 } = bundledModule21Exports;
+const { mergePlayerRequestParameters } = bundledModule16Exports;
+class CaptionsUnavailableError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'CaptionsUnavailableError';
+  }
+}
+
+/** The video has no usable caption track at all (not: a track whose text could not be fetched). */
+class NoCaptionTracksError extends CaptionsUnavailableError {
+  constructor(message) {
+    super(message);
+    this.name = 'NoCaptionTracksError';
+  }
+}
+
+/**
+ * Requests the chosen track with the player's parameters and parses the words.
+ * Error texts never contain the URL.
+ * @param {object} options
+ * @param {{baseUrl: string}} options.track
+ * @param {string} options.playerRequestUrl
+ * @param {typeof fetch} options.fetch
+ * @returns {Promise<import('../shared/json3_captions.js').TimedWord[]>}
+ */
+async function fetchCaptionWords({ track, playerRequestUrl, fetch }) {
+  const url = mergePlayerRequestParameters(track.baseUrl, playerRequestUrl);
+  const response = await fetch(url, { credentials: 'include' });
+  const body = await response.text();
+  if (!body.trim()) throw new CaptionsUnavailableError('YouTube returned an empty captions body');
+  let json3;
+  try {
+    json3 = JSON.parse(body);
+  } catch {
+    throw new CaptionsUnavailableError('YouTube returned captions that are not JSON');
+  }
+  const words = timedWordsFromJson3(json3);
+  if (!words.length) throw new CaptionsUnavailableError('YouTube captions contain no words');
+  return words;
+}
+return Object.freeze({ CaptionsUnavailableError: CaptionsUnavailableError, NoCaptionTracksError: NoCaptionTracksError, fetchCaptionWords: fetchCaptionWords });
+})();
+
 // Module: src/shared/sentence_cues.js
-const bundledModule16Exports = (function () {
+const bundledModule23Exports = (function () {
 /** Bump when the cue-building rules change, so cached cues and translations are rebuilt. */
 const CUE_RULES_VERSION = '1';
 
@@ -1826,9 +2628,9 @@ return Object.freeze({ CUE_RULES_VERSION: CUE_RULES_VERSION, DEFAULT_CUE_RULES: 
 })();
 
 // Module: src/shared/cache_key.js
-const bundledModule17Exports = (function () {
+const bundledModule24Exports = (function () {
 const { PROMPT_VERSION } = bundledModule4Exports;
-const { CUE_RULES_VERSION } = bundledModule16Exports;
+const { CUE_RULES_VERSION } = bundledModule23Exports;
 /** Source key of cues taken from the chat transcript instead of a caption track. */
 const CHAT_TRANSCRIPT_SOURCE_KEY = 'chat';
 
@@ -1862,7 +2664,7 @@ return Object.freeze({ CHAT_TRANSCRIPT_SOURCE_KEY: CHAT_TRANSCRIPT_SOURCE_KEY, l
 })();
 
 // Module: src/shared/cue_track.js
-const bundledModule18Exports = (function () {
+const bundledModule25Exports = (function () {
 /** @typedef {{id: number, startMs: number, endMs: number, sourceText: string}} Cue */
 /** @typedef {'none'|'pending'|'done'|'failed'} TranslationState */
 
@@ -1997,29 +2799,249 @@ class CueTrack {
 return Object.freeze({ CueTrack: CueTrack });
 })();
 
-// Module: src/shared/status_texts.js
-const bundledModule19Exports = (function () {
-// User-facing status texts of the overlay (Russian).
+// Module: src/shared/subtitle_wait.js
+const bundledModule26Exports = (function () {
+/** How long the video may be held while a translation is pending. */
+const WAIT_CAP_MS = 30000;
 
-const STATUS_TEXTS = {
-  translating: 'Перевожу…',
-  approximateTiming: 'Время приблизительное',
-  captionsNotFetched: 'Не удалось получить субтитры YouTube',
-  chatUnavailable: 'Чат «Спросить» недоступен для этого видео или аккаунта',
-  notSignedIn: 'Войдите в аккаунт YouTube',
-  repeatedFailures: 'Чат не отвечает. Включите субтитры заново, чтобы повторить',
-  noSpeech: 'У видео нет субтитров, и чат не дал транскрипцию',
-};
+/**
+ * @typedef {object} WaitDecision
+ * @property {'pause'|'play'|'none'} action What the caller must do with the video.
+ * @property {boolean} isCapped Whether the wait cap has been reached for this wait.
+ * @property {boolean} pausedByUs Whether the video is paused by us after the action.
+ */
 
-/** @param {number} minutesLeft whole minutes until requests may resume */
-function rateLimitedText(minutesLeft) {
-  return `Чат ограничил запросы. Повтор через ${minutesLeft} мин`;
+/**
+ * Decide whether to pause or resume the video while subtitles are translating.
+ * Pure: no timers, no DOM; the caller supplies the clock and applies the result.
+ *
+ * @param {object} state
+ * @param {boolean} state.isEnabled The waitForSubtitles setting.
+ * @param {boolean} state.isWaiting The status shows "translating" right now.
+ * @param {boolean} state.isAdPlaying An ad is playing.
+ * @param {boolean} state.isPumpStopped Translation stopped for a reason.
+ * @param {boolean} state.isAtVideoEnd Position is at or past the duration.
+ * @param {boolean} state.isVideoPaused The video element is paused right now.
+ * @param {boolean} state.pausedByUs We paused the video and the pause is still ours.
+ * @param {number|null} state.waitStartedMs When the current wait began.
+ * @param {boolean} state.isCapped The cap already expired for this wait.
+ * @param {boolean} [state.isDismissedByUser] The user resumed over our pause: no new pause in this wait.
+ * @param {number} state.nowMs The current time.
+ * @returns {WaitDecision}
+ */
+function decideWaitAction({
+  isEnabled,
+  isWaiting,
+  isAdPlaying,
+  isPumpStopped,
+  isAtVideoEnd,
+  isVideoPaused,
+  pausedByUs,
+  waitStartedMs,
+  isCapped,
+  isDismissedByUser = false,
+  nowMs,
+}) {
+  // The user or YouTube resumed the video: our pause is gone.
+  if (pausedByUs && !isVideoPaused) {
+    return { action: 'none', isCapped, pausedByUs: false };
+  }
+  const mustNotHold = !isWaiting || isAdPlaying || !isEnabled || isPumpStopped || isAtVideoEnd;
+  if (pausedByUs && mustNotHold) {
+    return { action: 'play', isCapped, pausedByUs: false };
+  }
+  if (!isWaiting) {
+    return { action: 'none', isCapped: false, pausedByUs };
+  }
+  if (isCapped) {
+    return { action: 'none', isCapped: true, pausedByUs };
+  }
+  if (isAdPlaying || !isEnabled || isPumpStopped || isAtVideoEnd) {
+    return { action: 'none', isCapped, pausedByUs };
+  }
+  const isCapReached = waitStartedMs !== null && nowMs - waitStartedMs >= WAIT_CAP_MS;
+  if (isCapReached) {
+    // Release our own pause at the cap, otherwise the video would stay held.
+    return { action: pausedByUs ? 'play' : 'none', isCapped: true, pausedByUs: false };
+  }
+  if (isDismissedByUser) {
+    return { action: 'none', isCapped, pausedByUs };
+  }
+  if (!isVideoPaused) {
+    return { action: 'pause', isCapped, pausedByUs: true };
+  }
+  return { action: 'none', isCapped, pausedByUs };
 }
-return Object.freeze({ STATUS_TEXTS: STATUS_TEXTS, rateLimitedText: rateLimitedText });
+return Object.freeze({ WAIT_CAP_MS: WAIT_CAP_MS, decideWaitAction: decideWaitAction });
+})();
+
+// Module: src/shared/failure_counter.js
+const bundledModule27Exports = (function () {
+const { ChatRateLimitedError, ChatUnavailableError, NotSignedInError } = bundledModule1Exports;
+/** @typedef {'rate-limited'|'not-signed-in'|'chat-unavailable'|'repeated-failures'} ChatStopReason */
+
+/** Failed chat messages in a row after which requests stop until the user retries. */
+const FAILED_MESSAGES_IN_A_ROW_LIMIT = 3;
+
+/**
+ * The stop reason of a chat error that ends requests at once; null for an error that only
+ * counts as one failed message (ChatRequestFailedError and anything unexpected).
+ * @param {unknown} error
+ * @returns {Exclude<ChatStopReason, 'repeated-failures'>|null}
+ */
+function stopReasonOfChatError(error) {
+  if (error instanceof ChatRateLimitedError) return 'rate-limited';
+  if (error instanceof NotSignedInError) return 'not-signed-in';
+  if (error instanceof ChatUnavailableError) return 'chat-unavailable';
+  return null;
+}
+
+/** Counts failed chat messages in a row; shared by the translation and the transcript pumps. */
+class FailureCounter {
+  #limit;
+  #failedInARow = 0;
+
+  constructor(limit = FAILED_MESSAGES_IN_A_ROW_LIMIT) {
+    this.#limit = limit;
+  }
+
+  /** A message that gave a usable result starts the count again. */
+  recordSuccess() {
+    this.#failedInARow = 0;
+  }
+
+  /** @returns {boolean} true when this failure reaches the limit */
+  recordFailure() {
+    this.#failedInARow += 1;
+    return this.#failedInARow >= this.#limit;
+  }
+
+  reset() {
+    this.#failedInARow = 0;
+  }
+}
+return Object.freeze({ FAILED_MESSAGES_IN_A_ROW_LIMIT: FAILED_MESSAGES_IN_A_ROW_LIMIT, stopReasonOfChatError: stopReasonOfChatError, FailureCounter: FailureCounter });
+})();
+
+// Module: src/shared/transcript_chunk_pump.js
+const bundledModule28Exports = (function () {
+const { FailureCounter, stopReasonOfChatError } = bundledModule27Exports;
+const { TRANSCRIPT_RESERVE_AHEAD_MS } = bundledModule6Exports;
+/** @typedef {import('./failure_counter.js').ChatStopReason|'no-speech'} TranscriptPumpStopReason */
+
+/**
+ * Requests chat transcript chunks around the playhead, one request at a time, with the
+ * failure rules of the translation pump: three failed messages in a row stop it, and the chat
+ * errors map to the same stop reasons. A chunk that comes back with no lines is failed and
+ * counts as a failed message; when every chunk of the video failed the stop reason is
+ * 'no-speech'. A thrown request failure leaves the chunk missing, so it is asked again.
+ * The owner calls tick() on its own timer.
+ */
+class TranscriptChunkPump {
+  #store;
+  #source;
+  #getPositionMs;
+  #reserveAheadMs;
+  #onChunksChanged;
+  #onStopped;
+  #isStopped = false;
+  #isEndedByOwner = false;
+  #stopReason = null;
+  #isRequestInFlight = false;
+  #failedMessages = new FailureCounter();
+
+  /**
+   * @param {{
+   *   store: import('./transcript_chunks.js').TranscriptChunkStore,
+   *   source: {requestChunk: (index: number) => Promise<import('./timestamped_transcript.js').TimedLine[]>},
+   *   getPositionMs: () => number,
+   *   reserveAheadMs?: number,
+   *   onChunksChanged: () => void,
+   *   onStopped: (reason: TranscriptPumpStopReason) => void,
+   * }} options
+   */
+  constructor({
+    store,
+    source,
+    getPositionMs,
+    reserveAheadMs = TRANSCRIPT_RESERVE_AHEAD_MS,
+    onChunksChanged,
+    onStopped,
+  }) {
+    this.#store = store;
+    this.#source = source;
+    this.#getPositionMs = getPositionMs;
+    this.#reserveAheadMs = reserveAheadMs;
+    this.#onChunksChanged = onChunksChanged;
+    this.#onStopped = onStopped;
+  }
+
+  /** @returns {TranscriptPumpStopReason|null} why the pump stopped by itself; null when running or stopped by the owner */
+  get stopReason() {
+    return this.#stopReason;
+  }
+
+  /** Ends the session: the reply of an in-flight request is discarded and no callback is called. */
+  stop() {
+    this.#isStopped = true;
+    this.#isEndedByOwner = true;
+  }
+
+  /** Starts working again after a stop caused by an error reason; nothing after stop(). */
+  resume() {
+    if (this.#isEndedByOwner || this.#stopReason === null) return;
+    this.#stopReason = null;
+    this.#isStopped = false;
+    this.#failedMessages.reset();
+  }
+
+  /** Requests the next chunk the playhead needs; does nothing when stopped or busy. */
+  async tick() {
+    if (this.#isStopped || this.#isRequestInFlight) return;
+    const index = this.#store.nextChunkToRequest(this.#getPositionMs(), this.#reserveAheadMs);
+    if (index === null) return;
+
+    this.#isRequestInFlight = true;
+    let cues;
+    try {
+      cues = await this.#source.requestChunk(index);
+    } catch (error) {
+      this.#isRequestInFlight = false;
+      if (this.#isStopped) return;
+      const reason = stopReasonOfChatError(error);
+      if (reason !== null) this.#stopWithReason(reason);
+      else this.#countFailedMessage(); // ChatRequestFailedError and anything unexpected
+      return;
+    }
+    this.#isRequestInFlight = false;
+    if (this.#isStopped) return;
+    if (!Array.isArray(cues) || cues.length === 0) {
+      this.#store.markChunkFailed(index);
+      this.#countFailedMessage();
+      return;
+    }
+    this.#store.addChunk(index, cues);
+    this.#failedMessages.recordSuccess();
+    this.#onChunksChanged();
+  }
+
+  #countFailedMessage() {
+    const isLimitReached = this.#failedMessages.recordFailure();
+    if (this.#store.areAllChunksFailed()) this.#stopWithReason('no-speech');
+    else if (isLimitReached) this.#stopWithReason('repeated-failures');
+  }
+
+  #stopWithReason(reason) {
+    this.#isStopped = true;
+    this.#stopReason = reason;
+    this.#onStopped(reason);
+  }
+}
+return Object.freeze({ TranscriptChunkPump: TranscriptChunkPump });
 })();
 
 // Module: src/shared/translation_schedule.js
-const bundledModule20Exports = (function () {
+const bundledModule29Exports = (function () {
 /** @typedef {import('./cue_track.js').CueTrack} CueTrack */
 /** @typedef {import('./sentence_cues.js').Cue} Cue */
 
@@ -2042,12 +3064,10 @@ return Object.freeze({ DEFAULT_SCHEDULE: DEFAULT_SCHEDULE, chooseNextBatch: choo
 })();
 
 // Module: src/shared/translation_pump.js
-const bundledModule21Exports = (function () {
-const { ChatRateLimitedError, ChatUnavailableError, NotSignedInError } = bundledModule1Exports;
-const { DEFAULT_SCHEDULE, chooseNextBatch } = bundledModule20Exports;
-/** @typedef {'rate-limited'|'not-signed-in'|'chat-unavailable'|'repeated-failures'} PumpStopReason */
-
-const FAILED_MESSAGES_IN_A_ROW_LIMIT = 3;
+const bundledModule30Exports = (function () {
+const { FailureCounter, stopReasonOfChatError } = bundledModule27Exports;
+const { DEFAULT_SCHEDULE, chooseNextBatch } = bundledModule29Exports;
+/** @typedef {import('./failure_counter.js').ChatStopReason} PumpStopReason */
 
 /**
  * Translates cues ahead of playback, one chat request at a time. The owner calls tick()
@@ -2064,7 +3084,7 @@ class TranslationPump {
   #isEndedByOwner = false;
   #stopReason = null;
   #isRequestInFlight = false;
-  #failedMessagesInARow = 0;
+  #failedMessages = new FailureCounter();
 
   /**
    * @param {{
@@ -2104,7 +3124,7 @@ class TranslationPump {
     if (this.#isEndedByOwner || this.#stopReason === null) return;
     this.#stopReason = null;
     this.#isStopped = false;
-    this.#failedMessagesInARow = 0;
+    this.#failedMessages.reset();
   }
 
   /** Sends the next batch when the translated reserve is short; does nothing when stopped or busy. */
@@ -2133,21 +3153,19 @@ class TranslationPump {
   #applyResult({ translationsByCueId, failedCueIds }) {
     for (const [cueId, text] of translationsByCueId) this.#track.setTranslation(cueId, text);
     this.#track.markFailed(failedCueIds);
-    if (translationsByCueId.size > 0) this.#failedMessagesInARow = 0;
+    if (translationsByCueId.size > 0) this.#failedMessages.recordSuccess();
     else this.#countFailedMessage();
     this.#onTranslationsChanged();
   }
 
   #handleError(error) {
-    if (error instanceof ChatRateLimitedError) this.#stopWithReason('rate-limited');
-    else if (error instanceof NotSignedInError) this.#stopWithReason('not-signed-in');
-    else if (error instanceof ChatUnavailableError) this.#stopWithReason('chat-unavailable');
+    const reason = stopReasonOfChatError(error);
+    if (reason !== null) this.#stopWithReason(reason);
     else this.#countFailedMessage(); // ChatRequestFailedError and anything unexpected
   }
 
   #countFailedMessage() {
-    this.#failedMessagesInARow += 1;
-    if (this.#failedMessagesInARow >= FAILED_MESSAGES_IN_A_ROW_LIMIT) this.#stopWithReason('repeated-failures');
+    if (this.#failedMessages.recordFailure()) this.#stopWithReason('repeated-failures');
   }
 
   #stopWithReason(reason) {
@@ -2160,30 +3178,36 @@ return Object.freeze({ TranslationPump: TranslationPump });
 })();
 
 // Module: src/page/subtitle_session.js
-const bundledModule22Exports = (function () {
-const { translationCacheKey } = bundledModule17Exports;
+const bundledModule31Exports = (function () {
+const { NoCaptionTracksError } = bundledModule22Exports;
+const { CHAT_TRANSCRIPT_SOURCE_KEY, translationCacheKey } = bundledModule24Exports;
 const { ChatRateLimitedError } = bundledModule1Exports;
-const { CueTrack } = bundledModule18Exports;
-const { promptLanguageName } = bundledModule12Exports;
-const { STATUS_TEXTS, rateLimitedText } = bundledModule19Exports;
-const { TranslationPump } = bundledModule21Exports;
-const { DEFAULT_SCHEDULE } = bundledModule20Exports;
+const { CueTrack } = bundledModule25Exports;
+const { promptLanguageName } = bundledModule17Exports;
+const { uiTexts } = bundledModule14Exports;
+const { decideWaitAction } = bundledModule26Exports;
+const { TranscriptChunkPump } = bundledModule28Exports;
+const { TranscriptChunkStore } = bundledModule6Exports;
+const { TranslationPump } = bundledModule30Exports;
+const { DEFAULT_SCHEDULE } = bundledModule29Exports;
 /** @typedef {import('../shared/sentence_cues.js').Cue} Cue */
 
 const TICK_INTERVAL_MS = 250;
 const MS_PER_MINUTE = 60000;
-
-const STATUS_TEXT_BY_STOP_REASON = {
-  'not-signed-in': STATUS_TEXTS.notSignedIn,
-  'chat-unavailable': STATUS_TEXTS.chatUnavailable,
-  'repeated-failures': STATUS_TEXTS.repeatedFailures,
-};
+// A position step backwards, or forward by more than twice the real time since the previous
+// tick plus this slack, is a seek, not playback (even a stalled tab moves the position by about
+// the elapsed time).
+const SEEK_SLACK_MS = 2000;
+// The browser may round currentTime back a little on pause() or play(); that is not a seek.
+const SEEK_BACK_TOLERANCE_MS = 500;
 
 /**
  * Translated subtitles of ONE video in ONE language: loads the cues, restores cached
  * translations, and on a 250 ms timer shows the cue under the playhead and lets the pump
- * translate ahead. A new video or language gets a new session; after stop() nothing of
- * this session reaches the view, the status callback or the cache.
+ * translate ahead. Without usable YouTube captions it falls back to a translated transcript
+ * from the chat, in chunks, with the "approximate timing" label. A new video or language gets
+ * a new session; after stop() nothing of this session reaches the view, the status callback
+ * or the cache.
  */
 class SubtitleSession {
   #videoId;
@@ -2191,6 +3215,8 @@ class SubtitleSession {
   #languageName;
   #loadCues;
   #createTranslator;
+  #createTranscriptSource;
+  #getDurationMs;
   #cache;
   #overlayView;
   #getPositionMs;
@@ -2201,19 +3227,45 @@ class SubtitleSession {
   #logInfo;
   #now;
   #schedule;
+  #pauseVideo;
+  #playVideo;
+  #isWaitForSubtitlesEnabled;
+  #texts;
+  #statusTextByStopReason;
 
   #isStarted = false;
   #isStopped = false;
   #isAdPlaying = false;
   #timerHandle = null;
+  /** Caption mode: the cues and their translations. */
   #track = null;
+  /** Fallback mode: the chat transcript chunks. */
+  #chunkStore = null;
+  /** What the box shows: the track or the chunk store (both answer displayAt and resetFailed). */
+  #display = null;
+  /** The TranslationPump or the TranscriptChunkPump. */
   #pump = null;
   #cacheKey = null;
   #translator = null;
+  #transcriptSource = null;
+  /** The panel says "captions not fetched" until the first chunk is shown. */
+  #isCaptionsNotFetchedShown = false;
   #rateLimitedUntilMs = null;
   /** Shown in the box instead of "Перевожу…" while the pump is stopped by an error. */
   #stopStatusText = null;
   #lastRenderedKey = null;
+  /** We paused the video to wait for a translation and the pause is still ours. */
+  #pausedByUs = false;
+  /** When the current wait for a translation began; null while nothing is awaited. */
+  #waitStartedMs = null;
+  /** The wait cap expired for the current wait: the video plays on and the box says so. */
+  #isWaitCapped = false;
+  /** The panel currently shows "translation delayed" because of the cap. */
+  #isDelayedStatusReported = false;
+  /** The user pressed play over our pause: this wait sets no new pause. */
+  #isWaitDismissedByUser = false;
+  #lastTickPositionMs = null;
+  #lastTickNowMs = null;
 
   /**
    * @param {{
@@ -2221,8 +3273,11 @@ class SubtitleSession {
    *   language: import('../shared/language_choices.js').TargetLanguage,
    *   loadCues: () => Promise<{cues: Cue[], sourceKey: string}>,
    *   createTranslator: (languageName: string) => Promise<{translateCues: Function}>,
+   *   createTranscriptSource: (languageName: string, durationMs: number) => Promise<{requestChunk: Function}>,
+   *   getDurationMs: () => number,
    *   cache: {load: (key: string) => Promise<object|null>, save: (key: string, entry: object) => Promise<void>},
-   *   overlayView: {showCueText: Function, showStatus: Function, clear: Function, setHidden: Function},
+   *   overlayView: {showCueText: Function, showStatus: Function, clear: Function, setHidden: Function,
+   *     setApproximateTimingLabel: Function},
    *   getPositionMs: () => number,
    *   isPaused?: () => boolean,
    *   setTimer: (callback: () => void, intervalMs: number) => any,
@@ -2231,6 +3286,10 @@ class SubtitleSession {
    *   logInfo?: (message: string, details: object) => void,
    *   now?: () => number,
    *   schedule?: {reserveAheadMs: number, batchSize: number},
+   *   pauseVideo?: () => void,
+   *   playVideo?: () => void,
+   *   isWaitForSubtitlesEnabled?: () => boolean,
+   *   texts?: Record<string, any>,
    * }} options
    */
   constructor({
@@ -2238,6 +3297,8 @@ class SubtitleSession {
     language,
     loadCues,
     createTranslator,
+    createTranscriptSource,
+    getDurationMs,
     cache,
     overlayView,
     getPositionMs,
@@ -2248,12 +3309,18 @@ class SubtitleSession {
     logInfo = () => {},
     now = () => Date.now(),
     schedule = DEFAULT_SCHEDULE,
+    pauseVideo = () => {},
+    playVideo = () => {},
+    isWaitForSubtitlesEnabled = () => false,
+    texts = uiTexts('ru'),
   }) {
     this.#videoId = videoId;
     this.#language = language;
     this.#languageName = promptLanguageName(language);
     this.#loadCues = loadCues;
     this.#createTranslator = createTranslator;
+    this.#createTranscriptSource = createTranscriptSource;
+    this.#getDurationMs = getDurationMs;
     this.#cache = cache;
     this.#overlayView = overlayView;
     this.#getPositionMs = getPositionMs;
@@ -2264,29 +3331,43 @@ class SubtitleSession {
     this.#logInfo = logInfo;
     this.#now = now;
     this.#schedule = schedule;
+    this.#pauseVideo = pauseVideo;
+    this.#playVideo = playVideo;
+    this.#isWaitForSubtitlesEnabled = isWaitForSubtitlesEnabled;
+    this.#texts = texts;
+    this.#statusTextByStopReason = {
+      'not-signed-in': texts.notSignedIn,
+      'chat-unavailable': texts.chatUnavailable,
+      'repeated-failures': texts.repeatedFailures,
+      'no-speech': texts.noSpeech,
+    };
   }
 
   /** Loads the cues and cached translations, then starts the timer. Never rejects. */
   async start() {
     if (this.#isStarted || this.#isStopped) return;
     this.#isStarted = true;
-    if (!this.#isAdPlaying) this.#overlayView.showStatus(STATUS_TEXTS.translating);
+    if (!this.#isAdPlaying) this.#overlayView.showStatus(this.#texts.translating);
 
     let loaded = null;
+    let hasCaptionTracks = true;
     try {
       loaded = await this.#loadCues();
-    } catch {
+    } catch (error) {
       loaded = null;
+      hasCaptionTracks = !(error instanceof NoCaptionTracksError);
     }
     if (this.#isStopped) return;
     if (!loaded || !Array.isArray(loaded.cues) || loaded.cues.length === 0) {
-      // Task 13 adds the chat transcript fallback here, behind the same loadCues seam.
-      this.#overlayView.clear();
-      this.#onStatusChanged(STATUS_TEXTS.captionsNotFetched, { canRetry: false });
+      await this.#startTranscriptFallback({ hasCaptionTracks });
       return;
     }
+    await this.#startCaptionMode(loaded);
+  }
 
+  async #startCaptionMode(loaded) {
     this.#track = new CueTrack(loaded.cues);
+    this.#display = this.#track;
     this.#cacheKey = translationCacheKey({
       videoId: this.#videoId,
       language: this.#language,
@@ -2294,7 +3375,7 @@ class SubtitleSession {
     });
     const cachedEntry = await this.#loadCachedEntry();
     if (this.#isStopped) return;
-    if (cachedEntry) this.#track.loadTranslations(cachedEntry.translations);
+    if (cachedEntry?.translations) this.#track.loadTranslations(cachedEntry.translations);
 
     this.#pump = new TranslationPump({
       track: this.#track,
@@ -2308,6 +3389,56 @@ class SubtitleSession {
       cues: loaded.cues.length,
       cachedTranslations: Object.keys(this.#track.translationsByCueId()).length,
     });
+    this.#startTimer();
+  }
+
+  /**
+   * The fallback without usable captions: a translated transcript from the chat, in chunks.
+   * The approximate-timing label is always on; when a track existed but its text could not be
+   * fetched, the panel says so until the first chunk is shown.
+   */
+  async #startTranscriptFallback({ hasCaptionTracks }) {
+    const rawDurationMs = Number(this.#getDurationMs());
+    // Infinity is a live stream: it has no end, so the transcript cannot be chunked.
+    const durationMs = Number.isFinite(rawDurationMs) && rawDurationMs > 0 ? rawDurationMs : 0;
+    if (durationMs <= 0) {
+      this.#overlayView.clear();
+      this.#onStatusChanged(this.#texts.captionsNotFetched, { canRetry: false });
+      return;
+    }
+    this.#overlayView.setApproximateTimingLabel(true);
+    if (hasCaptionTracks) {
+      this.#isCaptionsNotFetchedShown = true;
+      this.#onStatusChanged(this.#texts.captionsNotFetched, { canRetry: false });
+    }
+
+    this.#chunkStore = new TranscriptChunkStore(durationMs);
+    this.#display = this.#chunkStore;
+    this.#cacheKey = translationCacheKey({
+      videoId: this.#videoId,
+      language: this.#language,
+      sourceKey: CHAT_TRANSCRIPT_SOURCE_KEY,
+    });
+    const cachedEntry = await this.#loadCachedEntry();
+    if (this.#isStopped) return;
+    const cachedChunks = cachedEntry ? this.#chunkStore.loadCacheEntry(cachedEntry) : 0;
+
+    this.#pump = new TranscriptChunkPump({
+      store: this.#chunkStore,
+      source: { requestChunk: (index) => this.#requestChunk(index, durationMs) },
+      getPositionMs: this.#getPositionMs,
+      reserveAheadMs: this.#schedule.reserveAheadMs,
+      onChunksChanged: () => this.#saveChunks(),
+      onStopped: (reason) => this.#handlePumpStopped(reason),
+    });
+    this.#logInfo('lingotube: transcript fallback started', {
+      chunks: this.#chunkStore.chunkCount,
+      cachedChunks,
+    });
+    this.#startTimer();
+  }
+
+  #startTimer() {
     this.#lastRenderedKey = null;
     this.#timerHandle = this.#setTimer(() => this.#tick(), TICK_INTERVAL_MS);
     this.#tick();
@@ -2320,13 +3451,14 @@ class SubtitleSession {
     if (this.#timerHandle !== null) this.#clearTimer(this.#timerHandle);
     this.#timerHandle = null;
     this.#pump?.stop();
+    this.#releaseOurPause();
   }
 
-  /** The "retry" action: resumes a pump stopped by an error and re-schedules failed cues. */
+  /** The "retry" action: resumes a pump stopped by an error and re-schedules failed cues or chunks. */
   retry() {
     if (this.#isStopped || !this.#pump) return;
     this.#pump.resume();
-    this.#track.resetFailed();
+    this.#display.resetFailed();
     this.#rateLimitedUntilMs = null;
     this.#stopStatusText = null;
     this.#lastRenderedKey = null;
@@ -2342,7 +3474,11 @@ class SubtitleSession {
     if (this.#isStopped || isAdPlaying === this.#isAdPlaying) return;
     this.#isAdPlaying = isAdPlaying;
     this.#lastRenderedKey = null;
-    if (isAdPlaying) this.#overlayView.clear();
+    if (isAdPlaying) {
+      this.#releaseOurPause();
+      this.#resetWait();
+      this.#overlayView.clear();
+    }
     this.#overlayView.setHidden(isAdPlaying);
   }
 
@@ -2351,16 +3487,121 @@ class SubtitleSession {
     this.#resumeWhenRateLimitPassed();
     if (this.#isStopped) return;
     const positionMs = this.#getPositionMs();
-    this.#render(positionMs);
+    const isWaiting = this.#render(positionMs);
+    this.#applyWaitDecision(positionMs, isWaiting);
     if (this.#pump.stopReason !== null) return;
     // On pause the reserve is topped up once; after that no request is sent until playback moves on.
     // Deliberate second guard: chooseNextBatch already sends nothing once the reserve is met.
-    if (this.#isPaused() && this.#track.translatedAheadMs(positionMs) >= this.#schedule.reserveAheadMs) return;
+    // In the fallback the chunk choice alone guards it: no chunk is due once the reserve is met.
+    if (
+      this.#track
+      && this.#isPaused()
+      && this.#track.translatedAheadMs(positionMs) >= this.#schedule.reserveAheadMs
+    ) return;
     this.#pump.tick().catch(() => {});
   }
 
+  /**
+   * Pauses the video while the cue under the playhead is being translated and resumes it once
+   * the cue is ready, an ad starts, the setting is switched off or the wait cap is reached.
+   * A pause the user made is never touched: only a pause we made (#pausedByUs) is released.
+   */
+  #applyWaitDecision(positionMs, isWaiting) {
+    const nowMs = this.#now();
+    this.#restartWaitOnSeek(positionMs, isWaiting, nowMs);
+    if (isWaiting && this.#waitStartedMs === null) this.#waitStartedMs = nowMs;
+
+    const durationMs = Number(this.#getDurationMs());
+    const isVideoPaused = this.#isPaused();
+    if (isWaiting && this.#pausedByUs && !isVideoPaused) this.#isWaitDismissedByUser = true;
+    if (!isWaiting) this.#isWaitDismissedByUser = false;
+    const decision = decideWaitAction({
+      isEnabled: this.#isWaitForSubtitlesEnabled(),
+      isWaiting,
+      isAdPlaying: this.#isAdPlaying,
+      isPumpStopped: this.#pump.stopReason !== null,
+      isAtVideoEnd: Number.isFinite(durationMs) && durationMs > 0 && positionMs >= durationMs,
+      isVideoPaused,
+      pausedByUs: this.#pausedByUs,
+      waitStartedMs: this.#waitStartedMs,
+      isCapped: this.#isWaitCapped,
+      isDismissedByUser: this.#isWaitDismissedByUser,
+      nowMs,
+    });
+    this.#pausedByUs = decision.pausedByUs;
+    if (decision.action === 'pause') {
+      this.#callVideo(this.#pauseVideo, 'pause', { onFailure: () => { this.#pausedByUs = false; } });
+    } else if (decision.action === 'play') {
+      this.#callVideo(this.#playVideo, 'play');
+    }
+    if (!isWaiting) this.#waitStartedMs = null;
+    this.#updateCapState(decision.isCapped);
+  }
+
+  /** A seek during a wait starts a new wait on the new position, with a fresh 30 s. */
+  #restartWaitOnSeek(positionMs, isWaiting, nowMs) {
+    const previousPositionMs = this.#lastTickPositionMs;
+    const previousNowMs = this.#lastTickNowMs;
+    this.#lastTickPositionMs = positionMs;
+    this.#lastTickNowMs = nowMs;
+    if (!isWaiting || previousPositionMs === null || previousNowMs === null) return;
+    const stepMs = positionMs - previousPositionMs;
+    const elapsedMs = Math.max(0, nowMs - previousNowMs);
+    if (stepMs < -SEEK_BACK_TOLERANCE_MS || stepMs > elapsedMs * 2 + SEEK_SLACK_MS) {
+      this.#waitStartedMs = nowMs;
+      this.#isWaitCapped = false;
+      this.#isWaitDismissedByUser = false;
+    }
+  }
+
+  /** Mirrors the cap flag into the box and the panel; the box is redrawn when it changes. */
+  #updateCapState(isCapped) {
+    if (isCapped === this.#isWaitCapped && isCapped === this.#isDelayedStatusReported) return;
+    this.#isWaitCapped = isCapped;
+    this.#lastRenderedKey = null;
+    this.#render(this.#getPositionMs());
+    if (isCapped && this.#stopStatusText === null && !this.#isDelayedStatusReported) {
+      this.#isDelayedStatusReported = true;
+      this.#onStatusChanged(this.#texts.translationDelayed, { canRetry: false });
+    } else if (!isCapped && this.#isDelayedStatusReported) {
+      this.#isDelayedStatusReported = false;
+      if (this.#stopStatusText === null) this.#onStatusChanged(null, { canRetry: false });
+    }
+  }
+
+  /** Calls the video callback; its failure never reaches the tick. */
+  #callVideo(callback, name, { onFailure = () => {} } = {}) {
+    try {
+      callback();
+    } catch {
+      onFailure();
+      this.#logInfo(`lingotube: video ${name} failed`, {});
+    }
+  }
+
+  /** Gives back the video if we are holding it and it is still paused. */
+  #releaseOurPause() {
+    if (!this.#pausedByUs) return;
+    this.#pausedByUs = false;
+    if (this.#isPaused()) this.#callVideo(this.#playVideo, 'play');
+  }
+
+  #resetWait() {
+    this.#waitStartedMs = null;
+    this.#isWaitCapped = false;
+    this.#isWaitDismissedByUser = false;
+    this.#lastTickPositionMs = null;
+    this.#lastTickNowMs = null;
+    if (this.#isDelayedStatusReported) {
+      this.#isDelayedStatusReported = false;
+      if (this.#stopStatusText === null) this.#onStatusChanged(null, { canRetry: false });
+    }
+  }
+
+  /** @returns {boolean} whether the box shows "translating" for the cue under the playhead */
   #render(positionMs) {
-    const display = this.#track.displayAt(positionMs);
+    const display = this.#display.displayAt(positionMs);
+    if (display.kind === 'text') this.#endCaptionsNotFetchedStatus();
     let key;
     let draw;
     if (display.kind === 'text') {
@@ -2371,15 +3612,25 @@ class SubtitleSession {
       key = `status:${statusText}`;
       draw = () => this.#overlayView.showStatus(statusText);
     } else if (display.kind === 'waiting') {
-      key = `status:${STATUS_TEXTS.translating}`;
-      draw = () => this.#overlayView.showStatus(STATUS_TEXTS.translating);
+      const statusText = this.#isWaitCapped ? this.#texts.translationDelayed : this.#texts.translating;
+      key = `status:${statusText}`;
+      draw = () => this.#overlayView.showStatus(statusText);
     } else {
       key = 'clear';
       draw = () => this.#overlayView.clear();
     }
-    if (key === this.#lastRenderedKey) return;
+    const isWaiting = display.kind === 'waiting' && this.#stopStatusText === null;
+    if (key === this.#lastRenderedKey) return isWaiting;
     this.#lastRenderedKey = key;
     draw();
+    return isWaiting;
+  }
+
+  /** The first shown chunk takes over from the "captions not fetched" line of the panel. */
+  #endCaptionsNotFetchedStatus() {
+    if (!this.#isCaptionsNotFetchedShown) return;
+    this.#isCaptionsNotFetchedShown = false;
+    if (this.#stopStatusText === null) this.#onStatusChanged(null, { canRetry: false });
   }
 
   /** Opens the translator on the first batch that needs it, so a fully cached video sends nothing. */
@@ -2388,9 +3639,26 @@ class SubtitleSession {
       if (!this.#translator) this.#translator = await this.#createTranslator(this.#languageName);
       return await this.#translator.translateCues(cues);
     } catch (error) {
-      if (error instanceof ChatRateLimitedError) this.#rateLimitedUntilMs = error.retryAtMs;
+      this.#rememberRateLimit(error);
       throw error;
     }
+  }
+
+  /** Opens the transcript source on the first chunk that needs it, as #translateCues does. */
+  async #requestChunk(index, durationMs) {
+    try {
+      if (!this.#transcriptSource) {
+        this.#transcriptSource = await this.#createTranscriptSource(this.#languageName, durationMs);
+      }
+      return await this.#transcriptSource.requestChunk(index);
+    } catch (error) {
+      this.#rememberRateLimit(error);
+      throw error;
+    }
+  }
+
+  #rememberRateLimit(error) {
+    if (error instanceof ChatRateLimitedError) this.#rateLimitedUntilMs = error.retryAtMs;
   }
 
   #handlePumpStopped(reason) {
@@ -2398,15 +3666,16 @@ class SubtitleSession {
     let statusText;
     let canRetry = false;
     if (reason === 'rate-limited') {
-      statusText = rateLimitedText(this.#minutesUntilRateLimitEnds());
+      statusText = this.#texts.rateLimited(this.#minutesUntilRateLimitEnds());
       canRetry = true;
     } else {
-      statusText = STATUS_TEXT_BY_STOP_REASON[reason] ?? STATUS_TEXTS.repeatedFailures;
+      statusText = this.#statusTextByStopReason[reason] ?? this.#texts.repeatedFailures;
     }
     this.#reportStopStatus(statusText, canRetry);
   }
 
   #reportStopStatus(statusText, canRetry) {
+    this.#isCaptionsNotFetchedShown = false;
     this.#stopStatusText = statusText;
     this.#lastRenderedKey = null;
     this.#onStatusChanged(statusText, { canRetry });
@@ -2425,7 +3694,7 @@ class SubtitleSession {
       this.retry();
       return;
     }
-    const statusText = rateLimitedText(this.#minutesUntilRateLimitEnds());
+    const statusText = this.#texts.rateLimited(this.#minutesUntilRateLimitEnds());
     if (statusText !== this.#stopStatusText) this.#reportStopStatus(statusText, true);
   }
 
@@ -2448,12 +3717,24 @@ class SubtitleSession {
       // The cache is an optimisation only.
     }
   }
+
+  /** Saves every loaded chunk as one entry {chunks: {<index>: [{startMs, endMs, text}]}}. */
+  #saveChunks() {
+    if (this.#isStopped) return;
+    const entry = this.#chunkStore.toCacheEntry();
+    if (Object.keys(entry.chunks).length === 0) return;
+    try {
+      Promise.resolve(this.#cache.save(this.#cacheKey, entry)).catch(() => {});
+    } catch {
+      // The cache is an optimisation only.
+    }
+  }
 }
 return Object.freeze({ SubtitleSession: SubtitleSession });
 })();
 
 // Module: src/page/translation_cache.js
-const bundledModule23Exports = (function () {
+const bundledModule32Exports = (function () {
 const CACHE_INDEX_KEY = 'cacheIndex';
 const DEFAULT_MAX_TOTAL_BYTES = 4000000;
 
@@ -2461,11 +3742,29 @@ function isPlainObject(value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-/** A well-formed entry is an object whose `translations` is an object holding only strings. */
-function isWellFormedEntry(value) {
+/** A caption translation entry: `translations` is an object holding only strings. */
+function isTranslationsEntry(value) {
   return isPlainObject(value)
     && isPlainObject(value.translations)
     && Object.values(value.translations).every((text) => typeof text === 'string');
+}
+
+function isTimedLine(line) {
+  return isPlainObject(line) && Number.isFinite(line.startMs) && Number.isFinite(line.endMs)
+    && typeof line.text === 'string';
+}
+
+/** A chat transcript entry: `chunks` maps chunk indexes to lists of {startMs, endMs, text}. */
+function isChunksEntry(value) {
+  return isPlainObject(value)
+    && isPlainObject(value.chunks)
+    && Object.entries(value.chunks).every(
+      ([index, lines]) => /^\d+$/.test(index) && Array.isArray(lines) && lines.every(isTimedLine),
+    );
+}
+
+function isWellFormedEntry(value) {
+  return isTranslationsEntry(value) || isChunksEntry(value);
 }
 
 function isIndexItem(item) {
@@ -2492,7 +3791,7 @@ class TranslationCache {
 
   /**
    * @param {string} key
-   * @returns {Promise<{translations: Object<string, string>}|null>} null when missing, malformed or unreadable
+   * @returns {Promise<object|null>} a {translations} or {chunks} entry; null when missing, malformed or unreadable
    */
   async load(key) {
     try {
@@ -2506,7 +3805,7 @@ class TranslationCache {
   /**
    * Stores the entry, evicting the oldest ones until the total fits. Resolves even on failure.
    * @param {string} key
-   * @param {{translations: Object<string, string>}} entry
+   * @param {object} entry a {translations} or {chunks} entry
    * @returns {Promise<void>}
    */
   save(key, entry) {
@@ -2547,105 +3846,8 @@ class TranslationCache {
 return Object.freeze({ TranslationCache: TranslationCache });
 })();
 
-// Module: src/shared/json3_captions.js
-const bundledModule24Exports = (function () {
-/** A word is never shown as lasting longer than this before a pause. */
-const MAX_WORD_DURATION_MS = 1500;
-
-/**
- * @typedef {{text: string, startMs: number, endMs: number}} TimedWord
- */
-
-/**
- * Turns a YouTube json3 caption document into timed words.
- * Automatic captions carry per-word offsets (`tOffsetMs`); manual captions
- * carry one whole line per event, which becomes a single TimedWord.
- * @param {object} json3
- * @returns {TimedWord[]}
- */
-function timedWordsFromJson3(json3) {
-  const events = Array.isArray(json3?.events) ? json3.events : [];
-  const eventsWithText = events.filter(
-    (event) => Array.isArray(event?.segs) && Number.isFinite(event.tStartMs),
-  );
-  const hasWordOffsets = eventsWithText.some((event) =>
-    event.segs.some((seg) => typeof seg?.tOffsetMs === 'number'),
-  );
-  return hasWordOffsets ? wordsFromOffsets(eventsWithText) : wordsFromLines(eventsWithText);
-}
-
-function wordsFromOffsets(events) {
-  const words = [];
-  for (const event of events) {
-    for (const seg of event.segs) {
-      const text = typeof seg?.utf8 === 'string' ? seg.utf8.trim() : '';
-      if (!text) continue;
-      words.push({ text, startMs: event.tStartMs + (seg.tOffsetMs ?? 0), endMs: 0 });
-    }
-  }
-  words.forEach((word, index) => {
-    const nextStartMs = words[index + 1]?.startMs ?? Infinity;
-    word.endMs = Math.min(nextStartMs, word.startMs + MAX_WORD_DURATION_MS);
-  });
-  return words;
-}
-
-function wordsFromLines(events) {
-  const words = [];
-  for (const event of events) {
-    const text = event.segs
-      .map((seg) => (typeof seg?.utf8 === 'string' ? seg.utf8 : ''))
-      .join('')
-      .replace(/\s+/g, ' ')
-      .trim();
-    if (!text) continue;
-    words.push({ text, startMs: event.tStartMs, endMs: event.tStartMs + (event.dDurationMs ?? 0) });
-  }
-  return words;
-}
-return Object.freeze({ MAX_WORD_DURATION_MS: MAX_WORD_DURATION_MS, timedWordsFromJson3: timedWordsFromJson3 });
-})();
-
-// Module: src/page/youtube_captions_source.js
-const bundledModule25Exports = (function () {
-const { timedWordsFromJson3 } = bundledModule24Exports;
-const { mergePlayerRequestParameters } = bundledModule11Exports;
-class CaptionsUnavailableError extends Error {
-  constructor(message) {
-    super(message);
-    this.name = 'CaptionsUnavailableError';
-  }
-}
-
-/**
- * Requests the chosen track with the player's parameters and parses the words.
- * Error texts never contain the URL.
- * @param {object} options
- * @param {{baseUrl: string}} options.track
- * @param {string} options.playerRequestUrl
- * @param {typeof fetch} options.fetch
- * @returns {Promise<import('../shared/json3_captions.js').TimedWord[]>}
- */
-async function fetchCaptionWords({ track, playerRequestUrl, fetch }) {
-  const url = mergePlayerRequestParameters(track.baseUrl, playerRequestUrl);
-  const response = await fetch(url, { credentials: 'include' });
-  const body = await response.text();
-  if (!body.trim()) throw new CaptionsUnavailableError('YouTube returned an empty captions body');
-  let json3;
-  try {
-    json3 = JSON.parse(body);
-  } catch {
-    throw new CaptionsUnavailableError('YouTube returned captions that are not JSON');
-  }
-  const words = timedWordsFromJson3(json3);
-  if (!words.length) throw new CaptionsUnavailableError('YouTube captions contain no words');
-  return words;
-}
-return Object.freeze({ CaptionsUnavailableError: CaptionsUnavailableError, fetchCaptionWords: fetchCaptionWords });
-})();
-
 // Module: src/shared/video_url.js
-const bundledModule26Exports = (function () {
+const bundledModule33Exports = (function () {
 const VIDEO_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/;
 
 /**
@@ -2671,8 +3873,8 @@ return Object.freeze({ watchVideoIdFromUrl: watchVideoIdFromUrl });
 })();
 
 // Module: src/page/youtube_page_watcher.js
-const bundledModule27Exports = (function () {
-const { watchVideoIdFromUrl } = bundledModule26Exports;
+const bundledModule34Exports = (function () {
+const { watchVideoIdFromUrl } = bundledModule33Exports;
 const NAVIGATION_FINISHED_EVENT = 'yt-navigate-finish';
 const AD_SHOWING_CLASS = 'ad-showing';
 const PLAYER_SELECTOR = '#movie_player';
@@ -2740,7 +3942,7 @@ return Object.freeze({ watchYouTubePage: watchYouTubePage });
 })();
 
 // Module: src/page/youtube_player.js
-const bundledModule28Exports = (function () {
+const bundledModule35Exports = (function () {
 /** @returns {HTMLElement|null} */
 function findPlayerElement(document) {
   return document.querySelector('#movie_player');
@@ -2776,7 +3978,7 @@ return Object.freeze({ findPlayerElement: findPlayerElement, readCaptionTracks: 
 })();
 
 // Module: src/shared/caption_track_choice.js
-const bundledModule29Exports = (function () {
+const bundledModule36Exports = (function () {
 /**
  * @typedef {{languageCode: string, kind: 'asr'|'manual', baseUrl: string, name?: string}} CaptionTrackInfo
  */
@@ -2801,25 +4003,61 @@ function chooseCaptionTrack(tracks) {
 return Object.freeze({ chooseCaptionTrack: chooseCaptionTrack });
 })();
 
+// Module: src/shared/video_playback.js
+const bundledModule37Exports = (function () {
+// Safe pause/resume of the page's <video> on behalf of one subtitle session. No pause policy
+// lives here: the session decides when; this only refuses calls that would hit the wrong state.
+
+/**
+ * @param {{findVideoElement: () => (HTMLVideoElement|null|undefined),
+ *   readShownVideoId: () => string,
+ *   sessionVideoId: string}} options
+ *   readShownVideoId: id of the video the player shows now; calls of a session whose video is
+ *   no longer shown (the session was stopped by navigation) must not touch the player.
+ * @returns {{pause: () => void, play: () => void}}
+ */
+function createVideoPlayback({ findVideoElement, readShownVideoId, sessionVideoId }) {
+  const findVideoOfSession = () =>
+    readShownVideoId() === sessionVideoId ? (findVideoElement() ?? null) : null;
+  return {
+    pause() {
+      findVideoOfSession()?.pause();
+    },
+    play() {
+      const video = findVideoOfSession();
+      // An ended video would restart from the beginning on play().
+      if (!video || !video.paused || video.ended) return;
+      // The browser may refuse to play; that is not an error of ours.
+      Promise.resolve(video.play()).catch(() => {});
+    },
+  };
+}
+return Object.freeze({ createVideoPlayback: createVideoPlayback });
+})();
+
 // Module: src/page/main.js (entry)
 (function () {
 const { openAskChat } = bundledModule2Exports;
 const { ChatRequestGate } = bundledModule3Exports;
-const { ChatTranslator } = bundledModule6Exports;
-const { createExtensionStorage } = bundledModule8Exports;
-const { OverlayView } = bundledModule10Exports;
-const { createSerialCaptionCapture } = bundledModule11Exports;
-const { PlayerControls } = bundledModule14Exports;
-const { SettingsStore, createSettingsSaver, loadSettingsWithRetries } = bundledModule15Exports;
-const { SubtitleSession } = bundledModule22Exports;
-const { TranslationCache } = bundledModule23Exports;
-const { CaptionsUnavailableError, fetchCaptionWords } = bundledModule25Exports;
-const { watchYouTubePage } = bundledModule27Exports;
-const { findPlayerElement, readCaptionTracks, readVideoDetails } = bundledModule28Exports;
-const { captionSourceKey } = bundledModule17Exports;
-const { chooseCaptionTrack } = bundledModule29Exports;
-const { rememberTypedLanguage } = bundledModule13Exports;
-const { DEFAULT_CUE_RULES, buildCues } = bundledModule16Exports;
+const { ChatTranscriptSource } = bundledModule7Exports;
+const { ChatTranslator } = bundledModule9Exports;
+const { createExtensionStorage } = bundledModule11Exports;
+const { hideNativeCaptions, showNativeCaptions } = bundledModule12Exports;
+const { OverlayView } = bundledModule15Exports;
+const { createSerialCaptionCapture } = bundledModule16Exports;
+const { PlayerControls } = bundledModule19Exports;
+const { SettingsStore, createSettingsSaver, loadSettingsWithRetries } = bundledModule20Exports;
+const { SubtitleSession } = bundledModule31Exports;
+const { TranslationCache } = bundledModule32Exports;
+const { CaptionsUnavailableError, fetchCaptionWords, NoCaptionTracksError } = bundledModule22Exports;
+const { watchYouTubePage } = bundledModule34Exports;
+const { findPlayerElement, readCaptionTracks, readVideoDetails } = bundledModule35Exports;
+const { captionSourceKey } = bundledModule24Exports;
+const { chooseCaptionTrack } = bundledModule36Exports;
+const { rememberTypedLanguage } = bundledModule18Exports;
+const { isRightToLeft, pickUiLanguage, uiTexts } = bundledModule14Exports;
+const { createVideoPlayback } = bundledModule37Exports;
+const { DEFAULT_CUE_RULES, buildCues } = bundledModule23Exports;
 // Entry of the page bundle (MAIN world): builds every component once per page and wires them.
 // Tokens, chat commands and the authorization header never leave this world and are never
 // logged; logs carry no URL, token or video id.
@@ -2886,7 +4124,7 @@ async function waitForPlayerOfVideo({ document, videoId, isStillWanted }) {
  */
 async function loadYouTubeCues({ window, playerElement, videoId, captureSerially }) {
   const track = chooseCaptionTrack(readCaptionTracks(playerElement));
-  if (!track) throw new CaptionsUnavailableError('The video has no usable caption track');
+  if (!track) throw new NoCaptionTracksError('The video has no usable caption track');
   const playerRequestUrl = await captureSerially({
     playerElement,
     expectedVideoId: videoId,
@@ -2900,6 +4138,9 @@ async function loadYouTubeCues({ window, playerElement, videoId, captureSerially
 
 /** Builds the page-lifetime components and reacts to navigation, ads and the player panel. */
 function startLingotubePage({ window, document }) {
+  const uiLanguage = pickUiLanguage(window.navigator?.language);
+  const texts = uiTexts(uiLanguage);
+  const rtl = isRightToLeft(uiLanguage);
   const extensionStorage = createExtensionStorage({ window });
   const settingsStore = new SettingsStore(extensionStorage);
   // One cache and one gate for the page lifetime, shared by every session.
@@ -2920,6 +4161,8 @@ function startLingotubePage({ window, document }) {
   let playerElementWithControls = null;
   /** @type {{session: SubtitleSession, overlayView: OverlayView}|null} */
   let activeSubtitles = null;
+  /** The player whose native captions the overlay session hides; shown again when the session stops. */
+  let hiddenNativeCaptionsPlayer = null;
   /** Cues of one video, kept so a language change does not capture the player request again. */
   let cuesLoadOfVideo = null;
 
@@ -2952,8 +4195,9 @@ function startLingotubePage({ window, document }) {
     return load.promise;
   }
 
-  async function createTranslator(videoId, languageName) {
-    const chatSession = await openAskChat({
+  /** Opens the Ask chat of one video; shared by the translator and the transcript fallback. */
+  function openChatSession(videoId) {
+    return openAskChat({
       videoId,
       context: readYouTubeConfig('INNERTUBE_CONTEXT'),
       sessionIndex: Number(readYouTubeConfig('SESSION_INDEX')) || 0,
@@ -2963,6 +4207,10 @@ function startLingotubePage({ window, document }) {
       now: () => Date.now(),
       sha1Hex,
     });
+  }
+
+  async function createTranslator(videoId, languageName) {
+    const chatSession = await openChatSession(videoId);
     return new ChatTranslator({ chatSession, languageName });
   }
 
@@ -2972,6 +4220,10 @@ function startLingotubePage({ window, document }) {
       activeSubtitles.session.stop();
       activeSubtitles.overlayView.destroy();
       activeSubtitles = null;
+    }
+    if (hiddenNativeCaptionsPlayer) {
+      showNativeCaptions(hiddenNativeCaptionsPlayer);
+      hiddenNativeCaptionsPlayer = null;
     }
     showSessionStatus(null, false);
   }
@@ -2989,6 +4241,8 @@ function startLingotubePage({ window, document }) {
     });
     if (!playerElement || generation !== subtitlesGeneration) return;
     if (readVideoDetails(playerElement).isLive) return;
+    hideNativeCaptions(playerElement);
+    hiddenNativeCaptionsPlayer = playerElement;
 
     const findVideoElement = () => playerElement.querySelector('video');
     const overlayView = new OverlayView({
@@ -2996,17 +4250,34 @@ function startLingotubePage({ window, document }) {
       containerElement: playerElement,
       position: settings.overlayPosition,
       textScale: settings.textScale,
+      texts,
+      isRightToLeft: rtl,
       onPositionChanged: (position) => changeSettings({ overlayPosition: position }),
+    });
+    const videoPlayback = createVideoPlayback({
+      findVideoElement,
+      readShownVideoId: () => readVideoDetails(playerElement).videoId,
+      sessionVideoId: videoId,
     });
     const session = new SubtitleSession({
       videoId,
       language: settings.language,
       loadCues: () => loadCuesOfVideo(videoId, playerElement),
       createTranslator: (languageName) => createTranslator(videoId, languageName),
+      createTranscriptSource: async (languageName, durationMs) => new ChatTranscriptSource({
+        chatSession: await openChatSession(videoId),
+        languageName,
+        durationMs,
+      }),
       cache: translationCache,
+      texts,
       overlayView,
       getPositionMs: () => (findVideoElement()?.currentTime ?? 0) * 1000,
+      getDurationMs: () => (findVideoElement()?.duration || 0) * 1000,
       isPaused: () => findVideoElement()?.paused ?? true,
+      pauseVideo: videoPlayback.pause,
+      playVideo: videoPlayback.play,
+      isWaitForSubtitlesEnabled: () => settings.waitForSubtitles !== false,
       setTimer: (callback, intervalMs) => setInterval(callback, intervalMs),
       clearTimer: (handle) => clearInterval(handle),
       onStatusChanged: (statusText, { canRetry }) => showSessionStatus(statusText, canRetry),
@@ -3025,6 +4296,8 @@ function startLingotubePage({ window, document }) {
       document,
       playerElement,
       settings,
+      texts,
+      isRightToLeft: rtl,
       onEnabledChanged: (isEnabled) => {
         changeSettings({ enabled: isEnabled });
         if (isEnabled) startSubtitles().catch(reportUnexpectedError);
@@ -3044,6 +4317,7 @@ function startLingotubePage({ window, document }) {
         changeSettings({ textScale: scale });
         activeSubtitles?.overlayView.setTextScale(scale);
       },
+      onWaitForSubtitlesChanged: (isEnabled) => changeSettings({ waitForSubtitles: isEnabled }),
       onRetryRequested: () => {
         chatRequestGate.clearCooldown();
         activeSubtitles?.session.retry();

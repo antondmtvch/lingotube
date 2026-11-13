@@ -8,6 +8,14 @@ export class CaptionsUnavailableError extends Error {
   }
 }
 
+/** The video has no usable caption track at all (not: a track whose text could not be fetched). */
+export class NoCaptionTracksError extends CaptionsUnavailableError {
+  constructor(message) {
+    super(message);
+    this.name = 'NoCaptionTracksError';
+  }
+}
+
 /**
  * Requests the chosen track with the player's parameters and parses the words.
  * Error texts never contain the URL.

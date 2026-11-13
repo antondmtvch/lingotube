@@ -3,11 +3,10 @@ import {
   clampOverlayPosition,
   positionFromDrag,
 } from '../shared/overlay_position.js';
+import { uiTexts } from '../shared/ui_strings.js';
 
 /** A pointer movement shorter than this many pixels is a click, not a drag. */
 const DRAG_THRESHOLD_PX = 4;
-
-const APPROXIMATE_TIMING_LABEL_TEXT = 'Время приблизительное';
 
 /**
  * A draggable subtitle box over any element that wraps a video.
@@ -29,20 +28,22 @@ export class OverlayView {
   /**
    * @param {{document: Document, containerElement: HTMLElement,
    *   position: import('../shared/overlay_position.js').OverlayPosition|null,
-   *   textScale: number, onPositionChanged: (position: object) => void}} options
+   *   textScale: number, onPositionChanged: (position: object) => void,
+   *   texts?: Record<string, any>, isRightToLeft?: boolean}} options
    */
-  constructor({ document, containerElement, position, textScale, onPositionChanged }) {
+  constructor({ document, containerElement, position, textScale, onPositionChanged, texts = uiTexts('ru'), isRightToLeft = false }) {
     this.#container = containerElement;
     this.#onPositionChanged = onPositionChanged;
     this.#position = position ?? { ...DEFAULT_OVERLAY_POSITION };
 
     this.#boxElement = document.createElement('div');
     this.#boxElement.className = 'lingotube-overlay';
+    if (isRightToLeft) this.#boxElement.dir = 'rtl';
     this.#textElement = document.createElement('div');
     this.#textElement.className = 'lingotube-overlay-text';
     this.#labelElement = document.createElement('div');
     this.#labelElement.className = 'lingotube-overlay-label';
-    this.#labelElement.textContent = APPROXIMATE_TIMING_LABEL_TEXT;
+    this.#labelElement.textContent = texts.approximateTiming;
     this.#labelElement.hidden = true;
     this.#boxElement.append(this.#textElement, this.#labelElement);
     this.#boxElement.hidden = true;

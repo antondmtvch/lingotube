@@ -46,13 +46,14 @@ export const LANGUAGE_CHOICES = [
 /**
  * Items of the language dropdown: typed names first, then the listed languages, then "other".
  * @param {string[]} customLanguageNames
+ * @param {string} [otherLanguageLabel] label of the "other language" item
  * @returns {{value: string, label: string}[]}
  */
-export function buildLanguageMenu(customLanguageNames) {
+export function buildLanguageMenu(customLanguageNames, otherLanguageLabel = 'Другой язык…') {
   return [
     ...customLanguageNames.map((name) => ({ value: `${CUSTOM_VALUE_PREFIX}${name}`, label: name })),
     ...LANGUAGE_CHOICES.map((choice) => ({ value: choice.code, label: choice.nativeName })),
-    { value: OTHER_LANGUAGE_VALUE, label: 'Другой язык…' },
+    { value: OTHER_LANGUAGE_VALUE, label: otherLanguageLabel },
   ];
 }
 

@@ -129,7 +129,21 @@ test('capture ignores requests without pot and forces one with the button, then 
   const url = await capturePlayerCaptionRequestUrl(env);
   assert.match(url, /pot=NEW/);
   assert.equal(env.button.state, false);
-  assert.equal(env.classes.size, 0);
+});
+
+test('capture does not change the native captions class, on success or on timeout', async () => {
+  const succeeded = createFakeEnvironment({});
+  await capturePlayerCaptionRequestUrl(succeeded);
+  assert.equal(succeeded.classes.size, 0);
+
+  const timedOut = createFakeEnvironment({ requestOnClick: false });
+  await capturePlayerCaptionRequestUrl({ ...timedOut, timeoutMs: 300 });
+  assert.equal(timedOut.classes.size, 0);
+
+  const alreadyHidden = createFakeEnvironment({});
+  alreadyHidden.classes.add('lingotube-hide-native-captions');
+  await capturePlayerCaptionRequestUrl(alreadyHidden);
+  assert.deepEqual([...alreadyHidden.classes], ['lingotube-hide-native-captions']);
 });
 
 test('capture turns subtitles off and on again when they were on, ending on', async () => {
@@ -144,7 +158,6 @@ test('capture returns null and restores the button when no request comes', async
   const env = createFakeEnvironment({ requestOnClick: false });
   assert.equal(await capturePlayerCaptionRequestUrl({ ...env, timeoutMs: 300 }), null);
   assert.equal(env.button.state, false);
-  assert.equal(env.classes.size, 0);
 });
 
 test('capture ignores a buffered pot entry of another video and uses the button', async () => {

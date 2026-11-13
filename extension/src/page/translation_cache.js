@@ -5,11 +5,29 @@ function isPlainObject(value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-/** A well-formed entry is an object whose `translations` is an object holding only strings. */
-function isWellFormedEntry(value) {
+/** A caption translation entry: `translations` is an object holding only strings. */
+function isTranslationsEntry(value) {
   return isPlainObject(value)
     && isPlainObject(value.translations)
     && Object.values(value.translations).every((text) => typeof text === 'string');
+}
+
+function isTimedLine(line) {
+  return isPlainObject(line) && Number.isFinite(line.startMs) && Number.isFinite(line.endMs)
+    && typeof line.text === 'string';
+}
+
+/** A chat transcript entry: `chunks` maps chunk indexes to lists of {startMs, endMs, text}. */
+function isChunksEntry(value) {
+  return isPlainObject(value)
+    && isPlainObject(value.chunks)
+    && Object.entries(value.chunks).every(
+      ([index, lines]) => /^\d+$/.test(index) && Array.isArray(lines) && lines.every(isTimedLine),
+    );
+}
+
+function isWellFormedEntry(value) {
+  return isTranslationsEntry(value) || isChunksEntry(value);
 }
 
 function isIndexItem(item) {
@@ -36,7 +54,7 @@ export class TranslationCache {
 
   /**
    * @param {string} key
-   * @returns {Promise<{translations: Object<string, string>}|null>} null when missing, malformed or unreadable
+   * @returns {Promise<object|null>} a {translations} or {chunks} entry; null when missing, malformed or unreadable
    */
   async load(key) {
     try {
@@ -50,7 +68,7 @@ export class TranslationCache {
   /**
    * Stores the entry, evicting the oldest ones until the total fits. Resolves even on failure.
    * @param {string} key
-   * @param {{translations: Object<string, string>}} entry
+   * @param {object} entry a {translations} or {chunks} entry
    * @returns {Promise<void>}
    */
   save(key, entry) {

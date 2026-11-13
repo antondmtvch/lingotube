@@ -55,3 +55,10 @@ test('promptLanguageName never returns an empty name', () => {
   assert.equal(promptLanguageName({ code: null, name: '   ' }), 'Russian');
   assert.equal(promptLanguageName({ code: null, name: '' }), 'Russian');
 });
+
+test('buildLanguageMenu takes the label of the "other language" item from the argument', () => {
+  const otherItem = buildLanguageMenu([], 'Another language…').find((item) => item.value === OTHER_LANGUAGE_VALUE);
+  assert.equal(otherItem.label, 'Another language…');
+  const defaultItem = buildLanguageMenu([]).find((item) => item.value === OTHER_LANGUAGE_VALUE);
+  assert.equal(defaultItem.label, 'Другой язык…');
+});

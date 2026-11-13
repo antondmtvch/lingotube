@@ -3,6 +3,7 @@ import {
   buildLanguageMenu,
   targetLanguageFromMenuValue,
 } from '../shared/language_choices.js';
+import { uiTexts } from '../shared/ui_strings.js';
 import {
   customNamesForMenu,
   languageFromTypedText,
@@ -22,6 +23,8 @@ export class PlayerControls {
   #document;
   #playerElement;
   #settings;
+  #texts;
+  #isRightToLeft;
   #callbacks;
   #buttonElement;
   #panelElement;
@@ -29,6 +32,7 @@ export class PlayerControls {
   #otherLanguageRow;
   #otherLanguageInput;
   #toggleEnabledButton;
+  #waitForSubtitlesButton;
   #textScaleValueElement;
   #statusLineElement;
   #retryButton;
@@ -41,13 +45,17 @@ export class PlayerControls {
    *   onEnabledChanged: (isEnabled: boolean) => void,
    *   onLanguageChanged: (language: import('../shared/language_choices.js').TargetLanguage) => void,
    *   onTextScaleChanged: (scale: number) => void,
-   *   onRetryRequested: () => void}} options
+   *   onWaitForSubtitlesChanged: (isEnabled: boolean) => void,
+   *   onRetryRequested: () => void,
+   *   texts?: Record<string, any>, isRightToLeft?: boolean}} options
    */
-  constructor({ document, playerElement, settings, onEnabledChanged, onLanguageChanged, onTextScaleChanged, onRetryRequested }) {
+  constructor({ document, playerElement, settings, onEnabledChanged, onLanguageChanged, onTextScaleChanged, onWaitForSubtitlesChanged, onRetryRequested, texts = uiTexts('ru'), isRightToLeft = false }) {
     this.#document = document;
     this.#playerElement = playerElement;
     this.#settings = settings;
-    this.#callbacks = { onEnabledChanged, onLanguageChanged, onTextScaleChanged, onRetryRequested };
+    this.#texts = texts;
+    this.#isRightToLeft = isRightToLeft;
+    this.#callbacks = { onEnabledChanged, onLanguageChanged, onTextScaleChanged, onWaitForSubtitlesChanged, onRetryRequested };
 
     this.#buildButton();
     this.#buildPanel();
@@ -72,9 +80,12 @@ export class PlayerControls {
   applySettings(settings) {
     this.#settings = settings;
     this.#renderLanguageMenu();
-    this.#toggleEnabledButton.textContent = settings.enabled ? 'Выключить субтитры' : 'Включить субтитры';
+    this.#toggleEnabledButton.textContent = settings.enabled ? this.#texts.toggleOff : this.#texts.toggleOn;
     this.#buttonElement.classList.toggle('lingotube-player-button-pressed', settings.enabled);
     this.#buttonElement.setAttribute('aria-pressed', String(settings.enabled));
+    const isWaiting = settings.waitForSubtitles !== false;
+    this.#waitForSubtitlesButton.textContent = isWaiting ? this.#texts.waitOn : this.#texts.waitOff;
+    this.#waitForSubtitlesButton.setAttribute('aria-pressed', String(isWaiting));
     this.#textScaleValueElement.textContent = `${Math.round(settings.textScale * 100)}%`;
   }
 
@@ -111,11 +122,12 @@ export class PlayerControls {
     panel.setAttribute('role', 'dialog');
     panel.setAttribute('aria-label', 'lingotube');
     panel.hidden = true;
+    if (this.#isRightToLeft) panel.dir = 'rtl';
 
     const title = this.#createElement('div', 'lingotube-panel-title', 'lingotube');
 
     const languageRow = this.#createElement('label', 'lingotube-panel-row');
-    languageRow.append(this.#createElement('span', 'lingotube-panel-label', 'Язык перевода:'));
+    languageRow.append(this.#createElement('span', 'lingotube-panel-label', this.#texts.targetLanguageLabel));
     this.#languageSelect = this.#createElement('select', 'lingotube-language-select');
     this.#languageSelect.id = 'lingotube-language-select';
     this.#languageSelect.addEventListener('change', this.#handleLanguageSelected);
@@ -126,11 +138,11 @@ export class PlayerControls {
     this.#otherLanguageInput = this.#createElement('input', 'lingotube-other-language-input');
     this.#otherLanguageInput.type = 'text';
     this.#otherLanguageInput.setAttribute('maxlength', String(MAX_TYPED_LANGUAGE_LENGTH));
-    this.#otherLanguageInput.placeholder = 'Название языка';
+    this.#otherLanguageInput.placeholder = this.#texts.otherLanguagePlaceholder;
     this.#otherLanguageInput.addEventListener('keydown', (event) => {
       if (event.key === 'Enter') this.#confirmTypedLanguage();
     });
-    const confirmButton = this.#createElement('button', 'lingotube-panel-button', 'Готово');
+    const confirmButton = this.#createElement('button', 'lingotube-panel-button', this.#texts.done);
     confirmButton.addEventListener('click', () => this.#confirmTypedLanguage());
     this.#otherLanguageRow.append(this.#otherLanguageInput, confirmButton);
 
@@ -139,16 +151,21 @@ export class PlayerControls {
       this.#callbacks.onEnabledChanged(!this.#settings.enabled);
     });
 
+    this.#waitForSubtitlesButton = this.#createElement('button', 'lingotube-panel-button lingotube-wait-button');
+    this.#waitForSubtitlesButton.addEventListener('click', () => {
+      this.#callbacks.onWaitForSubtitlesChanged(this.#settings.waitForSubtitles === false);
+    });
+
     const scaleRow = this.#createElement('div', 'lingotube-panel-row');
     const smallerButton = this.#createElement('button', 'lingotube-panel-button lingotube-scale-button', '−');
-    smallerButton.setAttribute('aria-label', 'Уменьшить текст');
+    smallerButton.setAttribute('aria-label', this.#texts.smallerText);
     smallerButton.addEventListener('click', () => this.#changeTextScale(-1));
     const largerButton = this.#createElement('button', 'lingotube-panel-button lingotube-scale-button', '+');
-    largerButton.setAttribute('aria-label', 'Увеличить текст');
+    largerButton.setAttribute('aria-label', this.#texts.largerText);
     largerButton.addEventListener('click', () => this.#changeTextScale(1));
     this.#textScaleValueElement = this.#createElement('span', 'lingotube-scale-value');
     scaleRow.append(
-      this.#createElement('span', 'lingotube-panel-label', 'Размер текста:'),
+      this.#createElement('span', 'lingotube-panel-label', this.#texts.textSizeLabel),
       smallerButton,
       this.#textScaleValueElement,
       largerButton,
@@ -158,7 +175,7 @@ export class PlayerControls {
     this.#statusLineElement.hidden = true;
     this.#statusLineElement.setAttribute('role', 'status');
 
-    this.#retryButton = this.#createElement('button', 'lingotube-panel-button lingotube-retry-button', 'Повторить сейчас');
+    this.#retryButton = this.#createElement('button', 'lingotube-panel-button lingotube-retry-button', this.#texts.retryNow);
     this.#retryButton.hidden = true;
     this.#retryButton.addEventListener('click', () => this.#callbacks.onRetryRequested());
 
@@ -168,6 +185,7 @@ export class PlayerControls {
       this.#otherLanguageRow,
       this.#toggleEnabledButton,
       scaleRow,
+      this.#waitForSubtitlesButton,
       this.#statusLineElement,
       this.#retryButton,
     );
@@ -204,7 +222,7 @@ export class PlayerControls {
 
   #renderLanguageMenu() {
     const language = this.#settings.language;
-    const items = buildLanguageMenu(customNamesForMenu(this.#settings.customLanguageNames, language));
+    const items = buildLanguageMenu(customNamesForMenu(this.#settings.customLanguageNames, language), this.#texts.otherLanguageOption);
     this.#languageSelect.replaceChildren();
     for (const item of items) {
       const option = this.#document.createElement('option');

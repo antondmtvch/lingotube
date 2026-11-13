@@ -1,7 +1,6 @@
 // The caption URL and its `pot` token never leave the MAIN world and are never logged.
 
 const YOUTUBE_ORIGIN = 'https://www.youtube.com';
-const PLAYER_CLASS_HIDING_NATIVE_CAPTIONS = 'lingotube-hide-native-captions';
 const POLL_INTERVAL_MS = 100;
 const GRACE_PERIOD_MS = 300;
 const BUTTON_STATE_SETTLE_MS = 300;
@@ -83,8 +82,7 @@ export async function activateSubtitleButton(button, sleep) {
 
 /**
  * Finds the player's caption request in the resource log, provoking one with
- * the subtitles button if there is none. Native captions are hidden by CSS
- * meanwhile, and the button is returned to its original state.
+ * the subtitles button if there is none. The button is returned to its original state.
  * Two captures must never run at once on the same button: use createSerialCaptionCapture.
  * @param {object} options
  * @param {Element} options.playerElement the visible player; its own subtitles button is the one clicked
@@ -115,7 +113,6 @@ export async function capturePlayerCaptionRequestUrl({
     }
   };
 
-  const player = playerElement;
   const button = playerElement?.querySelector('.ytp-subtitles-button');
   const wasOn = button?.getAttribute('aria-pressed') === 'true';
   let buttonUsed = false;
@@ -123,7 +120,6 @@ export async function capturePlayerCaptionRequestUrl({
     await waitForRequest(GRACE_PERIOD_MS);
     if (!capturedUrl && button) {
       buttonUsed = true;
-      player?.classList.add(PLAYER_CLASS_HIDING_NATIVE_CAPTIONS);
       await activateSubtitleButton(button, sleep);
       if (wasOn) await activateSubtitleButton(button, sleep);
       await waitForRequest(timeoutMs);
@@ -134,7 +130,6 @@ export async function capturePlayerCaptionRequestUrl({
       const isOnNow = button.getAttribute('aria-pressed') === 'true';
       if (isOnNow !== wasOn) await activateSubtitleButton(button, sleep);
       await sleep(RESTORE_PAUSE_MS);
-      player?.classList.remove(PLAYER_CLASS_HIDING_NATIVE_CAPTIONS);
     }
   }
   return capturedUrl;

@@ -4,20 +4,24 @@
 
 import { openAskChat } from './ask_chat_client.js';
 import { ChatRequestGate } from './chat_request_gate.js';
+import { ChatTranscriptSource } from './chat_transcript_source.js';
 import { ChatTranslator } from './chat_translator.js';
 import { createExtensionStorage } from './extension_storage.js';
+import { hideNativeCaptions, showNativeCaptions } from './native_captions.js';
 import { OverlayView } from './overlay_view.js';
 import { createSerialCaptionCapture } from './player_caption_request.js';
 import { PlayerControls } from './player_controls.js';
 import { SettingsStore, createSettingsSaver, loadSettingsWithRetries } from './settings_store.js';
 import { SubtitleSession } from './subtitle_session.js';
 import { TranslationCache } from './translation_cache.js';
-import { CaptionsUnavailableError, fetchCaptionWords } from './youtube_captions_source.js';
+import { CaptionsUnavailableError, fetchCaptionWords, NoCaptionTracksError } from './youtube_captions_source.js';
 import { watchYouTubePage } from './youtube_page_watcher.js';
 import { findPlayerElement, readCaptionTracks, readVideoDetails } from './youtube_player.js';
 import { captionSourceKey } from '../shared/cache_key.js';
 import { chooseCaptionTrack } from '../shared/caption_track_choice.js';
 import { rememberTypedLanguage } from '../shared/player_panel_logic.js';
+import { isRightToLeft, pickUiLanguage, uiTexts } from '../shared/ui_strings.js';
+import { createVideoPlayback } from '../shared/video_playback.js';
 import { DEFAULT_CUE_RULES, buildCues } from '../shared/sentence_cues.js';
 
 const PLAYER_POLL_INTERVAL_MS = 250;
@@ -81,7 +85,7 @@ async function waitForPlayerOfVideo({ document, videoId, isStillWanted }) {
  */
 async function loadYouTubeCues({ window, playerElement, videoId, captureSerially }) {
   const track = chooseCaptionTrack(readCaptionTracks(playerElement));
-  if (!track) throw new CaptionsUnavailableError('The video has no usable caption track');
+  if (!track) throw new NoCaptionTracksError('The video has no usable caption track');
   const playerRequestUrl = await captureSerially({
     playerElement,
     expectedVideoId: videoId,
@@ -95,6 +99,9 @@ async function loadYouTubeCues({ window, playerElement, videoId, captureSerially
 
 /** Builds the page-lifetime components and reacts to navigation, ads and the player panel. */
 function startLingotubePage({ window, document }) {
+  const uiLanguage = pickUiLanguage(window.navigator?.language);
+  const texts = uiTexts(uiLanguage);
+  const rtl = isRightToLeft(uiLanguage);
   const extensionStorage = createExtensionStorage({ window });
   const settingsStore = new SettingsStore(extensionStorage);
   // One cache and one gate for the page lifetime, shared by every session.
@@ -115,6 +122,8 @@ function startLingotubePage({ window, document }) {
   let playerElementWithControls = null;
   /** @type {{session: SubtitleSession, overlayView: OverlayView}|null} */
   let activeSubtitles = null;
+  /** The player whose native captions the overlay session hides; shown again when the session stops. */
+  let hiddenNativeCaptionsPlayer = null;
   /** Cues of one video, kept so a language change does not capture the player request again. */
   let cuesLoadOfVideo = null;
 
@@ -147,8 +156,9 @@ function startLingotubePage({ window, document }) {
     return load.promise;
   }
 
-  async function createTranslator(videoId, languageName) {
-    const chatSession = await openAskChat({
+  /** Opens the Ask chat of one video; shared by the translator and the transcript fallback. */
+  function openChatSession(videoId) {
+    return openAskChat({
       videoId,
       context: readYouTubeConfig('INNERTUBE_CONTEXT'),
       sessionIndex: Number(readYouTubeConfig('SESSION_INDEX')) || 0,
@@ -158,6 +168,10 @@ function startLingotubePage({ window, document }) {
       now: () => Date.now(),
       sha1Hex,
     });
+  }
+
+  async function createTranslator(videoId, languageName) {
+    const chatSession = await openChatSession(videoId);
     return new ChatTranslator({ chatSession, languageName });
   }
 
@@ -167,6 +181,10 @@ function startLingotubePage({ window, document }) {
       activeSubtitles.session.stop();
       activeSubtitles.overlayView.destroy();
       activeSubtitles = null;
+    }
+    if (hiddenNativeCaptionsPlayer) {
+      showNativeCaptions(hiddenNativeCaptionsPlayer);
+      hiddenNativeCaptionsPlayer = null;
     }
     showSessionStatus(null, false);
   }
@@ -184,6 +202,8 @@ function startLingotubePage({ window, document }) {
     });
     if (!playerElement || generation !== subtitlesGeneration) return;
     if (readVideoDetails(playerElement).isLive) return;
+    hideNativeCaptions(playerElement);
+    hiddenNativeCaptionsPlayer = playerElement;
 
     const findVideoElement = () => playerElement.querySelector('video');
     const overlayView = new OverlayView({
@@ -191,17 +211,34 @@ function startLingotubePage({ window, document }) {
       containerElement: playerElement,
       position: settings.overlayPosition,
       textScale: settings.textScale,
+      texts,
+      isRightToLeft: rtl,
       onPositionChanged: (position) => changeSettings({ overlayPosition: position }),
+    });
+    const videoPlayback = createVideoPlayback({
+      findVideoElement,
+      readShownVideoId: () => readVideoDetails(playerElement).videoId,
+      sessionVideoId: videoId,
     });
     const session = new SubtitleSession({
       videoId,
       language: settings.language,
       loadCues: () => loadCuesOfVideo(videoId, playerElement),
       createTranslator: (languageName) => createTranslator(videoId, languageName),
+      createTranscriptSource: async (languageName, durationMs) => new ChatTranscriptSource({
+        chatSession: await openChatSession(videoId),
+        languageName,
+        durationMs,
+      }),
       cache: translationCache,
+      texts,
       overlayView,
       getPositionMs: () => (findVideoElement()?.currentTime ?? 0) * 1000,
+      getDurationMs: () => (findVideoElement()?.duration || 0) * 1000,
       isPaused: () => findVideoElement()?.paused ?? true,
+      pauseVideo: videoPlayback.pause,
+      playVideo: videoPlayback.play,
+      isWaitForSubtitlesEnabled: () => settings.waitForSubtitles !== false,
       setTimer: (callback, intervalMs) => setInterval(callback, intervalMs),
       clearTimer: (handle) => clearInterval(handle),
       onStatusChanged: (statusText, { canRetry }) => showSessionStatus(statusText, canRetry),
@@ -220,6 +257,8 @@ function startLingotubePage({ window, document }) {
       document,
       playerElement,
       settings,
+      texts,
+      isRightToLeft: rtl,
       onEnabledChanged: (isEnabled) => {
         changeSettings({ enabled: isEnabled });
         if (isEnabled) startSubtitles().catch(reportUnexpectedError);
@@ -239,6 +278,7 @@ function startLingotubePage({ window, document }) {
         changeSettings({ textScale: scale });
         activeSubtitles?.overlayView.setTextScale(scale);
       },
+      onWaitForSubtitlesChanged: (isEnabled) => changeSettings({ waitForSubtitles: isEnabled }),
       onRetryRequested: () => {
         chatRequestGate.clearCooldown();
         activeSubtitles?.session.retry();

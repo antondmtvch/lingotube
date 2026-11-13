@@ -16,7 +16,19 @@ function fakeStorage(initial = {}) {
 test('defaults are as documented', () => {
   assert.deepEqual(DEFAULT_SETTINGS, {
     enabled: false, language: { code: 'ru', name: 'Russian' }, customLanguageNames: [], textScale: 1, overlayPosition: null,
+    waitForSubtitles: true,
   });
+});
+
+test('settings: waitForSubtitles defaults to true', async () => {
+  assert.equal(DEFAULT_SETTINGS.waitForSubtitles, true);
+  assert.equal((await new SettingsStore(fakeStorage()).load()).waitForSubtitles, true);
+});
+
+test('settings: waitForSubtitles keeps a stored boolean and replaces a non-boolean with true', async () => {
+  const load = (stored) => new SettingsStore(fakeStorage({ settings: stored })).load();
+  assert.equal((await load({ waitForSubtitles: false })).waitForSubtitles, false);
+  assert.equal((await load({ waitForSubtitles: 'no' })).waitForSubtitles, true);
 });
 
 test('settings: nothing stored loads as defaults', async () => {

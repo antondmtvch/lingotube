@@ -8,7 +8,8 @@ const MAX_CUSTOM_LANGUAGE_NAMES = 5;
 
 /**
  * @typedef {{enabled: boolean, language: import('../shared/language_choices.js').TargetLanguage,
- *   customLanguageNames: string[], textScale: number, overlayPosition: {centerXFraction: number, bottomYFraction: number}|null}} Settings
+ *   customLanguageNames: string[], textScale: number, overlayPosition: {centerXFraction: number, bottomYFraction: number}|null,
+ *   waitForSubtitles: boolean}} Settings
  */
 
 /** @type {Settings} */
@@ -18,6 +19,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   customLanguageNames: Object.freeze([]),
   textScale: 1,
   overlayPosition: null,
+  waitForSubtitles: true,
 });
 
 function isPlainObject(value) {
@@ -74,6 +76,7 @@ function normalizeSettings(raw) {
     customLanguageNames: normalizeCustomLanguageNames(source.customLanguageNames),
     textScale: normalizeTextScale(source.textScale),
     overlayPosition: normalizeOverlayPosition(source.overlayPosition),
+    waitForSubtitles: typeof source.waitForSubtitles === 'boolean' ? source.waitForSubtitles : DEFAULT_SETTINGS.waitForSubtitles,
   };
 }
 
