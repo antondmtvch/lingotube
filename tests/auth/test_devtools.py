@@ -1,4 +1,5 @@
 import asyncio
+import http
 import json
 from collections.abc import Awaitable, Callable
 from contextlib import AsyncExitStack
@@ -146,3 +147,22 @@ async def test_open_page_and_clear_all_cookies_send_expected_commands(cdp_server
         ("Target.createTarget", {"url": "https://example.test/"}),
         ("Storage.clearCookies", None),
     ]
+
+
+async def test_os_error_from_caller_body_propagates_unchanged(cdp_server):
+    url = await cdp_server(replying({}))
+    with pytest.raises(OSError, match="from the body"):
+        async with connect_to_browser_devtools(url):
+            raise OSError("from the body")
+
+
+async def test_rejected_handshake_raises_devtools_error_without_server_text():
+    def reject(connection, request):
+        return connection.respond(http.HTTPStatus.FORBIDDEN, "LEAKME")
+
+    async with serve(replying({}), "127.0.0.1", 0, process_request=reject) as server:
+        port = server.sockets[0].getsockname()[1]
+        with pytest.raises(DevToolsError) as error:
+            async with connect_to_browser_devtools(f"ws://127.0.0.1:{port}/x"):
+                pass
+    assert "LEAKME" not in str(error.value)

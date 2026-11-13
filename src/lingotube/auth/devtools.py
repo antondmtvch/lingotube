@@ -8,13 +8,13 @@ import asyncio
 import itertools
 import json
 from collections.abc import AsyncIterator, Mapping
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlsplit
 
 from websockets.asyncio.client import ClientConnection, connect
-from websockets.exceptions import ConnectionClosed
+from websockets.exceptions import ConnectionClosed, WebSocketException
 
 _MAX_MESSAGE_BYTES = 16 * 2**20
 
@@ -82,13 +82,19 @@ async def connect_to_browser_devtools(
     websocket_url: str, timeout: float = 10.0
 ) -> AsyncIterator[DevToolsConnection]:
     _require_loopback_websocket_url(websocket_url)
-    try:
-        async with connect(
-            websocket_url, proxy=None, open_timeout=timeout, max_size=_MAX_MESSAGE_BYTES
-        ) as websocket:
-            yield DevToolsConnection(websocket, timeout)
-    except OSError, TimeoutError:
-        raise DevToolsError("DevTools connection failed") from None
+    async with AsyncExitStack() as stack:
+        try:
+            websocket = await stack.enter_async_context(
+                connect(
+                    websocket_url,
+                    proxy=None,
+                    open_timeout=timeout,
+                    max_size=_MAX_MESSAGE_BYTES,
+                )
+            )
+        except OSError, TimeoutError, WebSocketException, ValueError:
+            raise DevToolsError("DevTools connection failed") from None
+        yield DevToolsConnection(websocket, timeout)
 
 
 async def read_all_cookies(connection: DevToolsConnection) -> list[BrowserCookie]:
