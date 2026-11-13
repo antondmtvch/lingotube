@@ -229,3 +229,61 @@ test('the second ask uses the send command from the first reply', async () => {
   assert.equal(fetch.calls[2].body.continuation, 'TOK_NEW');
   assert.equal(fetch.calls[2].body.context.clickTracking.clickTrackingParams, 'CTP_NEW');
 });
+
+test('every retry sends the same body (same clientMessageId and formData)', async () => {
+  let clock = 1700000000000;
+  const { fetch, promise } = open([eligibleReply, { status: 503, json: {} }, { status: 503, json: {} }, answerReply], {
+    now: () => (clock += 1000),
+  });
+  const session = await promise;
+  await session.ask('q');
+  const askBodies = fetch.calls.slice(1).map((c) => c.body);
+  assert.equal(askBodies.length, 3);
+  assert.deepEqual(askBodies[1].formData, askBodies[0].formData);
+  assert.deepEqual(askBodies[2].formData, askBodies[0].formData);
+});
+
+test('the Authorization timestamp is taken inside the gate, right before fetch', async () => {
+  let clock = 1700000000000;
+  const gate = makeGate();
+  gate.run = async (send) => {
+    clock += 60000; // the gate holds the send for a minute
+    return send();
+  };
+  const { fetch, promise } = open([eligibleReply], { gate, now: () => clock });
+  await promise;
+  assert.match(fetch.calls[0].init.headers.Authorization, /^SAPISIDHASH 1700000060_/);
+});
+
+test('a gate rejecting with ChatRateLimitedError propagates after one gate.run, no retry', async () => {
+  const { gate, promise } = open([eligibleReply]);
+  await promise;
+  const limited = new ChatRateLimitedError(123);
+  const failingGate = { ...makeGate(), runs: 0 };
+  failingGate.run = async () => {
+    failingGate.runs += 1;
+    throw limited;
+  };
+  const fetch = makeFetch([]);
+  await assert.rejects(
+    openAskChat({ videoId: 'V', context: CONTEXT, sessionIndex: 0, fetch, gate: failingGate, cookieText: COOKIE_TEXT, now: () => 1, sha1Hex }),
+    (error) => error === limited,
+  );
+  assert.equal(failingGate.runs, 1);
+  assert.equal(fetch.calls.length, 0);
+  assert.ok(gate);
+});
+
+test('ask: a gate rejection with a generic Error propagates unchanged without retry', async () => {
+  const { fetch, gate, promise } = open([eligibleReply]);
+  const session = await promise;
+  const boom = new Error('lock aborted');
+  gate.run = async () => {
+    gate.runs += 1;
+    throw boom;
+  };
+  const runsBefore = gate.runs;
+  await assert.rejects(session.ask('q'), (error) => error === boom);
+  assert.equal(gate.runs, runsBefore + 1);
+  assert.equal(fetch.calls.length, 1);
+});

@@ -54,40 +54,41 @@ class RetryableFailure extends Error {}
 /** One request attempt through the gate. Throws RetryableFailure or a final chat error. */
 async function postOnce(environment, path, body) {
   const { context, sessionIndex, fetch, gate, cookieText, now, sha1Hex } = environment;
-  const authorization = await sapisidHashHeader({
-    cookieText,
-    origin: YOUTUBE_ORIGIN,
-    nowSeconds: Math.floor(now() / 1000),
-    sha1Hex,
-  });
-  const headers = {
-    'Content-Type': 'application/json',
-    Authorization: authorization,
-    'X-Origin': YOUTUBE_ORIGIN,
-    'X-Goog-AuthUser': String(sessionIndex),
-    'X-Youtube-Client-Name': '1',
-  };
-  if (typeof context?.client?.clientVersion === 'string') {
-    headers['X-Youtube-Client-Version'] = context.client.clientVersion;
-  }
-  if (typeof context?.client?.visitorData === 'string') {
-    headers['X-Goog-Visitor-Id'] = context.client.visitorData;
-  }
-  let response;
-  try {
-    response = await gate.run(() =>
-      fetch(`/youtubei/v1/${path}?prettyPrint=false`, {
+  // Everything time-sensitive (the SAPISIDHASH timestamp) is computed inside the gate closure,
+  // right before fetch: the gate may hold the send for seconds. Only fetch failures are turned
+  // into a retryable failure; anything the gate itself throws escapes unchanged.
+  const response = await gate.run(async () => {
+    const headers = {
+      'Content-Type': 'application/json',
+      Authorization: await sapisidHashHeader({
+        cookieText,
+        origin: YOUTUBE_ORIGIN,
+        nowSeconds: Math.floor(now() / 1000),
+        sha1Hex,
+      }),
+      'X-Origin': YOUTUBE_ORIGIN,
+      'X-Goog-AuthUser': String(sessionIndex),
+      'X-Youtube-Client-Name': '1',
+    };
+    if (typeof context?.client?.clientVersion === 'string') {
+      headers['X-Youtube-Client-Version'] = context.client.clientVersion;
+    }
+    if (typeof context?.client?.visitorData === 'string') {
+      headers['X-Goog-Visitor-Id'] = context.client.visitorData;
+    }
+    try {
+      return await fetch(`/youtubei/v1/${path}?prettyPrint=false`, {
         method: 'POST',
         credentials: 'include',
         redirect: 'error',
         headers,
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-      }),
-    );
-  } catch {
-    throw new RetryableFailure();
-  }
+      });
+    } catch {
+      throw new RetryableFailure();
+    }
+  });
   const { status } = response;
   if (status === 401 || status === 403) throw new NotSignedInError();
   if (status === 429) {
@@ -105,13 +106,14 @@ async function postOnce(environment, path, body) {
 
 /**
  * POST with up to MAX_RETRIES repeats of the same request on retryable failures.
+ * @param {object} body request body, reused unchanged by every attempt
  * @param {(data: object) => T} accept validates/derives the result; throw RetryableFailure to retry
  * @template T
  */
 async function postWithRetries(environment, path, body, accept = (data) => data) {
   for (let attempt = 0; ; attempt++) {
     try {
-      const data = await postOnce(environment, path, body());
+      const data = await postOnce(environment, path, body);
       if (data === null || typeof data !== 'object') throw new RetryableFailure();
       return accept(data);
     } catch (error) {
@@ -137,10 +139,17 @@ class AskChatSession {
    */
   async ask(prompt) {
     const command = this.#command;
+    // Built once: every retry re-sends the same message (same clientMessageId).
+    const body = buildAskBody({
+      context: this.#environment.context,
+      command,
+      prompt,
+      nowMs: this.#environment.now(),
+    });
     const { answer, fresh } = await postWithRetries(
       this.#environment,
       'get_panel',
-      () => buildAskBody({ context: this.#environment.context, command, prompt, nowMs: this.#environment.now() }),
+      body,
       (data) => {
         const text = extractAnswer(data);
         if (!text) throw new RetryableFailure();
@@ -159,13 +168,13 @@ class AskChatSession {
  */
 export async function openAskChat({ videoId, ...environment }) {
   const { context } = environment;
-  const next = await postWithRetries(environment, 'next', () => ({ context, videoId }));
+  const next = await postWithRetries(environment, 'next', { context, videoId });
   if (!isSignedIn(next)) throw new NotSignedInError();
   let command = findSendCommand(next);
   if (command === null) {
     const panelToken = findChatPanelToken(next);
     if (panelToken) {
-      const initial = await postWithRetries(environment, 'get_panel', () => ({ context, continuation: panelToken }));
+      const initial = await postWithRetries(environment, 'get_panel', { context, continuation: panelToken });
       command = findSendCommand(initial, { panelOnly: false });
     }
   }
