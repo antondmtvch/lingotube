@@ -128,7 +128,7 @@ const YOUTUBE_ORIGIN = 'https://www.youtube.com';
 const PLAYER_CLASS_HIDING_NATIVE_CAPTIONS = 'lingotube-hide-native-captions';
 const POLL_INTERVAL_MS = 100;
 const GRACE_PERIOD_MS = 300;
-const BUTTON_TOGGLE_PAUSE_MS = 700;
+const BUTTON_STATE_SETTLE_MS = 300;
 const RESTORE_PAUSE_MS = 500;
 // Parameters that identify the track: the track URL keeps its own, never the player's.
 const TRACK_IDENTITY_PARAMETERS = new Set(['lang', 'kind', 'name', 'tlang']);
@@ -210,6 +210,38 @@ function captureDiagnostics(playerElement, expectedVideoId, resourceEntries = pe
 }
 
 /**
+ * Presses the subtitles button the way a real click does: a pointer and mouse
+ * sequence dispatched on the button. A bare `.click()` does not toggle the
+ * player's button, so it is only a last resort when the state did not change.
+ * @param {Element} button
+ * @param {(ms: number) => Promise<void>} sleep
+ * @returns {Promise<{pressedAfterSequence: boolean, pressedAfterActivation: boolean, fallbackUsed: boolean}>}
+ */
+async function activateSubtitleButton(button, sleep) {
+  const readPressed = () => button.getAttribute('aria-pressed') === 'true';
+  const pressedBefore = readPressed();
+  const box = button.getBoundingClientRect?.();
+  const coordinates = box
+    ? { clientX: box.left + box.width / 2, clientY: box.top + box.height / 2 }
+    : {};
+  const eventOptions = { bubbles: true, cancelable: true, composed: true, button: 0, ...coordinates };
+  const PointerEventClass = typeof PointerEvent === 'function' ? PointerEvent : MouseEvent;
+  button.dispatchEvent(new PointerEventClass('pointerdown', { ...eventOptions, pointerType: 'mouse' }));
+  button.dispatchEvent(new MouseEvent('mousedown', eventOptions));
+  button.dispatchEvent(new MouseEvent('mouseup', eventOptions));
+  button.dispatchEvent(new MouseEvent('click', eventOptions));
+  await sleep(BUTTON_STATE_SETTLE_MS);
+  const pressedAfterSequence = readPressed();
+  let fallbackUsed = false;
+  if (pressedAfterSequence === pressedBefore) {
+    fallbackUsed = true;
+    button.click();
+    await sleep(BUTTON_STATE_SETTLE_MS);
+  }
+  return { pressedAfterSequence, pressedAfterActivation: readPressed(), fallbackUsed };
+}
+
+/**
  * Finds the player's caption request in the resource log, provoking one with
  * the subtitles button if there is none. Native captions are hidden by CSS
  * meanwhile, and the button is returned to its original state.
@@ -264,10 +296,16 @@ async function capturePlayerCaptionRequestUrl({
       buttonUsed = true;
       onButtonForced();
       player?.classList.add(PLAYER_CLASS_HIDING_NATIVE_CAPTIONS);
-      button.click();
-      if (wasOn) await sleep(BUTTON_TOGGLE_PAUSE_MS);
-      buttonObservation.subtitleButtonPressedAfterFirstClick = button.getAttribute('aria-pressed') === 'true';
-      if (wasOn) button.click();
+      const firstActivation = await activateSubtitleButton(button, sleep);
+      buttonObservation.subtitleButtonPressedAfterFirstClick = firstActivation.pressedAfterSequence;
+      let lastActivation = firstActivation;
+      let activationFallbackUsed = firstActivation.fallbackUsed;
+      if (wasOn) {
+        lastActivation = await activateSubtitleButton(button, sleep);
+        activationFallbackUsed ||= lastActivation.fallbackUsed;
+      }
+      buttonObservation.subtitleButtonPressedAfterActivation = lastActivation.pressedAfterActivation;
+      buttonObservation.activationFallbackUsed = activationFallbackUsed;
       onButtonObserved(buttonObservation);
       await waitForRequest(timeoutMs);
     }
@@ -275,14 +313,14 @@ async function capturePlayerCaptionRequestUrl({
     observer.disconnect();
     if (buttonUsed) {
       const isOnNow = button.getAttribute('aria-pressed') === 'true';
-      if (isOnNow !== wasOn) button.click();
+      if (isOnNow !== wasOn) await activateSubtitleButton(button, sleep);
       await sleep(RESTORE_PAUSE_MS);
       player?.classList.remove(PLAYER_CLASS_HIDING_NATIVE_CAPTIONS);
     }
   }
   return capturedUrl;
 }
-return Object.freeze({ mergePlayerRequestParameters: mergePlayerRequestParameters, isPlayerCaptionRequest: isPlayerCaptionRequest, captureDiagnostics: captureDiagnostics, capturePlayerCaptionRequestUrl: capturePlayerCaptionRequestUrl });
+return Object.freeze({ mergePlayerRequestParameters: mergePlayerRequestParameters, isPlayerCaptionRequest: isPlayerCaptionRequest, captureDiagnostics: captureDiagnostics, activateSubtitleButton: activateSubtitleButton, capturePlayerCaptionRequestUrl: capturePlayerCaptionRequestUrl });
 })();
 
 // Module: src/shared/json3_captions.js
