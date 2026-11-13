@@ -1,0 +1,81 @@
+const CACHE_INDEX_KEY = 'cacheIndex';
+const DEFAULT_MAX_TOTAL_BYTES = 4000000;
+
+function isPlainObject(value) {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** A well-formed entry is an object whose `translations` is an object holding only strings. */
+function isWellFormedEntry(value) {
+  return isPlainObject(value)
+    && isPlainObject(value.translations)
+    && Object.values(value.translations).every((text) => typeof text === 'string');
+}
+
+function isIndexItem(item) {
+  return isPlainObject(item) && typeof item.key === 'string'
+    && Number.isFinite(item.savedAtMs) && Number.isFinite(item.bytes);
+}
+
+/**
+ * Bounded cache of translations in the extension storage. Storage failures never
+ * reach the caller: subtitles keep working without the cache.
+ */
+export class TranslationCache {
+  /**
+   * @param {{get: Function, set: Function, remove: Function}} extensionStorage
+   * @param {{maxTotalBytes?: number, now?: () => number}} [options]
+   */
+  constructor(extensionStorage, { maxTotalBytes = DEFAULT_MAX_TOTAL_BYTES, now = () => Date.now() } = {}) {
+    this.extensionStorage = extensionStorage;
+    this.maxTotalBytes = maxTotalBytes;
+    this.now = now;
+  }
+
+  /**
+   * @param {string} key
+   * @returns {Promise<{translations: Object<string, string>}|null>} null when missing, malformed or unreadable
+   */
+  async load(key) {
+    try {
+      const stored = await this.extensionStorage.get([key]);
+      return isWellFormedEntry(stored[key]) ? stored[key] : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Stores the entry, evicting the oldest ones until the total fits. Resolves even on failure.
+   * @param {string} key
+   * @param {{translations: Object<string, string>}} entry
+   * @returns {Promise<void>}
+   */
+  async save(key, entry) {
+    try {
+      if (!isWellFormedEntry(entry)) return;
+      const bytes = JSON.stringify(entry).length;
+      if (bytes > this.maxTotalBytes) return;
+
+      const stored = await this.extensionStorage.get([CACHE_INDEX_KEY]);
+      const rawIndex = stored[CACHE_INDEX_KEY];
+      const index = (Array.isArray(rawIndex) ? rawIndex.filter(isIndexItem) : [])
+        .filter((item) => item.key !== key)
+        .sort((first, second) => first.savedAtMs - second.savedAtMs);
+
+      let totalBytes = bytes + index.reduce((sum, item) => sum + item.bytes, 0);
+      const evictedKeys = [];
+      while (totalBytes > this.maxTotalBytes && index.length > 0) {
+        const oldest = index.shift();
+        totalBytes -= oldest.bytes;
+        evictedKeys.push(oldest.key);
+      }
+
+      if (evictedKeys.length > 0) await this.extensionStorage.remove(evictedKeys);
+      index.push({ key, savedAtMs: this.now(), bytes });
+      await this.extensionStorage.set({ [key]: entry, [CACHE_INDEX_KEY]: index });
+    } catch {
+      // The cache is an optimisation only; a full or silent storage must not break subtitles.
+    }
+  }
+}
