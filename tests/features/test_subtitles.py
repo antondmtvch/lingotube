@@ -253,3 +253,34 @@ async def test_cache_write_failure_keeps_result_and_warns(tmp_path):
         language="ru",
     )
     assert "не удалось сохранить в кэш: PermissionError" in result.warnings
+
+
+async def test_same_cache_warning_from_original_and_subtitles_is_reported_once(
+    tmp_path,
+):
+    class FailingWriteCache(Cache):
+        async def put(
+            self,
+            key,
+            value,
+        ) -> None:
+            raise PermissionError("denied")
+
+    warning = "не удалось сохранить в кэш: PermissionError"
+    other = "другое предупреждение"
+    feature = SubtitlesFeature(
+        transcripts=FakeTranscripts(
+            result=TranscriptResult(
+                transcript=make_transcript(language="en"),
+                completeness=OK,
+                warnings=(other, warning),
+            )
+        ),
+        translator=FakeTranslator(),
+        cache=FailingWriteCache(root=tmp_path / "cache"),
+    )
+    result = await feature.run(
+        video_id=VID,
+        language="ru",
+    )
+    assert result.warnings == (other, warning)

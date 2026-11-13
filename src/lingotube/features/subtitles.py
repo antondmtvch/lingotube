@@ -107,7 +107,7 @@ class SubtitlesFeature:
                     "transcript": transcript.to_dict(),
                 },
             )
-            if failed is not None:
+            if failed is not None and failed not in result.warnings:
                 result = replace(
                     result,
                     warnings=result.warnings + (failed,),
