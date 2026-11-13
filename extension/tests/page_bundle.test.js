@@ -94,12 +94,19 @@ test('page bundle runs in a fake page and completes the storage round trip', asy
   assert.equal(storedItems.size, 0);
 });
 
-test('loader.js injects the page bundle as a classic script', () => {
-  assert.ok(loaderText.includes("chrome.runtime.getURL('src/page/bundle.js')"));
-  assert.doesNotMatch(loaderText, /type\s*=\s*['"]module['"]/);
-  assert.doesNotMatch(loaderText, /\.type\s*=/);
-  assert.doesNotMatch(loaderText, /getURL\('src\/page\/main\.js'\)/);
-  assert.ok(loaderText.includes("console.error('lingotube: page module did not start');"));
+test('loader.js does not inject the page bundle itself', () => {
+  assert.doesNotMatch(loaderText, /getURL\(/);
+  assert.doesNotMatch(loaderText, /createElement\(\s*['"]script['"]\s*\)/);
+  assert.doesNotMatch(loaderText, /appendChild/);
+});
+
+test('manifest declares the page bundle as a MAIN-world content script', () => {
+  const manifest = JSON.parse(readFileSync(new URL('../manifest.json', import.meta.url), 'utf8'));
+  const pageBundleEntries = manifest.content_scripts.filter((entry) => entry.world === 'MAIN');
+  assert.equal(pageBundleEntries.length, 1);
+  assert.deepEqual(pageBundleEntries[0].js, ['src/page/bundle.js']);
+  assert.deepEqual(pageBundleEntries[0].matches, ['https://www.youtube.com/*']);
+  assert.equal(pageBundleEntries[0].run_at, 'document_idle');
 });
 
 // --- The bundler itself, on throwaway module trees. ---

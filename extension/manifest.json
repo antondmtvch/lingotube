@@ -10,12 +10,12 @@
       "js": ["loader.js"],
       "css": ["overlay.css"],
       "run_at": "document_idle"
-    }
-  ],
-  "web_accessible_resources": [
+    },
     {
-      "resources": ["src/*"],
-      "matches": ["https://www.youtube.com/*"]
+      "matches": ["https://www.youtube.com/*"],
+      "js": ["src/page/bundle.js"],
+      "world": "MAIN",
+      "run_at": "document_idle"
     }
   ]
 }
