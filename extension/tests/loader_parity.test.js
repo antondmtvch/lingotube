@@ -13,7 +13,7 @@ function normalizeWhitespace(text) {
 
 /** Returns the source of `function name(...) { ... }` found by brace matching, without `export`. */
 function extractFunctionSource(sourceText, functionName) {
-  const start = sourceText.search(new RegExp(`function ${functionName}\(`));
+  const start = sourceText.indexOf(`function ${functionName}(`);
   assert.ok(start >= 0, `function ${functionName} not found`);
   const bodyStart = sourceText.indexOf('{', sourceText.indexOf(')', start));
   let depth = 0;
