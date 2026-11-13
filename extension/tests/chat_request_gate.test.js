@@ -39,14 +39,14 @@ function makeClock(start = 1_000_000) {
   return clock;
 }
 
-function makeGate({ lockManager, keyValueStorage, clock, visible = () => true, waitUntilTabVisible }) {
+function makeGate({ lockManager, keyValueStorage, clock, visible = () => true, waitUntilTabVisible, sleep }) {
   return new ChatRequestGate({
     lockManager,
     keyValueStorage,
     isTabVisible: visible,
     waitUntilTabVisible: waitUntilTabVisible ?? (async () => {}),
     now: clock.now,
-    sleep: clock.sleep,
+    sleep: sleep ?? clock.sleep,
   });
 }
 
@@ -66,8 +66,8 @@ test('two gates sharing lock and storage start their requests at least 5000 ms a
   };
   await Promise.all([tabA.run(send), tabB.run(send), tabA.run(send)]);
   assert.equal(starts.length, 3);
-  assert.ok(starts[1] - starts[0] >= 5000);
-  assert.ok(starts[2] - starts[1] >= 5000);
+  assert.equal(starts[1] - starts[0], 5000);
+  assert.equal(starts[2] - starts[1], 5000);
 });
 
 test('requests never overlap: the second starts after the first settles', async () => {
@@ -215,5 +215,101 @@ test('throwing storage does not crash the gate and the in-memory last start stil
   const starts = [];
   await gate.run(async () => starts.push(clock.now()));
   await gate.run(async () => starts.push(clock.now()));
-  assert.ok(starts[1] - starts[0] >= 5000);
+  assert.equal(starts[1] - starts[0], 5000);
+});
+
+test('a last start in the future (clock moved back or garbage) makes the gate wait at most 5000 ms', async () => {
+  for (const futureValue of ['1e18', String(1_000_000 + 3_600_000)]) {
+    const lockManager = makeLockManager();
+    const keyValueStorage = makeStorage({ [LAST_START_KEY]: futureValue });
+    const clock = makeClock();
+    const gate = makeGate({ lockManager, keyValueStorage, clock });
+    const before = clock.now();
+    await gate.run(async () => {});
+    assert.ok(clock.now() - before <= 5000);
+  }
+});
+
+test('a cooldown far in the future is capped at 600000 ms', () => {
+  for (const futureValue of ['1e18', String(1_000_000 + 3_600_000)]) {
+    const keyValueStorage = makeStorage({ [COOLDOWN_KEY]: futureValue });
+    const gate = makeGate({ lockManager: makeLockManager(), keyValueStorage, clock: makeClock() });
+    assert.equal(gate.cooldownRemainingMs(), 600000);
+  }
+});
+
+test('a tab hidden during the 5 s gap sends nothing until visible again, then sends once', async () => {
+  const lockManager = makeLockManager();
+  const keyValueStorage = makeStorage();
+  const clock = makeClock();
+  let visible = true;
+  let becomeVisible;
+  const gate = makeGate({
+    lockManager,
+    keyValueStorage,
+    clock,
+    visible: () => visible,
+    waitUntilTabVisible: () =>
+      new Promise((resolve) => {
+        becomeVisible = () => {
+          visible = true;
+          resolve();
+        };
+      }),
+    sleep: async (ms) => {
+      clock.time += ms;
+      visible = false;
+    },
+  });
+  await gate.run(async () => {});
+  let sends = 0;
+  const outcome = gate.run(async () => ++sends);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(sends, 0);
+  becomeVisible();
+  await outcome;
+  assert.equal(sends, 1);
+});
+
+test('a cooldown started by another gate during the gap sleep stops the request without sending', async () => {
+  const { lockManager, keyValueStorage, clock, tabB } = makeTabs();
+  const tabA = makeGate({
+    lockManager,
+    keyValueStorage,
+    clock,
+    sleep: async (ms) => {
+      clock.time += ms;
+      tabB.startCooldown();
+    },
+  });
+  await tabA.run(async () => {});
+  let sent = false;
+  await assert.rejects(
+    tabA.run(async () => {
+      sent = true;
+    }),
+    ChatRateLimitedError,
+  );
+  assert.equal(sent, false);
+});
+
+test('with storage that cannot write, a cooldown is still kept in this tab until cleared', async () => {
+  const clock = makeClock();
+  const storage = makeStorage();
+  storage.setItem = () => {
+    throw new Error('storage disabled');
+  };
+  const gate = makeGate({ lockManager: makeLockManager(), keyValueStorage: storage, clock });
+  gate.startCooldown();
+  assert.equal(gate.cooldownRemainingMs(), 600000);
+  let sent = false;
+  await assert.rejects(
+    gate.run(async () => {
+      sent = true;
+    }),
+    ChatRateLimitedError,
+  );
+  assert.equal(sent, false);
+  gate.clearCooldown();
+  assert.equal(await gate.run(async () => 'ok'), 'ok');
 });
