@@ -31,18 +31,23 @@ async function debugReadCaptions() {
       return;
     }
     let forcedByButton = false;
+    let buttonObservation = {};
     const expectedVideoId = readVideoDetails(playerElement).videoId || '';
     const playerRequestUrl = await capturePlayerCaptionRequestUrl({
       document,
+      playerElement,
       expectedVideoId,
       performanceObserverClass: PerformanceObserver,
       sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
       onButtonForced: () => {
         forcedByButton = true;
       },
+      onButtonObserved: (observation) => {
+        buttonObservation = observation;
+      },
     });
     if (!playerRequestUrl) {
-      console.info('lingotube: captions', { track: { languageCode: track.languageCode, kind: track.kind }, error: 'player request not captured', forcedByButton, ...captureDiagnostics(playerElement, expectedVideoId, performance.getEntriesByType('resource')) });
+      console.info('lingotube: captions', { track: { languageCode: track.languageCode, kind: track.kind }, error: 'player request not captured', forcedByButton, ...buttonObservation, ...captureDiagnostics(playerElement, expectedVideoId, performance.getEntriesByType('resource')) });
       return;
     }
     const words = await fetchCaptionWords({ track, playerRequestUrl, fetch: window.fetch.bind(window) });

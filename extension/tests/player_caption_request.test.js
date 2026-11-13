@@ -61,7 +61,10 @@ function createFakeEnvironment({ alreadySeen = [], subtitlesOn = false, requestO
       }
     },
   };
-  const player = { classList: { add: (name) => classes.add(name), remove: (name) => classes.delete(name) } };
+  const player = {
+    classList: { add: (name) => classes.add(name), remove: (name) => classes.delete(name) },
+    querySelector: (selector) => (selector === '.ytp-subtitles-button' ? button : null),
+  };
   const document = {
     querySelector: (selector) =>
       selector === '#movie_player' ? player : selector === '.ytp-subtitles-button' ? button : null,
@@ -78,7 +81,7 @@ function createFakeEnvironment({ alreadySeen = [], subtitlesOn = false, requestO
   const sleep = async () => {
     await new Promise((resolve) => setImmediate(resolve));
   };
-  return { document, button, classes, clicks, expectedVideoId: 'a', performanceObserverClass: FakePerformanceObserver, sleep };
+  return { document, playerElement: player, button, classes, clicks, expectedVideoId: 'a', performanceObserverClass: FakePerformanceObserver, sleep };
 }
 
 test('capture returns an earlier player request without touching the button', async () => {
@@ -122,6 +125,27 @@ test('capture takes a buffered pot entry of the expected video', async () => {
   const env = createFakeEnvironment({ alreadySeen: ['https://www.youtube.com/api/timedtext?v=a&pot=MATCH'] });
   assert.match(await capturePlayerCaptionRequestUrl(env), /pot=MATCH/);
   assert.deepEqual(env.clicks, []);
+});
+
+test('capture clicks the button inside the player, not the first one in the document', async () => {
+  const env = createFakeEnvironment({});
+  const wrongButton = { clicks: 0, getAttribute: () => 'false', click() { this.clicks += 1; } };
+  const observations = [];
+  const url = await capturePlayerCaptionRequestUrl({
+    ...env,
+    document: { querySelector: () => wrongButton, querySelectorAll: () => [wrongButton, env.button] },
+    onButtonObserved: (observation) => observations.push(observation),
+  });
+  assert.match(url, /pot=NEW/);
+  assert.equal(wrongButton.clicks, 0);
+  assert.deepEqual(env.clicks, [true, false]);
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0].subtitleButtonPressedBefore, false);
+  assert.equal(observations[0].subtitleButtonPressedAfterFirstClick, true);
+  assert.equal(observations[0].subtitleButtonCountInDocument, 2);
+  for (const value of Object.values(observations[0])) {
+    assert.ok(typeof value === 'number' || typeof value === 'boolean');
+  }
 });
 
 test('captureDiagnostics counts timedtext entries and returns only booleans and numbers', () => {

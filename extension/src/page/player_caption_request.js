@@ -90,21 +90,26 @@ export function captureDiagnostics(playerElement, expectedVideoId, resourceEntri
  * the subtitles button if there is none. Native captions are hidden by CSS
  * meanwhile, and the button is returned to its original state.
  * @param {object} options
- * @param {Document} options.document
+ * @param {Document} options.document only used to count subtitles buttons for diagnostics
+ * @param {Element} options.playerElement the visible player; its own subtitles button is the one clicked
  * @param {typeof PerformanceObserver} options.performanceObserverClass
  * @param {(ms: number) => Promise<void>} options.sleep
  * @param {string} options.expectedVideoId only requests for this video count
  * @param {number} [options.timeoutMs]
  * @param {() => void} [options.onButtonForced] called when the button had to be used
+ * @param {(observation: Record<string, number|boolean>) => void} [options.onButtonObserved]
+ *   receives only booleans and numbers about the button, never a value or a URL
  * @returns {Promise<string|null>}
  */
 export async function capturePlayerCaptionRequestUrl({
   document,
+  playerElement,
   performanceObserverClass,
   sleep,
   expectedVideoId,
   timeoutMs = 6000,
   onButtonForced = () => {},
+  onButtonObserved = () => {},
 }) {
   let capturedUrl = null;
   const observer = new performanceObserverClass((list) => {
@@ -120,9 +125,14 @@ export async function capturePlayerCaptionRequestUrl({
     }
   };
 
-  const player = document.querySelector('#movie_player');
-  const button = document.querySelector('.ytp-subtitles-button');
+  const player = playerElement;
+  const button = playerElement?.querySelector('.ytp-subtitles-button');
   const wasOn = button?.getAttribute('aria-pressed') === 'true';
+  const buttonObservation = {
+    subtitleButtonCountInPlayer: playerElement?.querySelectorAll?.('.ytp-subtitles-button').length ?? 0,
+    subtitleButtonCountInDocument: document?.querySelectorAll?.('.ytp-subtitles-button').length ?? 0,
+    subtitleButtonPressedBefore: wasOn,
+  };
   let buttonUsed = false;
   try {
     await waitForRequest(GRACE_PERIOD_MS);
@@ -130,11 +140,11 @@ export async function capturePlayerCaptionRequestUrl({
       buttonUsed = true;
       onButtonForced();
       player?.classList.add(PLAYER_CLASS_HIDING_NATIVE_CAPTIONS);
-      if (wasOn) {
-        button.click();
-        await sleep(BUTTON_TOGGLE_PAUSE_MS);
-      }
       button.click();
+      if (wasOn) await sleep(BUTTON_TOGGLE_PAUSE_MS);
+      buttonObservation.subtitleButtonPressedAfterFirstClick = button.getAttribute('aria-pressed') === 'true';
+      if (wasOn) button.click();
+      onButtonObserved(buttonObservation);
       await waitForRequest(timeoutMs);
     }
   } finally {
