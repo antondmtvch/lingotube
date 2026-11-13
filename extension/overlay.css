@@ -2,3 +2,53 @@
 .lingotube-hide-native-captions .ytp-caption-window-container {
   visibility: hidden !important;
 }
+
+.lingotube-overlay {
+  position: absolute;
+  /* Above the video, below the player's settings menu (.ytp-popup uses 71). */
+  z-index: 60;
+  max-width: 80%;
+  box-sizing: border-box;
+  padding: 6px 12px;
+  border-radius: 6px;
+  background: rgba(8, 8, 8, 0.75);
+  color: #fff;
+  font-family: Roboto, Arial, sans-serif;
+  font-size: calc(22px * var(--lingotube-text-scale, 1));
+  line-height: 1.3;
+  text-align: center;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+  /* The layer must not block the video; only the box itself takes pointer events. */
+  pointer-events: auto;
+}
+
+.lingotube-overlay.lingotube-dragging {
+  cursor: grabbing;
+}
+
+.lingotube-overlay[hidden],
+.lingotube-overlay-label[hidden] {
+  display: none;
+}
+
+.lingotube-overlay-text {
+  /* Two-line look: longer text is cut with an ellipsis. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  white-space: pre-line;
+}
+
+.lingotube-overlay-text.lingotube-overlay-status {
+  font-style: italic;
+  opacity: 0.8;
+}
+
+.lingotube-overlay-label {
+  margin-top: 2px;
+  font-size: 0.6em;
+  opacity: 0.7;
+}
