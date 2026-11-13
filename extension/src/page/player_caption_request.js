@@ -50,6 +50,42 @@ function isPlayerCaptionRequestForVideo(resourceUrl, videoId) {
 }
 
 /**
+ * Counts, without exposing any value, why a player caption request may not match.
+ * Returns only booleans and numbers: never a URL, a query value or a video id.
+ * @param {Element|null} playerElement
+ * @param {string} expectedVideoId
+ * @param {Array<{name: string}>} resourceEntries
+ * @returns {Record<string, number|boolean>}
+ */
+export function captureDiagnostics(playerElement, expectedVideoId, resourceEntries = performance.getEntriesByType('resource')) {
+  let timedtextEntriesSeen = 0;
+  let timedtextWithPot = 0;
+  let timedtextWithMatchingVideo = 0;
+  let timedtextWithAnyV = 0;
+  for (const entry of resourceEntries) {
+    if (!String(entry.name).includes('/api/timedtext')) continue;
+    timedtextEntriesSeen += 1;
+    try {
+      const { searchParams } = new URL(entry.name, YOUTUBE_ORIGIN);
+      if (searchParams.has('pot')) timedtextWithPot += 1;
+      if (searchParams.has('v')) timedtextWithAnyV += 1;
+      if (searchParams.get('v') === expectedVideoId) timedtextWithMatchingVideo += 1;
+    } catch {
+      // An unparsable address only counts as seen.
+    }
+  }
+  return {
+    expectedVideoIdLength: expectedVideoId.length,
+    timedtextEntriesSeen,
+    timedtextWithPot,
+    timedtextWithMatchingVideo,
+    timedtextWithAnyV,
+    playerHasGetPlayerResponse: typeof playerElement?.getPlayerResponse === 'function',
+    subtitlesButtonFound: Boolean(playerElement?.querySelector?.('.ytp-subtitles-button')),
+  };
+}
+
+/**
  * Finds the player's caption request in the resource log, provoking one with
  * the subtitles button if there is none. Native captions are hidden by CSS
  * meanwhile, and the button is returned to its original state.

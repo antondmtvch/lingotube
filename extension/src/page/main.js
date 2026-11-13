@@ -1,6 +1,6 @@
 import { createExtensionStorage } from './extension_storage.js';
 import { findPlayerElement, readCaptionTracks, readVideoDetails } from './youtube_player.js';
-import { capturePlayerCaptionRequestUrl } from './player_caption_request.js';
+import { capturePlayerCaptionRequestUrl, captureDiagnostics } from './player_caption_request.js';
 import { fetchCaptionWords } from './youtube_captions_source.js';
 import { chooseCaptionTrack } from '../shared/caption_track_choice.js';
 
@@ -31,9 +31,10 @@ async function debugReadCaptions() {
       return;
     }
     let forcedByButton = false;
+    const expectedVideoId = readVideoDetails(playerElement).videoId || '';
     const playerRequestUrl = await capturePlayerCaptionRequestUrl({
       document,
-      expectedVideoId: readVideoDetails(playerElement).videoId,
+      expectedVideoId,
       performanceObserverClass: PerformanceObserver,
       sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
       onButtonForced: () => {
@@ -41,7 +42,7 @@ async function debugReadCaptions() {
       },
     });
     if (!playerRequestUrl) {
-      console.info('lingotube: captions', { track: { languageCode: track.languageCode, kind: track.kind }, error: 'player request not captured', forcedByButton });
+      console.info('lingotube: captions', { track: { languageCode: track.languageCode, kind: track.kind }, error: 'player request not captured', forcedByButton, ...captureDiagnostics(playerElement, expectedVideoId, performance.getEntriesByType('resource')) });
       return;
     }
     const words = await fetchCaptionWords({ track, playerRequestUrl, fetch: window.fetch.bind(window) });

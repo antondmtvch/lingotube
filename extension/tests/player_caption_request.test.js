@@ -4,6 +4,7 @@ import {
   mergePlayerRequestParameters,
   isPlayerCaptionRequest,
   capturePlayerCaptionRequestUrl,
+  captureDiagnostics,
 } from '../src/page/player_caption_request.js';
 
 test('merge adds pot and client parameters, keeps the track own lang/kind, drops tlang, sets fmt=json3', () => {
@@ -121,4 +122,28 @@ test('capture takes a buffered pot entry of the expected video', async () => {
   const env = createFakeEnvironment({ alreadySeen: ['https://www.youtube.com/api/timedtext?v=a&pot=MATCH'] });
   assert.match(await capturePlayerCaptionRequestUrl(env), /pot=MATCH/);
   assert.deepEqual(env.clicks, []);
+});
+
+test('captureDiagnostics counts timedtext entries and returns only booleans and numbers', () => {
+  const entries = [
+    { name: 'https://www.youtube.com/api/timedtext?v=abc&pot=P' },
+    { name: 'https://www.youtube.com/api/timedtext?v=other&pot=P' },
+    { name: 'https://www.youtube.com/api/timedtext?v=abc' },
+    { name: 'https://www.youtube.com/api/timedtext?lang=en' },
+    { name: 'https://www.youtube.com/watch?v=abc&pot=P' },
+  ];
+  const player = { getPlayerResponse: () => ({}), querySelector: (selector) => (selector === '.ytp-subtitles-button' ? {} : null) };
+  const diagnostics = captureDiagnostics(player, 'abc', entries);
+  assert.deepEqual(diagnostics, {
+    expectedVideoIdLength: 3,
+    timedtextEntriesSeen: 4,
+    timedtextWithPot: 2,
+    timedtextWithMatchingVideo: 2,
+    timedtextWithAnyV: 3,
+    playerHasGetPlayerResponse: true,
+    subtitlesButtonFound: true,
+  });
+  for (const value of Object.values(diagnostics)) {
+    assert.ok(typeof value === 'number' || typeof value === 'boolean');
+  }
 });

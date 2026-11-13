@@ -174,6 +174,42 @@ function isPlayerCaptionRequestForVideo(resourceUrl, videoId) {
 }
 
 /**
+ * Counts, without exposing any value, why a player caption request may not match.
+ * Returns only booleans and numbers: never a URL, a query value or a video id.
+ * @param {Element|null} playerElement
+ * @param {string} expectedVideoId
+ * @param {Array<{name: string}>} resourceEntries
+ * @returns {Record<string, number|boolean>}
+ */
+function captureDiagnostics(playerElement, expectedVideoId, resourceEntries = performance.getEntriesByType('resource')) {
+  let timedtextEntriesSeen = 0;
+  let timedtextWithPot = 0;
+  let timedtextWithMatchingVideo = 0;
+  let timedtextWithAnyV = 0;
+  for (const entry of resourceEntries) {
+    if (!String(entry.name).includes('/api/timedtext')) continue;
+    timedtextEntriesSeen += 1;
+    try {
+      const { searchParams } = new URL(entry.name, YOUTUBE_ORIGIN);
+      if (searchParams.has('pot')) timedtextWithPot += 1;
+      if (searchParams.has('v')) timedtextWithAnyV += 1;
+      if (searchParams.get('v') === expectedVideoId) timedtextWithMatchingVideo += 1;
+    } catch {
+      // An unparsable address only counts as seen.
+    }
+  }
+  return {
+    expectedVideoIdLength: expectedVideoId.length,
+    timedtextEntriesSeen,
+    timedtextWithPot,
+    timedtextWithMatchingVideo,
+    timedtextWithAnyV,
+    playerHasGetPlayerResponse: typeof playerElement?.getPlayerResponse === 'function',
+    subtitlesButtonFound: Boolean(playerElement?.querySelector?.('.ytp-subtitles-button')),
+  };
+}
+
+/**
  * Finds the player's caption request in the resource log, provoking one with
  * the subtitles button if there is none. Native captions are hidden by CSS
  * meanwhile, and the button is returned to its original state.
@@ -236,7 +272,7 @@ async function capturePlayerCaptionRequestUrl({
   }
   return capturedUrl;
 }
-return Object.freeze({ mergePlayerRequestParameters: mergePlayerRequestParameters, isPlayerCaptionRequest: isPlayerCaptionRequest, capturePlayerCaptionRequestUrl: capturePlayerCaptionRequestUrl });
+return Object.freeze({ mergePlayerRequestParameters: mergePlayerRequestParameters, isPlayerCaptionRequest: isPlayerCaptionRequest, captureDiagnostics: captureDiagnostics, capturePlayerCaptionRequestUrl: capturePlayerCaptionRequestUrl });
 })();
 
 // Module: src/shared/json3_captions.js
@@ -366,7 +402,7 @@ return Object.freeze({ chooseCaptionTrack: chooseCaptionTrack });
 (function () {
 const { createExtensionStorage } = bundledModule1Exports;
 const { findPlayerElement, readCaptionTracks, readVideoDetails } = bundledModule2Exports;
-const { capturePlayerCaptionRequestUrl } = bundledModule3Exports;
+const { capturePlayerCaptionRequestUrl, captureDiagnostics } = bundledModule3Exports;
 const { fetchCaptionWords } = bundledModule5Exports;
 const { chooseCaptionTrack } = bundledModule6Exports;
 async function checkStorageRoundTrip() {
@@ -396,9 +432,10 @@ async function debugReadCaptions() {
       return;
     }
     let forcedByButton = false;
+    const expectedVideoId = readVideoDetails(playerElement).videoId || '';
     const playerRequestUrl = await capturePlayerCaptionRequestUrl({
       document,
-      expectedVideoId: readVideoDetails(playerElement).videoId,
+      expectedVideoId,
       performanceObserverClass: PerformanceObserver,
       sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
       onButtonForced: () => {
@@ -406,7 +443,7 @@ async function debugReadCaptions() {
       },
     });
     if (!playerRequestUrl) {
-      console.info('lingotube: captions', { track: { languageCode: track.languageCode, kind: track.kind }, error: 'player request not captured', forcedByButton });
+      console.info('lingotube: captions', { track: { languageCode: track.languageCode, kind: track.kind }, error: 'player request not captured', forcedByButton, ...captureDiagnostics(playerElement, expectedVideoId, performance.getEntriesByType('resource')) });
       return;
     }
     const words = await fetchCaptionWords({ track, playerRequestUrl, fetch: window.fetch.bind(window) });
