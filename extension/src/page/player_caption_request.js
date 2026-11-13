@@ -6,6 +6,8 @@ const POLL_INTERVAL_MS = 100;
 const GRACE_PERIOD_MS = 300;
 const BUTTON_TOGGLE_PAUSE_MS = 700;
 const RESTORE_PAUSE_MS = 500;
+// Parameters that identify the track: the track URL keeps its own, never the player's.
+const TRACK_IDENTITY_PARAMETERS = new Set(['lang', 'kind', 'name', 'tlang']);
 
 /**
  * Takes the track's own address and adds the parameters the player sent
@@ -19,7 +21,7 @@ export function mergePlayerRequestParameters(trackBaseUrl, playerRequestUrl) {
   const merged = new URL(trackBaseUrl, YOUTUBE_ORIGIN);
   const playerRequest = new URL(playerRequestUrl, YOUTUBE_ORIGIN);
   for (const [name, value] of playerRequest.searchParams) {
-    if (name !== 'tlang' && !merged.searchParams.has(name)) merged.searchParams.set(name, value);
+    if (!TRACK_IDENTITY_PARAMETERS.has(name) && !merged.searchParams.has(name)) merged.searchParams.set(name, value);
   }
   merged.searchParams.delete('tlang');
   merged.searchParams.set('fmt', 'json3');
@@ -40,6 +42,13 @@ export function isPlayerCaptionRequest(resourceUrl) {
   }
 }
 
+function isPlayerCaptionRequestForVideo(resourceUrl, videoId) {
+  return (
+    isPlayerCaptionRequest(resourceUrl) &&
+    new URL(resourceUrl, YOUTUBE_ORIGIN).searchParams.get('v') === videoId
+  );
+}
+
 /**
  * Finds the player's caption request in the resource log, provoking one with
  * the subtitles button if there is none. Native captions are hidden by CSS
@@ -48,6 +57,7 @@ export function isPlayerCaptionRequest(resourceUrl) {
  * @param {Document} options.document
  * @param {typeof PerformanceObserver} options.performanceObserverClass
  * @param {(ms: number) => Promise<void>} options.sleep
+ * @param {string} options.expectedVideoId only requests for this video count
  * @param {number} [options.timeoutMs]
  * @param {() => void} [options.onButtonForced] called when the button had to be used
  * @returns {Promise<string|null>}
@@ -56,13 +66,14 @@ export async function capturePlayerCaptionRequestUrl({
   document,
   performanceObserverClass,
   sleep,
+  expectedVideoId,
   timeoutMs = 6000,
   onButtonForced = () => {},
 }) {
   let capturedUrl = null;
   const observer = new performanceObserverClass((list) => {
     for (const entry of list.getEntries()) {
-      if (isPlayerCaptionRequest(entry.name)) capturedUrl = entry.name;
+      if (isPlayerCaptionRequestForVideo(entry.name, expectedVideoId)) capturedUrl = entry.name;
     }
   });
   observer.observe({ type: 'resource', buffered: true });

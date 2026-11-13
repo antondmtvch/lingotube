@@ -24,6 +24,19 @@ test('merge adds pot and client parameters, keeps the track own lang/kind, drops
   assert.equal(merged.origin, 'https://www.youtube.com');
 });
 
+test('merge does not copy the player lang/kind/name into a manual track URL', () => {
+  const merged = new URL(
+    mergePlayerRequestParameters(
+      'https://www.youtube.com/api/timedtext?v=abc&lang=de',
+      'https://www.youtube.com/api/timedtext?v=abc&lang=en&kind=asr&name=Auto&pot=P&c=WEB',
+    ),
+  );
+  assert.equal(merged.searchParams.has('kind'), false);
+  assert.equal(merged.searchParams.has('name'), false);
+  assert.equal(merged.searchParams.get('lang'), 'de');
+  assert.equal(merged.searchParams.get('pot'), 'P');
+});
+
 test('a request without pot is not a player caption request', () => {
   assert.equal(isPlayerCaptionRequest('https://www.youtube.com/api/timedtext?v=a&fmt=json3'), false);
   assert.equal(isPlayerCaptionRequest('https://www.youtube.com/api/timedtext?v=a&pot=P'), true);
@@ -64,7 +77,7 @@ function createFakeEnvironment({ alreadySeen = [], subtitlesOn = false, requestO
   const sleep = async () => {
     await new Promise((resolve) => setImmediate(resolve));
   };
-  return { document, button, classes, clicks, performanceObserverClass: FakePerformanceObserver, sleep };
+  return { document, button, classes, clicks, expectedVideoId: 'a', performanceObserverClass: FakePerformanceObserver, sleep };
 }
 
 test('capture returns an earlier player request without touching the button', async () => {
@@ -95,4 +108,17 @@ test('capture returns null and restores the button when no request comes', async
   assert.equal(await capturePlayerCaptionRequestUrl({ ...env, timeoutMs: 300 }), null);
   assert.equal(env.button.state, false);
   assert.equal(env.classes.size, 0);
+});
+
+test('capture ignores a buffered pot entry of another video and uses the button', async () => {
+  const env = createFakeEnvironment({ alreadySeen: ['https://www.youtube.com/api/timedtext?v=other&pot=OLD'] });
+  const url = await capturePlayerCaptionRequestUrl(env);
+  assert.match(url, /pot=NEW/);
+  assert.deepEqual(env.clicks, [true, false]);
+});
+
+test('capture takes a buffered pot entry of the expected video', async () => {
+  const env = createFakeEnvironment({ alreadySeen: ['https://www.youtube.com/api/timedtext?v=a&pot=MATCH'] });
+  assert.match(await capturePlayerCaptionRequestUrl(env), /pot=MATCH/);
+  assert.deepEqual(env.clicks, []);
 });

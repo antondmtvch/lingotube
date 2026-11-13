@@ -1,5 +1,5 @@
 import { createExtensionStorage } from './extension_storage.js';
-import { findPlayerElement, readCaptionTracks } from './youtube_player.js';
+import { findPlayerElement, readCaptionTracks, readVideoDetails } from './youtube_player.js';
 import { capturePlayerCaptionRequestUrl } from './player_caption_request.js';
 import { fetchCaptionWords } from './youtube_captions_source.js';
 import { chooseCaptionTrack } from '../shared/caption_track_choice.js';
@@ -33,6 +33,7 @@ async function debugReadCaptions() {
     let forcedByButton = false;
     const playerRequestUrl = await capturePlayerCaptionRequestUrl({
       document,
+      expectedVideoId: readVideoDetails(playerElement).videoId,
       performanceObserverClass: PerformanceObserver,
       sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
       onButtonForced: () => {
