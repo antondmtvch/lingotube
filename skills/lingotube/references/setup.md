@@ -49,9 +49,10 @@ lingotube signs in to YouTube with the person's browser cookies. Run
   lingotube browser window, saves YouTube cookies locally in lingotube's data folder, and
   removes any remembered `cookies_file` / `browser` from lingotube's settings. Run it only after
   the person says "yes". Tell them that a browser window will
-  open (a separate lingotube profile, not their own), that they sign in to YouTube there, that
-  the window closes by itself, and that Google may ask for an identity check such as a selfie,
-  which can be skipped. The command waits up to 10 minutes for the sign-in. If you can run
+  open (a separate lingotube profile, not their own), that they sign in to YouTube there and then
+  CLOSE the browser window themselves (it does not close by itself; lingotube saves the
+  cookies only after that), that Chrome or Edge is launched without a debugging port, and
+  that Google may ask for an identity check such as a selfie, which can be skipped. The command waits up to 10 minutes for the sign-in. If you can run
   commands in the background, run `lingotube login` that way and wait for it to finish;
   otherwise run it with the longest timeout you have; if neither works, ask the person to run
   `lingotube login` in their own terminal and tell you when it is done. Then run
