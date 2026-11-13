@@ -6,8 +6,9 @@ import pytest
 from dependency_injector import providers
 
 from lingotube import cli
-from lingotube.auth.base import Credentials
+from lingotube.auth.base import LOGIN_HINT, Credentials
 from lingotube.auth.browser import BROWSERS
+from lingotube.auth.login_store import LoginCookieStore, SavedLogin
 from lingotube.commands import AppContext
 from lingotube.config import LoginPaths, Settings
 from lingotube.container import build_container
@@ -450,7 +451,14 @@ async def test_container_doctor_sources(tmp_path):
         )
 
     plain = make(settings=Settings()).doctor_sources()
-    assert list(plain) == ["файл cookies", *[f"браузер {b}" for b in BROWSERS]]
+    assert list(plain) == [
+        "файл cookies",
+        "профиль входа",
+        *[f"браузер {b}" for b in BROWSERS],
+    ]
+    with pytest.raises(expected_exception=AuthError) as unset_login:
+        await plain["профиль входа"].load()
+    assert unset_login.value.hint == LOGIN_HINT
     with pytest.raises(expected_exception=AuthError) as info:
         await plain["файл cookies"].load()
     assert "--cookies-file" in (info.value.hint or "")
@@ -461,7 +469,7 @@ async def test_container_doctor_sources(tmp_path):
             browser="firefox",
         )
     ).doctor_sources()
-    assert list(chosen) == ["файл cookies", "браузер firefox"]
+    assert list(chosen) == ["файл cookies", "профиль входа", "браузер firefox"]
 
     loaded: list[str] = []
 
@@ -708,3 +716,38 @@ def test_doctor_command_unexpected_error_still_prints_table(tmp_path):
     assert code == 0
     assert "файл cookies" in out and "RuntimeError" in out and LOGIN in out
     assert SECRET_SAPISID not in out + err
+
+
+async def test_doctor_lists_login_profile_row_after_file(tmp_path):
+    await LoginCookieStore(cookies_file=tmp_path / "login-cookies.json").write(
+        saved=SavedLogin(browser="chrome", cookies={"SAPISID": SECRET_SAPISID})
+    )
+    container = build_container(
+        settings=Settings(),
+        env={},
+        cache_dir=tmp_path / "c",
+        login_paths=LoginPaths(
+            profile_dir=tmp_path / "login-profile",
+            cookies_file=tmp_path / "login-cookies.json",
+        ),
+        err=io.StringIO(),
+    )
+    sources = container.doctor_sources()
+    assert list(sources)[:2] == ["файл cookies", "профиль входа"]
+    assert (await sources["профиль входа"].load()).sapisid() == SECRET_SAPISID
+
+
+async def test_doctor_login_profile_works_marks_others_non_critical():
+    checks = await run_doctor(
+        sources={
+            "файл cookies": BadSource(),
+            "профиль входа": GoodSource(),
+            "браузер chrome": BadSource(),
+        },
+        make_ask=ask_factory(),
+        test_video_id="abcdefghijk",
+    )
+    assert by_name(checks=checks, name="профиль входа").ok
+    assert not by_name(checks=checks, name="файл cookies").critical
+    assert not by_name(checks=checks, name="браузер chrome").critical
+    assert doctor_exit_code(checks=checks) == 0
