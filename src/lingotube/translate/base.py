@@ -7,6 +7,10 @@ from lingotube.models import Cue
 
 
 class Translator(Protocol):
+    async def prepare(self) -> None:
+        """Makes the translator ready (e.g. reads its key); raises if it cannot work."""
+        ...
+
     async def translate(
         self,
         cues: Sequence[Cue],

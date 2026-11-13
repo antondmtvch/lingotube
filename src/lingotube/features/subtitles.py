@@ -15,6 +15,7 @@ from lingotube.features.transcript import (
     TranscriptResult,
     _parse_final,
 )
+from lingotube.models import VideoInfo
 from lingotube.prompts import PROMPT_VERSION
 from lingotube.translate.base import Translator
 
@@ -72,10 +73,19 @@ class SubtitlesFeature:
             if cached is not None:
                 return cached
 
+        translator = self._translator
+
+        async def check_key(info: VideoInfo) -> None:
+            # the language is known once the chat is open, before any question is asked:
+            # a missing key fails here, while the own language needs no key at all
+            if _primary(language=info.language) != _primary(language=language):
+                await translator.prepare()
+
         original = await self._transcripts.run(
             video_id=video_id,
             language=None,
             use_cache=use_cache,
+            on_opened=check_key,
         )
         source = original.transcript
         if _primary(language=source.language) == _primary(language=language):

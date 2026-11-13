@@ -36,6 +36,9 @@ class OpenAICompatTranslator:
         self._settings = settings
         self._api_key = api_key
 
+    async def prepare(self) -> None:
+        """Ready from construction: the key was already read."""
+
     async def translate(
         self,
         cues: Sequence[Cue],

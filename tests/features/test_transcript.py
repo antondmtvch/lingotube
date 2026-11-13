@@ -1091,3 +1091,66 @@ async def test_exhausted_mid_video_part_adds_warning_naming_the_range(tmp_path):
     assert len(ranged) == 1
     assert "1:00" in ranged[0] and "оборван" not in ranged[0]
     assert not any("5:00–10:00" in w or "10:00–15:00" in w for w in result.warnings)
+
+
+async def test_on_opened_runs_after_open_before_any_chat_request(tmp_path):
+    client = FakeAskClient(
+        info=info(duration=300),
+        answer=full,
+    )
+    seen: list[tuple[str | None, int]] = []
+
+    async def on_opened(opened: VideoInfo) -> None:
+        seen.append((opened.language, len(client.prompts)))
+
+    await feature(
+        client=client,
+        tmp_path=tmp_path,
+    ).run(
+        video_id=VID,
+        on_opened=on_opened,
+    )
+    assert seen == [("ru", 0)]
+    assert client.opened == [VID]
+
+
+async def test_on_opened_error_stops_before_any_chat_request(tmp_path):
+    client = FakeAskClient(
+        info=info(duration=300),
+        answer=full,
+    )
+
+    async def on_opened(opened: VideoInfo) -> None:
+        raise RuntimeError("stop")
+
+    with pytest.raises(expected_exception=RuntimeError):
+        await feature(
+            client=client,
+            tmp_path=tmp_path,
+        ).run(
+            video_id=VID,
+            on_opened=on_opened,
+        )
+    assert client.prompts == []
+
+
+async def test_on_opened_not_called_when_result_is_cached(tmp_path):
+    client = FakeAskClient(
+        info=info(duration=300),
+        answer=full,
+    )
+    feat = feature(
+        client=client,
+        tmp_path=tmp_path,
+    )
+    await feat.run(video_id=VID)
+    called: list[VideoInfo] = []
+
+    async def on_opened(opened: VideoInfo) -> None:
+        called.append(opened)
+
+    await feat.run(
+        video_id=VID,
+        on_opened=on_opened,
+    )
+    assert called == []

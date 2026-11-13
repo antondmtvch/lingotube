@@ -1,11 +1,13 @@
 from collections.abc import Sequence
 from dataclasses import replace
 
+import pytest
+
 from lingotube.assemble import Completeness
 from lingotube.cache import Cache
 from lingotube.features.subtitles import SubtitlesFeature
 from lingotube.features.transcript import TranscriptResult
-from lingotube.models import Cue, Transcript
+from lingotube.models import Cue, Transcript, VideoInfo
 
 VID = "vid123"
 OK = Completeness(
@@ -54,8 +56,18 @@ class FakeTranscripts:
         language=None,
         *,
         use_cache=True,
+        on_opened=None,
     ):
         self.calls.append((video_id, language))
+        if on_opened is not None:
+            await on_opened(
+                VideoInfo(
+                    video_id=video_id,
+                    duration=10.0,
+                    title="t",
+                    language=self.original_language,
+                )
+            )
         if self.result is not None:
             return self.result
         lang = language if language is not None else self.original_language
@@ -67,8 +79,15 @@ class FakeTranscripts:
 
 
 class FakeTranslator:
-    def __init__(self):
+    def __init__(self, prepare_error: Exception | None = None):
         self.calls: list[str] = []
+        self.prepared = 0
+        self._prepare_error = prepare_error
+
+    async def prepare(self) -> None:
+        self.prepared += 1
+        if self._prepare_error is not None:
+            raise self._prepare_error
 
     async def translate(
         self,
@@ -284,3 +303,33 @@ async def test_same_cache_warning_from_original_and_subtitles_is_reported_once(
         language="ru",
     )
     assert result.warnings == (other, warning)
+
+
+async def test_missing_key_fails_after_open_before_chat_requests(tmp_path):
+    tr = FakeTranscripts(original_language="en")
+    tl = FakeTranslator(prepare_error=RuntimeError("no key"))
+    with pytest.raises(expected_exception=RuntimeError):
+        await SubtitlesFeature(
+            transcripts=tr,
+            translator=tl,
+            cache=Cache(root=tmp_path),
+        ).run(
+            video_id=VID,
+            language="ru",
+        )
+    assert tl.calls == [] and tl.prepared == 1
+
+
+async def test_own_language_needs_no_translator_key(tmp_path):
+    tr = FakeTranscripts(original_language="en")
+    tl = FakeTranslator(prepare_error=RuntimeError("no key"))
+    res = await SubtitlesFeature(
+        transcripts=tr,
+        translator=tl,
+        cache=Cache(root=tmp_path),
+    ).run(
+        video_id=VID,
+        language="en-US",
+    )
+    assert tl.prepared == 0 and tl.calls == []
+    assert res.transcript.language == "en-US"

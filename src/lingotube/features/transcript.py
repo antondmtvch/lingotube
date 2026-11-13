@@ -13,7 +13,7 @@ Flow (spec §6, §7, §16):
 """
 
 import math
-from collections.abc import Callable, Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, replace
 from typing import Any
 
@@ -29,7 +29,7 @@ from lingotube.assemble import (
 from lingotube.cache import Cache, CacheKey, put_best_effort
 from lingotube.config import Settings
 from lingotube.errors import ChatUnavailableError, ValidationError
-from lingotube.models import Transcript
+from lingotube.models import Transcript, VideoInfo
 from lingotube.parsing import ParsedLine, parse_answer
 from lingotube.prompts import PROMPT_VERSION, load_prompt
 
@@ -162,8 +162,13 @@ class TranscriptFeature:
         language: str | None = None,
         *,
         use_cache: bool = True,
+        on_opened: Callable[[VideoInfo], Awaitable[None]] | None = None,
     ) -> TranscriptResult:
         """`language=None` → original language; otherwise the chat translates directly.
+
+        `on_opened` is awaited once the chat is open (so the video's language is known) and
+        before any question is asked; it is not called when a cached result is served.
+        An exception from it aborts the run before any chat request.
 
         `use_cache=False` neither reads nor serves cached parts/results, but fresh
         parts and the fresh result are still written.
@@ -180,6 +185,8 @@ class TranscriptFeature:
 
         session = await self._ask.open(video_id=video_id)
         info = session.info
+        if on_opened is not None:
+            await on_opened(info)
         ranges = plan_ranges(
             duration=info.duration,
             chunk_seconds=self._settings.chunk_seconds,

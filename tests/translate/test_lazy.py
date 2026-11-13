@@ -1,3 +1,5 @@
+import pytest
+
 from lingotube.models import Cue
 from lingotube.translate.lazy import LazyTranslator
 
@@ -53,3 +55,25 @@ async def test_awaitable_factory_is_supported():
         target_language="de",
     )
     assert out[0].text == "Ade"
+
+
+async def test_prepare_builds_the_translator_once_and_surfaces_its_error():
+    calls: list[int] = []
+
+    def factory():
+        calls.append(1)
+        return Upper()
+
+    lazy = LazyTranslator(factory=factory)
+    await lazy.prepare()
+    out = await lazy.translate(
+        cues=CUES,
+        target_language="ru",
+    )
+    assert calls == [1] and out[0].text == "Aru"
+
+    def broken():
+        raise RuntimeError("no key")
+
+    with pytest.raises(expected_exception=RuntimeError):
+        await LazyTranslator(factory=broken).prepare()
