@@ -43,11 +43,7 @@ def test_finds_edge_via_which_on_linux():
         platform="linux",
         env={},
         is_file=lambda path: False,
-        which=lambda name: (
-            "/usr/bin/microsoft-edge-stable"
-            if name == "microsoft-edge-stable"
-            else None
-        ),
+        which=lambda name: "/usr/bin/microsoft-edge-stable" if name == "microsoft-edge-stable" else None,
     )
     assert found == Path("/usr/bin/microsoft-edge-stable")
 
@@ -76,18 +72,13 @@ def test_first_installed_prefers_chrome_then_edge():
         "chrome",
         WINDOWS_CHROME,
     )
-    assert find_first_installed_browser(
-        is_file={WINDOWS_EDGE}.__contains__, **common
-    ) == ("edge", WINDOWS_EDGE)
+    assert find_first_installed_browser(is_file={WINDOWS_EDGE}.__contains__, **common) == ("edge", WINDOWS_EDGE)
     assert find_first_installed_browser(is_file=lambda p: False, **common) is None
 
 
 def test_command_line_has_no_automation_or_address_flags():
     args = browser_command_line(Path("chrome"), Path("p"), "headless", "https://x/")
-    assert not any(
-        a.startswith(("--enable-automation", "--remote-debugging-address"))
-        for a in args
-    )
+    assert not any(a.startswith(("--enable-automation", "--remote-debugging-address")) for a in args)
     assert "--remote-debugging-port=0" in args and args[-1] == "https://x/"
 
 
@@ -109,8 +100,7 @@ def test_no_visible_window_launch_mode_with_debugging_port_exists():
 
 def test_profile_busy_hint_mentions_lingering_background_process():
     assert PROFILE_BUSY_HINT == (
-        "Закройте окно входа lingotube (или завершите его фоновый процесс браузера) "
-        "и повторите."
+        "Закройте окно входа lingotube (или завершите его фоновый процесс браузера) и повторите."
     )
 
 
@@ -215,9 +205,7 @@ def spawn_writing_port_file(profile_dir: Path, process: FakeProcess):
     async def spawn(*args, **kwargs):
         captured["args"] = args
         captured["kwargs"] = kwargs
-        (profile_dir / "DevToolsActivePort").write_text(
-            "53211\n/devtools/browser/abc\n"
-        )
+        (profile_dir / "DevToolsActivePort").write_text("53211\n/devtools/browser/abc\n")
         return process
 
     spawn.captured = captured
@@ -263,9 +251,7 @@ async def test_launch_ignores_stale_port_file(tmp_path):
     assert browser.websocket_url.endswith(":2/devtools/browser/new")
 
 
-async def test_launch_raises_profile_busy_when_busy_before_launch(
-    tmp_path, monkeypatch
-):
+async def test_launch_raises_profile_busy_when_busy_before_launch(tmp_path, monkeypatch):
     monkeypatch.setattr(login_browser, "is_login_profile_in_use", lambda *a, **k: True)
 
     async def spawn(*args, **kwargs):
@@ -283,9 +269,7 @@ async def test_launch_raises_profile_busy_when_busy_before_launch(
     assert info.value.exit_code == 1
 
 
-async def test_launch_raises_profile_busy_when_process_exits_and_profile_locked(
-    tmp_path, monkeypatch
-):
+async def test_launch_raises_profile_busy_when_process_exits_and_profile_locked(tmp_path, monkeypatch):
     spawned = []
     monkeypatch.setattr(
         login_browser, "is_login_profile_in_use", lambda *a, **k: bool(spawned)
@@ -433,9 +417,7 @@ LOGIN_URL = "https://accounts.google.com/ServiceLogin?service=youtube"
 
 def test_sign_in_window_command_line_has_no_debugging_or_automation_flags():
     args = sign_in_window_command_line(Path("chrome"), Path("p"), LOGIN_URL)
-    assert not any(
-        a.startswith(("--remote-debugging", "--enable-automation")) for a in args
-    )
+    assert not any(a.startswith(("--remote-debugging", "--enable-automation")) for a in args)
     assert "--disable-background-mode" in args
     assert "--no-first-run" in args
     assert "--no-default-browser-check" in args
@@ -471,9 +453,7 @@ async def test_sign_in_window_deletes_profile_before_launch(tmp_path):
     assert not window.has_exited
 
 
-async def test_sign_in_window_profile_locked_during_delete_is_profile_busy(
-    tmp_path, monkeypatch
-):
+async def test_sign_in_window_profile_locked_during_delete_is_profile_busy(tmp_path, monkeypatch):
     def refuse(path, *args, **kwargs):
         raise PermissionError("LEAKME-path")
 
@@ -494,9 +474,7 @@ async def test_sign_in_window_profile_locked_during_delete_is_profile_busy(
     assert info.value.hint == PROFILE_BUSY_HINT
 
 
-async def test_sign_in_window_busy_profile_is_checked_before_delete(
-    tmp_path, monkeypatch
-):
+async def test_sign_in_window_busy_profile_is_checked_before_delete(tmp_path, monkeypatch):
     (tmp_path / "keep").write_text("x")
     monkeypatch.setattr(login_browser, "is_login_profile_in_use", lambda *a, **k: True)
 

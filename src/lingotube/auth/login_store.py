@@ -41,18 +41,13 @@ def _parse_saved_login(raw_text: str) -> SavedLogin:
         data = json.loads(raw_text)
     except ValueError, RecursionError:
         raise _corrupted_login_error() from None
-    if not isinstance(data, dict) or not _is_current_format_version(
-        data.get("version")
-    ):
+    if not isinstance(data, dict) or not _is_current_format_version(data.get("version")):
         raise _corrupted_login_error()
     browser = data.get("browser")
     cookies = data.get("cookies")
     if browser not in LOGIN_BROWSERS or not isinstance(cookies, dict):
         raise _corrupted_login_error()
-    if not all(
-        isinstance(name, str) and isinstance(value, str)
-        for name, value in cookies.items()
-    ):
+    if not all(isinstance(name, str) and isinstance(value, str) for name, value in cookies.items()):
         raise _corrupted_login_error()
     return SavedLogin(
         browser=browser,

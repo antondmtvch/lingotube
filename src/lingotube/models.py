@@ -74,14 +74,11 @@ class Transcript:
             "duration": self.duration,
             "language": self.language,
             "prompt_version": self.prompt_version,
-            "cues": [
-                {"id": c.id, "start": c.start, "end": c.end, "text": c.text}
-                for c in self.cues
-            ],
+            "cues": [{"id": c.id, "start": c.start, "end": c.end, "text": c.text} for c in self.cues],
         }
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "Transcript":
+    def from_dict(cls, d: dict[str, Any]) -> Transcript:
         if not isinstance(
             d,
             dict,

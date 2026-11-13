@@ -5,13 +5,10 @@ from typing import Protocol
 
 from lingotube.errors import AuthError
 
-LOGIN_HINT = (
-    "Выполните lingotube login: откроется окно Chrome или Edge, войдите в YouTube."
-)
+LOGIN_HINT = "Выполните lingotube login: откроется окно Chrome или Edge, войдите в YouTube."
 
 EXPORT_HINT = (
-    LOGIN_HINT
-    + " Запасной путь — выгрузить cookies через режим инкогнито: откройте окно инкогнито, "
+    LOGIN_HINT + " Запасной путь — выгрузить cookies через режим инкогнито: откройте окно инкогнито, "
     "разрешите там расширение для экспорта, войдите на youtube.com, выгрузите cookies на "
     "странице https://www.youtube.com/robots.txt и сразу закройте окно инкогнито. "
     "Затем запустите с --cookies-file <путь> (путь запомнится)."

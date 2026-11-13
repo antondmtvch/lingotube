@@ -8,7 +8,7 @@ import asyncio
 import itertools
 import json
 from collections.abc import AsyncIterator, Mapping
-from contextlib import AsyncExitStack, asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager, suppress
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlsplit
@@ -43,9 +43,7 @@ class DevToolsConnection:
         self._timeout = timeout
         self._message_ids = itertools.count(1)
 
-    async def send_command(
-        self, method: str, params: Mapping[str, Any] | None = None
-    ) -> dict[str, Any]:
+    async def send_command(self, method: str, params: Mapping[str, Any] | None = None) -> dict[str, Any]:
         """Send one command and return its `result`; events and foreign ids are skipped."""
         message_id = next(self._message_ids)
         command: dict[str, Any] = {"id": message_id, "method": method}
@@ -68,9 +66,7 @@ class DevToolsConnection:
         except TimeoutError:
             raise DevToolsError(f"DevTools command {method} timed out") from None
         except ValueError:
-            raise DevToolsError(
-                f"DevTools command {method} got a malformed reply"
-            ) from None
+            raise DevToolsError(f"DevTools command {method} got a malformed reply") from None
 
 
 def _require_loopback_websocket_url(websocket_url: str) -> None:
@@ -80,9 +76,7 @@ def _require_loopback_websocket_url(websocket_url: str) -> None:
 
 
 @asynccontextmanager
-async def connect_to_browser_devtools(
-    websocket_url: str, timeout: float = 10.0
-) -> AsyncIterator[DevToolsConnection]:
+async def connect_to_browser_devtools(websocket_url: str, timeout: float = 10.0) -> AsyncIterator[DevToolsConnection]:
     _require_loopback_websocket_url(websocket_url)
     async with AsyncExitStack() as stack:
         try:
@@ -102,17 +96,12 @@ async def connect_to_browser_devtools(
 async def read_all_cookies(connection: DevToolsConnection) -> list[BrowserCookie]:
     result = await connection.send_command("Storage.getCookies")
     try:
-        return [
-            BrowserCookie(name=c["name"], value=c["value"], domain=c["domain"])
-            for c in result.get("cookies", [])
-        ]
+        return [BrowserCookie(name=c["name"], value=c["value"], domain=c["domain"]) for c in result.get("cookies", [])]
     except KeyError, TypeError:
         # No exception text: it could carry a cookie entry.
         raise DevToolsError("DevTools returned a malformed cookie entry") from None
 
 
 async def close_browser(connection: DevToolsConnection) -> None:
-    try:
+    with suppress(DevToolsConnectionClosed):
         await connection.send_command("Browser.close")
-    except DevToolsConnectionClosed:
-        pass

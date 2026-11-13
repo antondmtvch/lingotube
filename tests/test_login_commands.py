@@ -69,11 +69,7 @@ class LoginHarness:
         container.browser_finder.override(providers.Object(lambda: self.installed))
         container.single_browser_finder.override(
             providers.Object(
-                lambda browser: (
-                    self.installed[1]
-                    if self.installed and self.installed[0] == browser
-                    else None
-                )
+                lambda browser: self.installed[1] if self.installed and self.installed[0] == browser else None
             )
         )
         return AppContext(
@@ -278,9 +274,7 @@ def test_logout_permission_error_while_removing_is_exit_1(tmp_path, monkeypatch)
     assert code == 1
 
 
-def test_logout_other_os_error_while_removing_profile_is_fixed_text_exit_1(
-    tmp_path, monkeypatch
-):
+def test_logout_other_os_error_while_removing_profile_is_fixed_text_exit_1(tmp_path, monkeypatch):
     h = LoginHarness(tmp_path)
     h.paths.profile_dir.mkdir()
 

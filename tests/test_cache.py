@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import dataclasses
 import os
 
@@ -67,11 +68,7 @@ async def test_key_fields_cannot_collide_or_escape(tmp_path):
         key=a,
         value={"x": 1},
     )
-    assert all(
-        p.parent == tmp_path / "c"
-        for p in (tmp_path / "c").rglob(pattern="*")
-        if p.is_file()
-    )
+    assert all(p.parent == tmp_path / "c" for p in (tmp_path / "c").rglob(pattern="*") if p.is_file())
     assert (
         await cache.get(
             key=CacheKey(
@@ -139,13 +136,11 @@ async def test_no_temp_files_left_after_put(tmp_path):
 
 async def test_failed_put_leaves_no_temp_files(tmp_path):
     cache = Cache(root=tmp_path)
-    try:
+    with contextlib.suppress(TypeError):
         await cache.put(
             key=KEY,
             value={"x": object()},
         )
-    except TypeError:
-        pass
     assert list(tmp_path.iterdir()) == []
 
 

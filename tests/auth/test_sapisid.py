@@ -33,10 +33,7 @@ def test_fallback_to_3papisid():
         creds=Credentials(cookies={"__Secure-3PAPISID": "P"}),
         now=5,
     )
-    assert (
-        a["Authorization"]
-        == f"SAPISIDHASH 5_{hashlib.sha1(data=b'5 P https://www.youtube.com').hexdigest()}"
-    )
+    assert a["Authorization"] == f"SAPISIDHASH 5_{hashlib.sha1(data=b'5 P https://www.youtube.com').hexdigest()}"
 
 
 def test_missing_both_is_auth_error():

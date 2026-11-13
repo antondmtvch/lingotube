@@ -18,10 +18,7 @@ from lingotube.auth.devtools import DevToolsConnection, DevToolsError, close_bro
 from lingotube.errors import AuthError, ProfileBusyError
 
 PROFILE_BUSY_MESSAGE = "Профиль входа lingotube сейчас открыт."
-PROFILE_BUSY_HINT = (
-    "Закройте окно входа lingotube (или завершите его фоновый процесс браузера) "
-    "и повторите."
-)
+PROFILE_BUSY_HINT = "Закройте окно входа lingotube (или завершите его фоновый процесс браузера) и повторите."
 LOGIN_BROWSERS = ("chrome", "edge")
 LaunchMode = Literal["headless", "offscreen"]
 
@@ -87,17 +84,13 @@ def find_first_installed_browser(
 ) -> tuple[str, Path] | None:
     """Return (name, executable) of the first installed browser: chrome, then edge."""
     for browser in LOGIN_BROWSERS:
-        executable = find_browser_executable(
-            browser, platform=platform, env=env, is_file=is_file, which=which
-        )
+        executable = find_browser_executable(browser, platform=platform, env=env, is_file=is_file, which=which)
         if executable is not None:
             return browser, executable
     return None
 
 
-def browser_command_line(
-    executable: Path, profile_dir: Path, mode: LaunchMode, start_url: str
-) -> list[str]:
+def browser_command_line(executable: Path, profile_dir: Path, mode: LaunchMode, start_url: str) -> list[str]:
     """Argument list (no shell) for the login browser; no automation flags."""
     return [
         str(executable),
@@ -110,9 +103,7 @@ def browser_command_line(
     ]
 
 
-def sign_in_window_command_line(
-    executable: Path, profile_dir: Path, login_url: str
-) -> list[str]:
+def sign_in_window_command_line(executable: Path, profile_dir: Path, login_url: str) -> list[str]:
     """Argument list (no shell) for the sign-in window.
 
     No `--remote-debugging-*` and no automation flags: a browser with a debugging
@@ -229,9 +220,7 @@ async def launch_login_browser(
     profile_dir: Path,
     mode: LaunchMode,
     start_url: str,
-    spawn: Callable[
-        ..., Awaitable[asyncio.subprocess.Process]
-    ] = asyncio.create_subprocess_exec,
+    spawn: Callable[..., Awaitable[asyncio.subprocess.Process]] = asyncio.create_subprocess_exec,
     port_file_timeout: float = 30.0,
 ) -> RunningLoginBrowser:
     """Start the browser in the login profile and wait for its DevTools endpoint."""
@@ -258,9 +247,7 @@ async def launch_login_browser(
             while True:
                 websocket_url = _read_websocket_url(port_file)
                 if websocket_url is not None:
-                    return RunningLoginBrowser(
-                        websocket_url=websocket_url, process=process
-                    )
+                    return RunningLoginBrowser(websocket_url=websocket_url, process=process)
                 if process.returncode is not None:
                     break
                 await asyncio.sleep(_PORT_FILE_POLL_INTERVAL)
@@ -301,9 +288,7 @@ async def launch_sign_in_window(
     executable: Path,
     profile_dir: Path,
     login_url: str,
-    spawn: Callable[
-        ..., Awaitable[asyncio.subprocess.Process]
-    ] = asyncio.create_subprocess_exec,
+    spawn: Callable[..., Awaitable[asyncio.subprocess.Process]] = asyncio.create_subprocess_exec,
 ) -> SignInWindow:
     """Wipe the login profile, then open the sign-in window without a debugging port."""
     if is_login_profile_in_use(profile_dir):

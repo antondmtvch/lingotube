@@ -32,10 +32,7 @@ def test_srt():
     assert render(
         transcript=T,
         fmt="srt",
-    ) == (
-        "1\n00:00:02,000 --> 00:00:04,000\nПомогите!\n\n"
-        "2\n01:02:03,000 --> 01:02:07,500\nb\n"
-    )
+    ) == ("1\n00:00:02,000 --> 00:00:04,000\nПомогите!\n\n2\n01:02:03,000 --> 01:02:07,500\nb\n")
 
 
 def test_vtt():
@@ -168,18 +165,12 @@ def test_empty_text_cues_are_skipped_and_srt_renumbered(empty):
         transcript=t,
         fmt="srt",
     )
-    assert (
-        srt
-        == "1\n00:00:00,000 --> 00:00:01,000\na\n\n2\n00:00:02,000 --> 00:00:03,000\nb\n"
-    )
+    assert srt == "1\n00:00:00,000 --> 00:00:01,000\na\n\n2\n00:00:02,000 --> 00:00:03,000\nb\n"
     vtt = render(
         transcript=t,
         fmt="vtt",
     )
-    assert (
-        vtt
-        == "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\na\n\n00:00:02.000 --> 00:00:03.000\nb\n"
-    )
+    assert vtt == "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\na\n\n00:00:02.000 --> 00:00:03.000\nb\n"
     assert (
         len(
             json.loads(

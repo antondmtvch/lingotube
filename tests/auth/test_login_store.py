@@ -21,9 +21,7 @@ async def test_write_then_read_roundtrip(tmp_path):
 @pytest.mark.skipif(os.name == "nt", reason="POSIX mode bits")
 async def test_written_file_is_owner_only(tmp_path):
     path = tmp_path / "login-cookies.json"
-    await LoginCookieStore(cookies_file=path).write(
-        saved=SavedLogin(browser="chrome", cookies={"a": "b"})
-    )
+    await LoginCookieStore(cookies_file=path).write(saved=SavedLogin(browser="chrome", cookies={"a": "b"}))
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
 
 
@@ -56,9 +54,7 @@ async def test_failed_write_leaves_no_temporary_file(tmp_path, monkeypatch):
 
     monkeypatch.setattr(login_store.os, "replace", failing_replace)
     with pytest.raises(OSError):
-        await LoginCookieStore(cookies_file=path).write(
-            saved=SavedLogin(browser="chrome", cookies={"a": "b"})
-        )
+        await LoginCookieStore(cookies_file=path).write(saved=SavedLogin(browser="chrome", cookies={"a": "b"}))
     assert list(tmp_path.iterdir()) == []
 
 

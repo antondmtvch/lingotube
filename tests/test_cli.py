@@ -82,7 +82,7 @@ def cut_answer(prompt: str) -> str:
 
 
 class FakeSession(AskSession):
-    def __init__(self, client: "FakeAsk") -> None:
+    def __init__(self, client: FakeAsk) -> None:
         self.info = client.info
         self._client = client
 
@@ -356,12 +356,7 @@ def test_transcript_outputs_json_format(tmp_path):
         URL,
     )
     assert code == 0, err
-    assert (
-        json.loads(s=(tmp_path / f"{VID}.en.json").read_text(encoding="utf-8"))[
-            "video_id"
-        ]
-        == VID
-    )
+    assert json.loads(s=(tmp_path / f"{VID}.en.json").read_text(encoding="utf-8"))["video_id"] == VID
 
 
 def test_build_reads_file_and_validates(tmp_path):

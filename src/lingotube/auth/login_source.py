@@ -17,9 +17,7 @@ class LoginProfileCookieSource:
         self,
         store: LoginCookieStore,
         paths: LoginPaths,
-        refresh: Callable[
-            ..., Awaitable[RefreshResult]
-        ] = refresh_cookies_from_login_profile,
+        refresh: Callable[..., Awaitable[RefreshResult]] = refresh_cookies_from_login_profile,
     ) -> None:
         self._store = store
         self._paths = paths

@@ -24,8 +24,7 @@ SETTINGS_CLEANUP_FAILED_WARNING = (
     "проверьте settings.toml и уберите cookies_file и browser вручную."
 )
 ENV_OVERRIDES_LOGIN_WARNING = (
-    f"Переменная {ENV_COOKIES_FILE} задана и важнее входа lingotube; "
-    "уберите её, чтобы использовать вход."
+    f"Переменная {ENV_COOKIES_FILE} задана и важнее входа lingotube; уберите её, чтобы использовать вход."
 )
 
 
@@ -125,9 +124,7 @@ def register(
             warnings: tuple[str, ...] = ()
             if ctx.settings_path is not None:
                 try:
-                    forgotten = await forget_remembered_cookie_sources(
-                        settings_path=ctx.settings_path
-                    )
+                    forgotten = await forget_remembered_cookie_sources(settings_path=ctx.settings_path)
                 except LingotubeError, OSError:
                     # The sign-in itself succeeded; only the settings cleanup failed.
                     warnings += (SETTINGS_CLEANUP_FAILED_WARNING,)

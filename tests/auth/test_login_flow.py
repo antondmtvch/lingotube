@@ -53,12 +53,7 @@ class FakeConnection:
                 await self._on_cookies()
             polls = self._cookie_polls
             batch = polls.pop(0) if len(polls) > 1 else polls[0]
-            return {
-                "cookies": [
-                    {"name": c.name, "value": c.value, "domain": c.domain}
-                    for c in batch
-                ]
-            }
+            return {"cookies": [{"name": c.name, "value": c.value, "domain": c.domain} for c in batch]}
         if method == "Target.getTargets":
             counts = self._page_counts
             count = counts.pop(0) if len(counts) > 1 else (counts[0] if counts else 1)
@@ -103,9 +98,7 @@ class FakeSignInWindow:
 
 
 class Harness:
-    def __init__(
-        self, connection: FakeConnection, window_exits_at: float | None = 3.0
-    ) -> None:
+    def __init__(self, connection: FakeConnection, window_exits_at: float | None = 3.0) -> None:
         self.connection = connection
         self.running = FakeRunningBrowser()
         self.clock = FakeClock()
@@ -131,9 +124,7 @@ class Harness:
 
 @pytest.fixture
 def paths(tmp_path: Path) -> LoginPaths:
-    return LoginPaths(
-        profile_dir=tmp_path / "profile", cookies_file=tmp_path / "cookies.json"
-    )
+    return LoginPaths(profile_dir=tmp_path / "profile", cookies_file=tmp_path / "cookies.json")
 
 
 @pytest.fixture
@@ -189,10 +180,7 @@ async def test_sign_in_opens_login_page_in_window_and_notifies_once(paths, store
         paths.profile_dir,
         LOGIN_PAGE_URL,
     )
-    assert messages == [
-        "Войдите в YouTube в открывшемся окне и закройте окно браузера; "
-        "жду до 10 минут."
-    ]
+    assert messages == ["Войдите в YouTube в открывшемся окне и закройте окно браузера; жду до 10 минут."]
     assert LOGIN_PAGE_URL.startswith("https://accounts.google.com/ServiceLogin")
 
 
@@ -222,17 +210,13 @@ async def test_sign_in_accepts_secure_3papisid_alone(paths, store):
 
 
 async def test_sign_in_drops_foreign_domain_cookies(paths, store):
-    harness = Harness(
-        FakeConnection([SIGNED_IN + [cookie("TRACKER", "LEAKME", ".example.com")]])
-    )
+    harness = Harness(FakeConnection([SIGNED_IN + [cookie("TRACKER", "LEAKME", ".example.com")]]))
     saved = await sign_in(harness, paths, store)
     assert "TRACKER" not in saved.cookies
     assert "TRACKER" not in (await store.read()).cookies
 
 
-async def test_window_closed_without_sign_in_is_auth_error_and_nothing_written(
-    paths, store
-):
+async def test_window_closed_without_sign_in_is_auth_error_and_nothing_written(paths, store):
     harness = Harness(FakeConnection([[cookie("PREF", "LEAKME")]]), window_exits_at=1.0)
     with pytest.raises(AuthError) as caught:
         await sign_in(harness, paths, store)
@@ -313,9 +297,7 @@ async def test_headless_read_failure_is_auth_error_and_shuts_down(paths, store):
     assert harness.running.shut_down_calls >= 1
 
 
-async def test_sign_in_connect_failure_is_auth_error_and_shuts_down_without_connection(
-    paths, store
-):
+async def test_sign_in_connect_failure_is_auth_error_and_shuts_down_without_connection(paths, store):
     harness = Harness(FakeConnection([[]]))
 
     @asynccontextmanager
@@ -359,13 +341,9 @@ async def refresh(harness: Harness, paths, store, find=lambda browser: Path("edg
 
 
 async def test_refresh_saves_rotated_cookies(paths, store):
-    await store.write(
-        SavedLogin(browser="edge", cookies={ROTATING_COOKIE: "OLD-LEAKME"})
-    )
+    await store.write(SavedLogin(browser="edge", cookies={ROTATING_COOKIE: "OLD-LEAKME"}))
     rotated_cookies = [cookie("SAPISID", "LEAKME-new"), cookie(ROTATING_COOKIE, "NEW")]
-    harness = Harness(
-        FakeConnection([[cookie(ROTATING_COOKIE, "OLD-LEAKME")], rotated_cookies])
-    )
+    harness = Harness(FakeConnection([[cookie(ROTATING_COOKIE, "OLD-LEAKME")], rotated_cookies]))
     result = await refresh(harness, paths, store)
     assert result.rotated is True
     assert result.saved.browser == "edge"
@@ -407,13 +385,9 @@ async def test_refresh_store_write_failure_is_auth_error(paths, store):
     assert caught.value.message == "Не удалось сохранить вход lingotube."
 
 
-async def test_refresh_busy_profile_is_auth_error_with_close_window_hint(
-    paths, store, monkeypatch
-):
+async def test_refresh_busy_profile_is_auth_error_with_close_window_hint(paths, store, monkeypatch):
     await store.write(SavedLogin(browser="chrome", cookies={}))
-    monkeypatch.setattr(
-        "lingotube.auth.login_flow.is_login_profile_in_use", lambda profile_dir: True
-    )
+    monkeypatch.setattr("lingotube.auth.login_flow.is_login_profile_in_use", lambda profile_dir: True)
     harness = Harness(FakeConnection([[]]))
     with pytest.raises(AuthError) as caught:
         await refresh(harness, paths, store)

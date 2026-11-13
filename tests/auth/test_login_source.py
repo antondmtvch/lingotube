@@ -40,7 +40,5 @@ async def test_refresh_from_profile_passes_paths_and_store(tmp_path):
     async def fake_refresh(**kwargs):
         calls.append(kwargs)
 
-    await LoginProfileCookieSource(
-        store=store, paths=paths, refresh=fake_refresh
-    ).refresh_from_profile()
+    await LoginProfileCookieSource(store=store, paths=paths, refresh=fake_refresh).refresh_from_profile()
     assert calls == [{"paths": paths, "store": store}]

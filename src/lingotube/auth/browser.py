@@ -92,9 +92,7 @@ class ChainCookieSource:
             try:
                 return await source.load()
             except AuthError as e:
-                hint = (
-                    e.hint or hint
-                )  # keep the last source's own hint (e.g. the Windows one)
+                hint = e.hint or hint  # keep the last source's own hint (e.g. the Windows one)
         raise AuthError(
             message="Не удалось получить cookies ни из одного источника.",
             hint=hint,

@@ -33,15 +33,12 @@ WATCH_PATH = "/watch"
 NEXT_PATH = "/youtubei/v1/next"
 GET_PANEL_PATH = "/youtubei/v1/get_panel"
 USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
 )
 ACCEPT_LANGUAGE = "ru,en;q=0.8"  # as in the live-verified probe
 WEB_CLIENT_NAME_ID = "1"  # numeric id of the WEB innertube client
 
-_STALE_COOKIES = (
-    "YouTube не видит вход в аккаунт: cookies устарели или выгружены без входа."
-)
+_STALE_COOKIES = "YouTube не видит вход в аккаунт: cookies устарели или выгружены без входа."
 
 
 class Pacer:
@@ -81,9 +78,7 @@ class AskClient(Protocol):
 
 def _ensure_youtube(url: httpx.URL) -> None:
     if url.scheme != "https" or url.host != ALLOWED_HOST or url.port not in (None, 443):
-        raise NetworkError(
-            message="Отказ: запрос не к https://www.youtube.com не выполняется."
-        )
+        raise NetworkError(message="Отказ: запрос не к https://www.youtube.com не выполняется.")
 
 
 MIN_SECRET_LENGTH = 4
@@ -227,9 +222,7 @@ class _Channel:
                     last = f"{what}: {type(e).__name__}: {e}"
                     continue
                 except httpx.HTTPError as e:
-                    raise NetworkError(
-                        message=self.redact(text=f"{what}: {type(e).__name__}: {e}")
-                    ) from None
+                    raise NetworkError(message=self.redact(text=f"{what}: {type(e).__name__}: {e}")) from None
             status = resp.status_code
             if resp.history or 300 <= status < 400 or resp.url.host != ALLOWED_HOST:
                 raise NetworkError(
@@ -246,9 +239,7 @@ class _Channel:
             if status >= 400:
                 raise NetworkError(message=f"{what}: HTTP {status}")
             return resp
-        raise NetworkError(
-            message=self.redact(text=f"{last} (попыток: {attempts})")
-        ) from None
+        raise NetworkError(message=self.redact(text=f"{last} (попыток: {attempts})")) from None
 
     async def post_json(
         self,
@@ -308,9 +299,7 @@ class YouTubeAskSession(AskSession):
             panel_only=False,
         )
         if fresh is not None:
-            self._channel.add_secrets(
-                values=[fresh.continuation, fresh.click_tracking_params]
-            )
+            self._channel.add_secrets(values=[fresh.continuation, fresh.click_tracking_params])
             self._cmd = fresh
         return answer
 
@@ -391,9 +380,7 @@ class YouTubeAskClient(AskClient):
                     panel_only=False,
                 )
         if cmd is None:
-            raise ChatUnavailableError(
-                message="Чат YouTube («Спросить») недоступен для этого видео."
-            )
+            raise ChatUnavailableError(message="Чат YouTube («Спросить») недоступен для этого видео.")
         return YouTubeAskSession(
             channel=ch,
             info=info,

@@ -240,9 +240,7 @@ def page_logged_in(html: str) -> bool | None:
 
 def extract_page(html: str) -> tuple[dict[str, Any], VideoInfo]:
     """Innertube client context (ytcfg) and video info (ytInitialPlayerResponse)."""
-    unavailable = ChatUnavailableError(
-        message="Не удалось разобрать страницу видео YouTube (видео недоступно?)."
-    )
+    unavailable = ChatUnavailableError(message="Не удалось разобрать страницу видео YouTube (видео недоступно?).")
     i = html.find(_CONTEXT_MARKER)
     m = _PLAYER_MARKER.search(string=html)
     if i < 0 or m is None:

@@ -9,7 +9,7 @@ Answer = Callable[[str], str | BaseException]
 
 
 class FakeAskSession(AskSession):
-    def __init__(self, client: "FakeAskClient") -> None:
+    def __init__(self, client: FakeAskClient) -> None:
         self.info = client.info
         self._client = client
 

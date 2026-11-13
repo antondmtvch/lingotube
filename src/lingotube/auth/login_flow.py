@@ -34,18 +34,13 @@ from lingotube.config import LoginPaths
 from lingotube.errors import AuthError, ProfileBusyError
 
 type LaunchSignInWindow = Callable[[Path, Path, str], Awaitable[SignInWindow]]
-type LaunchLoginBrowser = Callable[
-    [Path, Path, LaunchMode, str], Awaitable[RunningLoginBrowser]
-]
+type LaunchLoginBrowser = Callable[[Path, Path, LaunchMode, str], Awaitable[RunningLoginBrowser]]
 type ConnectToBrowser = Callable[[str], AbstractAsyncContextManager[DevToolsConnection]]
 type Sleep = Callable[[float], Awaitable[None]]
 type Clock = Callable[[], float]
 type ReadFromConnection = Callable[[DevToolsConnection], Awaitable[list[BrowserCookie]]]
 
-LOGIN_PAGE_URL = (
-    "https://accounts.google.com/ServiceLogin"
-    "?service=youtube&continue=https://www.youtube.com/"
-)
+LOGIN_PAGE_URL = "https://accounts.google.com/ServiceLogin?service=youtube&continue=https://www.youtube.com/"
 REFRESH_PAGE_URL = "https://www.youtube.com/"
 LOGIN_WAIT_SECONDS = 600.0
 WINDOW_POLL_SECONDS = 1.0
@@ -68,10 +63,7 @@ def youtube_cookies_only(cookies: Iterable[BrowserCookie]) -> dict[str, str]:
 
 
 def _has_sapisid(cookies: Iterable[BrowserCookie]) -> bool:
-    return any(
-        cookie.name in _SAPISID_COOKIE_NAMES and is_allowed_domain(cookie.domain)
-        for cookie in cookies
-    )
+    return any(cookie.name in _SAPISID_COOKIE_NAMES and is_allowed_domain(cookie.domain) for cookie in cookies)
 
 
 def _is_youtube_domain(domain: str) -> bool:
@@ -117,10 +109,7 @@ async def sign_in_with_login_browser(
     it, then read the cookies of the login profile in a headless launch."""
     window = await launch_window(executable, paths.profile_dir, LOGIN_PAGE_URL)
     try:
-        notify(
-            "Войдите в YouTube в открывшемся окне и закройте окно браузера; "
-            "жду до 10 минут."
-        )
+        notify("Войдите в YouTube в открывшемся окне и закройте окно браузера; жду до 10 минут.")
         await wait_for_sign_in_window_to_close(window=window, sleep=sleep, clock=clock)
     finally:
         # Ctrl+C or a timeout: close our own window; no-op once it has exited.
@@ -147,9 +136,7 @@ async def sign_in_with_login_browser(
     return saved
 
 
-async def wait_for_sign_in_window_to_close(
-    window: SignInWindow, sleep: Sleep, clock: Clock
-) -> None:
+async def wait_for_sign_in_window_to_close(window: SignInWindow, sleep: Sleep, clock: Clock) -> None:
     """Poll our own window process until it exits; AuthError after LOGIN_WAIT_SECONDS."""
     deadline = clock() + LOGIN_WAIT_SECONDS
     while not window.has_exited:
@@ -209,9 +196,7 @@ async def refresh_cookies_from_login_profile(
     saved = await store.read()
     executable = find_executable(saved.browser)
     if executable is None:
-        raise AuthError(
-            message="Браузер для обновления входа не найден.", hint=LOGIN_HINT
-        )
+        raise AuthError(message="Браузер для обновления входа не найден.", hint=LOGIN_HINT)
     if is_login_profile_in_use(paths.profile_dir):
         raise _profile_busy_auth_error()
     previous_value = saved.cookies.get(ROTATING_COOKIE)
@@ -237,13 +222,9 @@ async def refresh_cookies_from_login_profile(
     except ProfileBusyError:
         raise _profile_busy_auth_error() from None
     except DevToolsError:
-        raise AuthError(
-            message="Не удалось обновить вход в профиле lingotube.", hint=LOGIN_HINT
-        ) from None
+        raise AuthError(message="Не удалось обновить вход в профиле lingotube.", hint=LOGIN_HINT) from None
     if not _has_sapisid(cookies):
-        raise AuthError(
-            message="Вход в профиле lingotube больше не действует.", hint=LOGIN_HINT
-        )
+        raise AuthError(message="Вход в профиле lingotube больше не действует.", hint=LOGIN_HINT)
     refreshed = SavedLogin(browser=saved.browser, cookies=youtube_cookies_only(cookies))
     await _save_login(store, refreshed)
     new_rotating_value = refreshed.cookies.get(ROTATING_COOKIE)

@@ -59,9 +59,7 @@ class FileCookieSource:
                 hint=EXPORT_HINT,
             ) from None
         if mode is not None and mode & 0o044:
-            self._warn(
-                f"Файл cookies доступен другим пользователям: {self._path} (chmod 600)."
-            )
+            self._warn(f"Файл cookies доступен другим пользователям: {self._path} (chmod 600).")
         creds = Credentials(cookies=_parse(text=text))
         creds.require_sapisid()
         return creds

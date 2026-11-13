@@ -5,6 +5,7 @@ The model API key is NOT a setting: only the *name* of the env var is stored
 """
 
 import asyncio
+import contextlib
 import math
 import os
 import tempfile
@@ -126,9 +127,7 @@ def _check(
         except OverflowError:  # a TOML integer too large for a float
             number = math.inf
         if not math.isfinite(number):
-            raise ValidationError(
-                message=f"Setting '{where}{name}' must be a finite number"
-            )
+            raise ValidationError(message=f"Setting '{where}{name}' must be a finite number")
         return number
     return value
 
@@ -155,13 +154,9 @@ def _validated(
         where=where,
     )
     if name in _MIN and value < _MIN[name][0]:  # type: ignore[operator]
-        raise ValidationError(
-            message=f"Setting '{where}{name}' must be {_MIN[name][1]}"
-        )
+        raise ValidationError(message=f"Setting '{where}{name}' must be {_MIN[name][1]}")
     if name == "format" and value not in FORMATS:
-        raise ValidationError(
-            message=f"Setting 'format' must be one of {', '.join(FORMATS)}"
-        )
+        raise ValidationError(message=f"Setting 'format' must be one of {', '.join(FORMATS)}")
     return value
 
 
@@ -206,9 +201,7 @@ def load_settings(
         except FileNotFoundError:
             data = {}
         except (OSError, tomllib.TOMLDecodeError, UnicodeDecodeError) as e:
-            raise ValidationError(
-                message=f"Cannot read settings file {path}: {e}"
-            ) from e
+            raise ValidationError(message=f"Cannot read settings file {path}: {e}") from e
         for k, v in data.items():
             if k == "translator":
                 values[k] = _parse_translator(raw=v)
@@ -287,9 +280,7 @@ def _toml_value(v: object) -> str:
         list,
     ):
         return "[" + ", ".join(_toml_value(v=i) for i in v) + "]"
-    raise ValidationError(
-        message=f"Cannot serialize settings value of type {type(v).__name__}"
-    )
+    raise ValidationError(message=f"Cannot serialize settings value of type {type(v).__name__}")
 
 
 def _dump_toml(data: dict) -> str:
@@ -323,9 +314,7 @@ def _remember(
     except FileNotFoundError:
         data = {}
     except (OSError, tomllib.TOMLDecodeError, UnicodeDecodeError) as e:
-        raise ValidationError(
-            message=f"Cannot update settings file {settings_path}: {e}"
-        ) from e
+        raise ValidationError(message=f"Cannot update settings file {settings_path}: {e}") from e
     value = str(path.resolve())
     if data.get("cookies_file") == value:
         return  # unchanged: keep the user's file (comments, formatting) as is
@@ -363,10 +352,8 @@ def _write_settings_atomically(
             dst=settings_path,
         )
     finally:
-        try:
+        with contextlib.suppress(FileNotFoundError):
             os.unlink(path=tmp)
-        except FileNotFoundError:
-            pass
 
 
 async def remember_cookies_file(
@@ -389,9 +376,7 @@ def _forget_remembered_cookie_sources_blocking(settings_path: Path) -> list[str]
     except FileNotFoundError:
         return []
     except (OSError, tomllib.TOMLDecodeError, UnicodeDecodeError) as e:
-        raise ValidationError(
-            message=f"Cannot update settings file {settings_path}: {e}"
-        ) from e
+        raise ValidationError(message=f"Cannot update settings file {settings_path}: {e}") from e
     removed = [key for key in _REMEMBERED_COOKIE_SOURCE_KEYS if key in data]
     if not removed:
         return []  # keep the user's file (comments, formatting) as is

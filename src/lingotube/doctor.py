@@ -217,11 +217,7 @@ async def run_doctor(
         or Check(
             name=CHAT,
             ok=False,
-            detail=(
-                "не проверен: нет соединения с YouTube"
-                if network_down
-                else "не проверен: нет входа в аккаунт"
-            ),
+            detail=("не проверен: нет соединения с YouTube" if network_down else "не проверен: нет входа в аккаунт"),
             hint=None,
         )
     )
@@ -260,9 +256,7 @@ def doctor_error(checks: list[Check]) -> LingotubeError | None:
         checks=checks,
         name=CHAT,
     ):
-        return (
-            None  # a source works and the chat is reachable: a crashed row is not fatal
-        )
+        return None  # a source works and the chat is reachable: a crashed row is not fatal
     if any(c.unexpected for c in checks):
         return LingotubeError(
             message="Одна из проверок завершилась неожиданной ошибкой.",
@@ -307,9 +301,7 @@ def render_table(
 ) -> str:
     """The checks as a table, then the distinct hints of failed checks (the final
     error's own hint is printed with the error)."""
-    rows = [("ПРОВЕРКА", "ИТОГ", "ПОДРОБНОСТИ")] + [
-        (c.name, _verdict(check=c), c.detail) for c in checks
-    ]
+    rows = [("ПРОВЕРКА", "ИТОГ", "ПОДРОБНОСТИ")] + [(c.name, _verdict(check=c), c.detail) for c in checks]
     w0 = max(len(r[0]) for r in rows)
     w1 = max(len(r[1]) for r in rows)
     lines = [f"{a.ljust(w0)}  {b.ljust(w1)}  {c}".rstrip() for a, b, c in rows]

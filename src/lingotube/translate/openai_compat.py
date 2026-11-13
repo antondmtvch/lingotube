@@ -108,6 +108,7 @@ class OpenAICompatTranslator:
                     for c, t in zip(
                         batch,
                         texts,
+                        strict=True,
                     )
                 ]
         raise ValidationError(

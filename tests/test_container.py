@@ -36,9 +36,7 @@ async def test_cookie_source_prefers_cookies_file_then_browser_then_login_profil
         settings=Settings(cookies_file=tmp_path / "c.txt", browser="firefox"),
     )
     assert isinstance(with_file.cookie_source(), FileCookieSource)
-    with_browser = make_container(
-        tmp_path=tmp_path, settings=Settings(browser="firefox")
-    )
+    with_browser = make_container(tmp_path=tmp_path, settings=Settings(browser="firefox"))
     assert isinstance(with_browser.cookie_source(), BrowserCookieSource)
     with_login = make_container(tmp_path=tmp_path, settings=Settings())
     assert isinstance(with_login.cookie_source(), LoginProfileCookieSource)
@@ -51,8 +49,6 @@ def test_cookie_source_falls_back_to_browser_chain_without_login(tmp_path):
 
 async def test_env_cookies_file_keeps_priority_over_a_saved_login(tmp_path):
     await save_login(tmp_path=tmp_path)
-    settings = load_settings(
-        path=None, env={"LINGOTUBE_COOKIES_FILE": str(tmp_path / "env.txt")}
-    )
+    settings = load_settings(path=None, env={"LINGOTUBE_COOKIES_FILE": str(tmp_path / "env.txt")})
     container = make_container(tmp_path=tmp_path, settings=settings)
     assert isinstance(container.cookie_source(), FileCookieSource)
