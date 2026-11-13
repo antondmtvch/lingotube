@@ -44,6 +44,7 @@ class Check:
     hint: str | None
     critical: bool = True  # False: failed, but another source works, so not an error
     unexpected: bool = False  # the check itself crashed (a bug, not a user problem)
+    soft_verdict: str = "не прочитан"  # the word shown when a failure is not critical
 
 
 def _crashed(
@@ -129,6 +130,7 @@ async def run_doctor(
                 ok=False,
                 detail=f"cookies прочитаны, но YouTube их не принял: {e.message}",
                 hint=e.hint,
+                soft_verdict="не принят",
             )
             continue
         except ChatUnavailableError as e:
@@ -284,7 +286,7 @@ def doctor_exit_code(checks: list[Check]) -> int:
 def _verdict(check: Check) -> str:
     if check.ok:
         return "ок"
-    return "ошибка" if check.critical else "нет"
+    return "ошибка" if check.critical else check.soft_verdict
 
 
 def render_table(

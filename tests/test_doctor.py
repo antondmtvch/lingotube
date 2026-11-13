@@ -545,9 +545,38 @@ async def test_failed_browsers_are_not_critical_when_a_source_works():
         error=None,
     )
     assert "ошибка" not in text
-    assert "нет" in text
+    chrome_row = next(
+        line for line in text.splitlines() if line.startswith("браузер chrome")
+    )
+    assert chrome_row.split()[2:5] == ["не", "прочитан", "В"]
     assert "Подсказки" not in text and "cookies.txt" not in text
     assert doctor_exit_code(checks=checks) == 0
+
+
+async def test_stale_source_is_reported_as_not_accepted_not_as_unread():
+    from lingotube.doctor import render_table
+
+    class Stale:
+        async def load(self) -> Credentials:
+            return Credentials(cookies={"SAPISID": "STALE"})
+
+    class StaleAware:
+        def __init__(self, source) -> None:
+            self.source = source
+
+        async def open(self, video_id: str) -> FakeSession:
+            if (await self.source.load()).sapisid() == "STALE":
+                raise AuthError(message="cookies устарели")
+            return FakeSession(video_id=video_id)
+
+    checks = await run_doctor(
+        sources={"файл cookies": Stale(), "браузер firefox": GoodSource()},
+        make_ask=StaleAware,
+        test_video_id="abcdefghijk",
+    )
+    text = render_table(checks=checks, error=None)
+    row = next(line for line in text.splitlines() if line.startswith("файл cookies"))
+    assert "не принят" in row and "не прочитан" not in row
 
 
 async def test_failed_sources_stay_critical_when_none_works():
