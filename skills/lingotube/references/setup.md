@@ -56,7 +56,8 @@ lingotube signs in to YouTube with the person's browser cookies. Run
      export goes stale quickly).
   6. Save the file in their home folder, not in a project folder and not in a synced folder
      (it gives access to their account).
-  Then run `lingotube doctor --cookies-file <path> --json`. lingotube remembers the path.
+  Then run `lingotube doctor --cookies-file "<absolute path>" --json` (for example
+  `"$HOME/cookies.txt"`; lingotube does not expand `~`). lingotube remembers the path.
 
 Never open, print or check the contents of the cookies file yourself; only pass its path.
 Tell the person that exported cookies can expire after a while (sometimes within an hour);

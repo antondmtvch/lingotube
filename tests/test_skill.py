@@ -78,7 +78,24 @@ def test_long_run_guidance():
 
 
 def test_output_outside_repo():
-    assert "~/lingotube/" in skill_text("SKILL.md")
+    t = skill_text("SKILL.md")
+    assert '"$HOME/lingotube/' in t
+    assert 'New-Item -ItemType Directory -Force "$HOME/lingotube"' in t
+    assert 'mkdir -p "$HOME/lingotube"' in t
+
+
+def test_no_tilde_paths_in_commands():
+    # lingotube does not expand "~" and Windows PowerShell passes it literally
+    for p in SKILL_DIR.rglob("*.md"):
+        assert "~/" not in p.read_text(encoding="utf-8"), p
+
+
+def test_cookies_path_is_absolute():
+    assert "absolute path" in skill_text("references/setup.md")
+
+
+def test_find_moment_reads_utf8_on_windows():
+    assert "Get-Content -Encoding UTF8" in skill_text("references/find-moment.md")
 
 
 def test_cookie_secrecy_rule():

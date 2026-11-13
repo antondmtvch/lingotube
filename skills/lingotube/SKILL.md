@@ -46,8 +46,13 @@ follow [references/setup.md](references/setup.md) before doing anything else.
 ## Where to save files
 
 If the person named a folder, use it. If not, and the current folder is a git repository,
-do not write into it: save to `~/lingotube/` with `-o` (create the folder if needed) and tell
-the person the full path. Otherwise lingotube's default (current folder) is fine.
+do not write into it: save to `"$HOME/lingotube/<file>"` with `-o` and tell the person the full
+path. Otherwise lingotube's default (current folder) is fine.
+
+- lingotube does not expand `~` and does not create folders. Always give `-o` an absolute path;
+  `"$HOME/..."` (in double quotes) works in both PowerShell and sh.
+- Create the folder first: `New-Item -ItemType Directory -Force "$HOME/lingotube"`
+  (PowerShell) or `mkdir -p "$HOME/lingotube"` (sh).
 
 ## Summary
 

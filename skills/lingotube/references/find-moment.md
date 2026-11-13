@@ -30,6 +30,9 @@ Do not read the whole transcript at once: an hour of video is tens of thousands 
 1. Search the file for words that would be said about the topic, in the transcript's
    language: the words themselves, their other forms (for example, other word endings), and
    synonyms. Use your terminal's text search (for example `grep -n -i` or `Select-String`).
+   The file is UTF-8: in Windows PowerShell read it with `Get-Content -Encoding UTF8`, otherwise
+   non-Latin text (for example Russian) comes back garbled. The file is indented JSON, about
+   six lines per cue.
 2. Read the cues around each hit (a few before and after) to understand the context.
 3. If nothing matches, read the cues in order in chunks (for example 100 cues at a time) and
    look for the topic by meaning, not by exact words.
