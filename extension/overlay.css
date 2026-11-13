@@ -1,0 +1,4 @@
+
+.lingotube-hide-native-captions .ytp-caption-window-container {
+  visibility: hidden !important;
+}
