@@ -44,7 +44,11 @@ lingotube signs in to YouTube with the person's browser cookies. Run
 
 - **Firefox:** ask them to sign in to youtube.com in Firefox, then rerun
   `lingotube doctor --json`. lingotube reads Firefox directly.
-- **Chrome or Edge:** use `lingotube login` first. Tell the person that a browser window will
+- **Chrome or Edge:** use `lingotube login` first (add `--browser edge` or `--browser chrome`
+  if the person names one). Show the exact command and say what it does: it opens a separate
+  lingotube browser window, saves YouTube cookies locally in lingotube's data folder, and
+  removes any remembered `cookies_file` / `browser` from lingotube's settings. Run it only after
+  the person says "yes". Tell them that a browser window will
   open (a separate lingotube profile, not their own), that they sign in to YouTube there, that
   the window closes by itself, and that Google may ask for an identity check such as a selfie,
   which can be skipped. The command waits up to 10 minutes for the sign-in. If you can run
