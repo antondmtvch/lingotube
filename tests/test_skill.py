@@ -34,6 +34,11 @@ def test_description_length_and_single_line():
     assert not d.startswith((">", "|"))
 
 
+def test_description_is_a_valid_plain_yaml_scalar():
+    d = read_frontmatter(SKILL_DIR / "SKILL.md")["description"]
+    assert ": " not in d and " #" not in d and not d.startswith(("'", '"'))
+
+
 def test_description_has_russian_keywords():
     d = read_frontmatter(SKILL_DIR / "SKILL.md")["description"]
     for word in (

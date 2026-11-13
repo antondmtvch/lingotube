@@ -1,6 +1,6 @@
 ---
 name: lingotube
-description: Summarize, transcribe, subtitle or find a moment in a YouTube video with the lingotube CLI (it asks YouTube's own chat about the video). Use when the person shares a YouTube link or asks what a video is about, wants its text, subtitles in some language, or wants to know where in the video something is said. Also covers first-time setup of lingotube and its YouTube sign-in. Ключевые слова: видео, YouTube, пересказ, субтитры, транскрипция, найти момент.
+description: Summarize, transcribe, subtitle or find a moment in a YouTube video with the lingotube CLI (it asks YouTube's own chat about the video). Use when the person shares a YouTube link or asks what a video is about, wants its text, subtitles in some language, or wants to know where in the video something is said. Also covers first-time setup of lingotube and its YouTube sign-in. Ключевые слова — видео, YouTube, пересказ, субтитры, транскрипция, найти момент.
 ---
 
 # lingotube
