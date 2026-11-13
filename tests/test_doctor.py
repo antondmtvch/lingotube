@@ -358,7 +358,7 @@ def test_doctor_command_all_sources_fail_exit_4(tmp_path):
     code, out, err = h.run()
     assert code == 4
     assert "--cookies-file" in err
-    assert "cookies.txt" in err
+    assert "lingotube login" in err
     assert h.opened == []
 
 
