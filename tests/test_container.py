@@ -4,7 +4,7 @@ from lingotube.auth.browser import BrowserCookieSource, ChainCookieSource
 from lingotube.auth.file import FileCookieSource
 from lingotube.auth.login_source import LoginProfileCookieSource
 from lingotube.auth.login_store import LoginCookieStore, SavedLogin
-from lingotube.config import LoginPaths, Settings
+from lingotube.config import LoginPaths, Settings, load_settings
 from lingotube.container import build_container
 
 
@@ -47,3 +47,12 @@ async def test_cookie_source_prefers_cookies_file_then_browser_then_login_profil
 def test_cookie_source_falls_back_to_browser_chain_without_login(tmp_path):
     container = make_container(tmp_path=tmp_path, settings=Settings())
     assert isinstance(container.cookie_source(), ChainCookieSource)
+
+
+async def test_env_cookies_file_keeps_priority_over_a_saved_login(tmp_path):
+    await save_login(tmp_path=tmp_path)
+    settings = load_settings(
+        path=None, env={"LINGOTUBE_COOKIES_FILE": str(tmp_path / "env.txt")}
+    )
+    container = make_container(tmp_path=tmp_path, settings=settings)
+    assert isinstance(container.cookie_source(), FileCookieSource)
