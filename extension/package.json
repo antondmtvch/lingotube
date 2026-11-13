@@ -1,0 +1,5 @@
+{
+  "name": "lingotube-extension",
+  "private": true,
+  "type": "module"
+}
