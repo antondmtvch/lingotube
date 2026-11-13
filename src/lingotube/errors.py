@@ -28,6 +28,13 @@ class AuthError(LingotubeError):
     exit_code = 4
 
 
+class ProfileBusyError(LingotubeError):
+    """The lingotube login profile is already open in another browser window."""
+
+    code = "profile_busy"
+    exit_code = 1
+
+
 class IncompleteError(LingotubeError):
     code = "incomplete"
     exit_code = 5
