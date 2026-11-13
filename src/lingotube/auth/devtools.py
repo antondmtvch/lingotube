@@ -56,6 +56,8 @@ class DevToolsConnection:
                 await self._websocket.send(json.dumps(command))
                 while True:
                     reply = json.loads(await self._websocket.recv())
+                    if not isinstance(reply, dict):
+                        raise ValueError("DevTools reply is not a JSON object")
                     if reply.get("id") != message_id:
                         continue
                     if "error" in reply:
@@ -99,10 +101,14 @@ async def connect_to_browser_devtools(
 
 async def read_all_cookies(connection: DevToolsConnection) -> list[BrowserCookie]:
     result = await connection.send_command("Storage.getCookies")
-    return [
-        BrowserCookie(name=c["name"], value=c["value"], domain=c["domain"])
-        for c in result.get("cookies", [])
-    ]
+    try:
+        return [
+            BrowserCookie(name=c["name"], value=c["value"], domain=c["domain"])
+            for c in result.get("cookies", [])
+        ]
+    except KeyError, TypeError:
+        # No exception text: it could carry a cookie entry.
+        raise DevToolsError("DevTools returned a malformed cookie entry") from None
 
 
 async def close_browser(connection: DevToolsConnection) -> None:

@@ -215,8 +215,13 @@ def _read_websocket_url(port_file: Path) -> str | None:
     return f"ws://127.0.0.1:{lines[0].strip()}{lines[1].strip()}"
 
 
-def _profile_busy_error() -> ProfileBusyError:
+def profile_busy_error() -> ProfileBusyError:
     return ProfileBusyError(message=PROFILE_BUSY_MESSAGE, hint=PROFILE_BUSY_HINT)
+
+
+async def shut_down_spawned_process(process: asyncio.subprocess.Process) -> None:
+    """Terminate, then kill, a browser process lingotube spawned (no DevTools needed)."""
+    await RunningLoginBrowser(websocket_url="", process=process).shut_down(None)
 
 
 async def launch_login_browser(
@@ -231,7 +236,7 @@ async def launch_login_browser(
 ) -> RunningLoginBrowser:
     """Start the browser in the login profile and wait for its DevTools endpoint."""
     if is_login_profile_in_use(profile_dir):
-        raise _profile_busy_error()
+        raise profile_busy_error()
     port_file = profile_dir / _DEVTOOLS_PORT_FILE_NAME
     try:
         profile_dir.mkdir(parents=True, exist_ok=True)
@@ -260,17 +265,17 @@ async def launch_login_browser(
                     break
                 await asyncio.sleep(_PORT_FILE_POLL_INTERVAL)
     except TimeoutError:
-        await RunningLoginBrowser(websocket_url="", process=process).shut_down(None)
+        await shut_down_spawned_process(process)
         raise AuthError(
             message="Браузер не ответил вовремя.",
             hint="Повторите `lingotube login`.",
         ) from None
     except BaseException:
-        await RunningLoginBrowser(websocket_url="", process=process).shut_down(None)
+        await shut_down_spawned_process(process)
         raise
 
     if is_login_profile_in_use(profile_dir):
-        raise _profile_busy_error()
+        raise profile_busy_error()
     raise AuthError(
         message="Браузер не запустился.",
         hint="Проверьте установку Chrome или Edge и повторите `lingotube login`.",
@@ -289,9 +294,7 @@ class SignInWindow:
 
     async def close(self) -> None:
         """Terminate, then kill, our own process; no-op once it has exited."""
-        await RunningLoginBrowser(websocket_url="", process=self._process).shut_down(
-            None
-        )
+        await shut_down_spawned_process(self._process)
 
 
 async def launch_sign_in_window(
@@ -304,14 +307,14 @@ async def launch_sign_in_window(
 ) -> SignInWindow:
     """Wipe the login profile, then open the sign-in window without a debugging port."""
     if is_login_profile_in_use(profile_dir):
-        raise _profile_busy_error()
+        raise profile_busy_error()
     try:
         if profile_dir.exists():
             shutil.rmtree(profile_dir)
         profile_dir.mkdir(parents=True, exist_ok=True)
     except PermissionError:
         # No exception text: it may contain paths.
-        raise _profile_busy_error() from None
+        raise profile_busy_error() from None
     except OSError:
         raise AuthError(
             message="Не удалось подготовить профиль входа lingotube.",

@@ -72,10 +72,14 @@ class FakeRunningBrowser:
     websocket_url = "ws://127.0.0.1:1/devtools/browser/x"
 
     def __init__(self) -> None:
-        self.shut_down_calls = 0
+        self.shut_down_connections: list = []
+
+    @property
+    def shut_down_calls(self) -> int:
+        return len(self.shut_down_connections)
 
     async def shut_down(self, connection) -> None:
-        self.shut_down_calls += 1
+        self.shut_down_connections.append(connection)
 
 
 class FakeSignInWindow:
@@ -206,7 +210,7 @@ async def test_cookies_are_read_by_headless_launch_after_window_exited(paths, st
     assert saved.browser == "chrome"
     assert set(saved.cookies) == {"SAPISID", "LOGIN_INFO"}
     assert await store.read() == saved
-    assert harness.running.shut_down_calls >= 1
+    assert harness.running.shut_down_connections[0] is harness.connection
     assert "Target.createTarget" not in harness.connection.commands
     assert "Storage.clearCookies" not in harness.connection.commands
 
@@ -307,6 +311,25 @@ async def test_headless_read_failure_is_auth_error_and_shuts_down(paths, store):
         await sign_in(harness, paths, store)
     assert "LEAKME" not in str(caught.value)
     assert harness.running.shut_down_calls >= 1
+
+
+async def test_sign_in_connect_failure_is_auth_error_and_shuts_down_without_connection(
+    paths, store
+):
+    harness = Harness(FakeConnection([[]]))
+
+    @asynccontextmanager
+    async def failing_connect(websocket_url):
+        raise DevToolsError("LEAKME-detail")
+        yield
+
+    harness.connect = failing_connect
+    with pytest.raises(AuthError) as caught:
+        await sign_in(harness, paths, store)
+    assert caught.value.message == "Не удалось прочитать вход из профиля lingotube."
+    assert "LEAKME" not in str(caught.value)
+    assert harness.running.shut_down_connections[-1] is None
+    assert not paths.cookies_file.exists()
 
 
 async def test_sign_in_store_write_failure_is_auth_error_with_fixed_text(paths, store):
@@ -426,6 +449,24 @@ async def test_refresh_signed_out_profile_is_auth_error_with_login_hint(paths, s
     with pytest.raises(AuthError) as caught:
         await refresh(harness, paths, store)
     assert caught.value.hint == LOGIN_HINT
+    assert harness.running.shut_down_calls >= 1
+
+
+async def test_refresh_devtools_failure_is_auth_error_with_login_hint(paths, store):
+    await store.write(SavedLogin(browser="chrome", cookies={}))
+
+    class BrokenConnection(FakeConnection):
+        async def send_command(self, method, params=None):
+            if method == "Storage.getCookies":
+                raise DevToolsConnectionClosed("LEAKME-detail")
+            return await super().send_command(method, params)
+
+    harness = Harness(BrokenConnection([[]]))
+    with pytest.raises(AuthError) as caught:
+        await refresh(harness, paths, store)
+    assert caught.value.message == "Не удалось обновить вход в профиле lingotube."
+    assert caught.value.hint == LOGIN_HINT
+    assert "LEAKME" not in str(caught.value)
     assert harness.running.shut_down_calls >= 1
 
 

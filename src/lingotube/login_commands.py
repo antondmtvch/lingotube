@@ -5,18 +5,17 @@ Cookie values never reach the output: the commands report only counts and paths.
 
 import asyncio
 import shutil
+from pathlib import Path
 
 from lingotube.auth.login_browser import (
     LOGIN_BROWSERS,
-    PROFILE_BUSY_HINT,
-    PROFILE_BUSY_MESSAGE,
     is_login_profile_in_use,
+    profile_busy_error,
 )
 from lingotube.config import ENV_COOKIES_FILE, forget_remembered_cookie_sources
 from lingotube.errors import (
     AuthError,
     LingotubeError,
-    ProfileBusyError,
     UsageError,
 )
 
@@ -30,21 +29,14 @@ ENV_OVERRIDES_LOGIN_WARNING = (
 )
 
 
-def _profile_busy_error() -> ProfileBusyError:
-    return ProfileBusyError(
-        message=PROFILE_BUSY_MESSAGE,
-        hint=PROFILE_BUSY_HINT,
-    )
-
-
-def _remove_profile_directory(profile_dir) -> bool:
+def _remove_profile_directory(profile_dir: Path) -> bool:
     """True if the directory existed and was removed; PermissionError means it is in use."""
     if not profile_dir.exists():
         return False
     try:
         shutil.rmtree(profile_dir)
     except PermissionError:
-        raise _profile_busy_error() from None
+        raise profile_busy_error() from None
     except OSError:
         raise _removal_failed_error() from None
     return True
@@ -62,7 +54,7 @@ async def _delete_saved_cookies(store) -> bool:
     try:
         return await store.delete()
     except PermissionError:
-        raise _profile_busy_error() from None
+        raise profile_busy_error() from None
     except OSError:
         raise _removal_failed_error() from None
 
@@ -120,7 +112,7 @@ def register(
                 )
             paths = container.login_paths()
             if await asyncio.to_thread(is_login_profile_in_use, paths.profile_dir):
-                raise _profile_busy_error()
+                raise profile_busy_error()
             sign_in = container.sign_in_flow()
             saved = await sign_in(
                 browser=browser_name,
@@ -136,7 +128,7 @@ def register(
                     forgotten = await forget_remembered_cookie_sources(
                         settings_path=ctx.settings_path
                     )
-                except LingotubeError:
+                except LingotubeError, OSError:
                     # The sign-in itself succeeded; only the settings cleanup failed.
                     warnings += (SETTINGS_CLEANUP_FAILED_WARNING,)
             if container.env().get(ENV_COOKIES_FILE):
@@ -176,7 +168,7 @@ def register(
             container = ctx.container
             paths = container.login_paths()
             if await asyncio.to_thread(is_login_profile_in_use, paths.profile_dir):
-                raise _profile_busy_error()
+                raise profile_busy_error()
             cookies_removed = await _delete_saved_cookies(container.login_store())
             profile_removed = await asyncio.to_thread(
                 _remove_profile_directory,

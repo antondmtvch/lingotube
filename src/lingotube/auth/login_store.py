@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 import tempfile
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -30,12 +31,19 @@ def _corrupted_login_error() -> AuthError:
     )
 
 
+def _is_current_format_version(version: object) -> bool:
+    # `True == 1`, so a plain comparison would accept a JSON boolean.
+    return type(version) is int and version == _FORMAT_VERSION
+
+
 def _parse_saved_login(raw_text: str) -> SavedLogin:
     try:
         data = json.loads(raw_text)
-    except ValueError:
+    except ValueError, RecursionError:
         raise _corrupted_login_error() from None
-    if not isinstance(data, dict) or data.get("version") != _FORMAT_VERSION:
+    if not isinstance(data, dict) or not _is_current_format_version(
+        data.get("version")
+    ):
         raise _corrupted_login_error()
     browser = data.get("browser")
     cookies = data.get("cookies")
@@ -109,11 +117,12 @@ class LoginCookieStore:
                 src=tmp,
                 dst=self._cookies_file,
             )
-        finally:
-            try:
+        except BaseException:
+            # Only a failed write leaves a temporary file behind; after a successful
+            # replace it no longer exists.
+            with suppress(FileNotFoundError):
                 os.unlink(tmp)
-            except FileNotFoundError:
-                pass
+            raise
 
     def _delete_blocking(self) -> bool:
         try:
