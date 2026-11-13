@@ -8,6 +8,7 @@ cookies file and the browser store, chat tokens and visitor data inside YouTube'
 responses (and inside transport-error texts), the model key in the environment.
 """
 
+import asyncio
 import io
 import json
 import re
@@ -19,8 +20,9 @@ import respx
 from dependency_injector import providers
 
 from lingotube import cli
+from lingotube.auth.login_store import LoginCookieStore, SavedLogin
 from lingotube.commands import AppContext
-from lingotube.config import Settings, TranslatorSettings
+from lingotube.config import LoginPaths, Settings, TranslatorSettings
 from lingotube.container import build_container
 
 MARK = "LEAKME"
@@ -400,6 +402,10 @@ class Leak:
             settings=self.settings,
             env=self.env,
             cache_dir=self.tmp / "cache",
+            login_paths=LoginPaths(
+                profile_dir=self.tmp / "login-profile",
+                cookies_file=self.tmp / "login-cookies.json",
+            ),
             err=err,
         )
         # never touch a real browser profile in tests
@@ -817,3 +823,52 @@ def test_doctor_never_leaks(
         "internal": 1,
     }
     assert code == expected[scenario], out + err
+
+
+@pytest.mark.parametrize(
+    argnames="json_mode",
+    argvalues=MODES,
+)
+def test_summary_via_login_profile_leaks_nothing(
+    tmp_path,
+    router,
+    json_mode,
+):
+    route_youtube(
+        router=router,
+        scenario="ok",
+    )
+    leak = Leak(
+        tmp_path=tmp_path,
+        scenario="ok",
+    )
+    # no cookies file: the login profile is the source
+    leak.settings = Settings(
+        min_interval=0.0,
+        max_retries=1,
+    )
+    asyncio.run(
+        LoginCookieStore(cookies_file=tmp_path / "login-cookies.json").write(
+            saved=SavedLogin(
+                browser="chrome",
+                cookies={"SAPISID": SAPISID, "SID": SID},
+            )
+        )
+    )
+    code, out, err = leak.run(
+        "summary",
+        URL,
+        "--lang",
+        "ru",
+        *(["--json"] if json_mode else []),
+    )
+    assert MARK not in out and MARK not in err
+    # the login store holds the markers by design; everything else must not
+    for path in tmp_path.rglob(pattern="*"):
+        if path.is_file() and path.name not in (
+            "login-cookies.json",
+            leak.cookies.name,
+        ):
+            assert MARK not in path.read_text(encoding="utf-8", errors="replace"), path
+    assert youtube_saw_cookies(router=router)
+    assert code == 0, err

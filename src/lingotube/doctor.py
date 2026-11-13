@@ -9,7 +9,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass, replace
 
 from lingotube.ask.client import AskClient
-from lingotube.auth.base import EXPORT_HINT, CookieSource, Credentials
+from lingotube.auth.base import EXPORT_HINT, LOGIN_HINT, CookieSource, Credentials
 from lingotube.errors import (
     AuthError,
     ChatUnavailableError,
@@ -19,6 +19,7 @@ from lingotube.errors import (
 
 DEFAULT_TEST_VIDEO = "-n5MqamatXE"  # public video with the chat confirmed by the probe
 FILE_SOURCE = "файл cookies"
+LOGIN_PROFILE_SOURCE = "профиль входа"
 LOGIN = "вход в аккаунт"
 CHAT = "чат на тестовом видео"
 NETWORK = "соединение с YouTube"
@@ -28,7 +29,6 @@ CHAT_HINT = (
     "аккаунтам 13+ и, по имеющимся данным, не брендовым аккаунтам. Если дело в видео — "
     "проверьте на другом: lingotube doctor --video <ссылка>."
 )
-COOKIES_FILE_HINT = "Надёжный путь — файл cookies.txt. " + EXPORT_HINT
 NETWORK_HINT = "Проверьте подключение к интернету и повторите позже."
 
 
@@ -67,6 +67,16 @@ class UnsetCookieFile:
         raise AuthError(
             message="Файл cookies не задан.",
             hint=EXPORT_HINT,
+        )
+
+
+class UnsetLoginProfile:
+    """The login-profile source when `lingotube login` was never run."""
+
+    async def load(self) -> Credentials:
+        raise AuthError(
+            message="Вход через lingotube login не выполнялся.",
+            hint=LOGIN_HINT,
         )
 
 
@@ -276,7 +286,7 @@ def doctor_error(checks: list[Check]) -> LingotubeError | None:
         )
     return AuthError(
         message="Ни один источник cookies не дал входа в YouTube.",
-        hint=COOKIES_FILE_HINT,
+        hint=EXPORT_HINT,
     )
 
 

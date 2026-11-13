@@ -15,9 +15,9 @@ from typing import Any, TextIO
 import typer
 import typer.main
 
-from lingotube import doctor
+from lingotube import doctor, login_commands
 from lingotube.commands import AppContext, report
-from lingotube.config import default_paths, load_settings
+from lingotube.config import default_login_paths, default_paths, load_settings
 from lingotube.errors import LingotubeError, UsageError
 from lingotube.features import build, subtitles, summary, transcript
 from lingotube.features.registry import FeatureRegistry
@@ -35,6 +35,7 @@ def build_registry() -> FeatureRegistry:
     registry.add(register=summary.register)
     registry.add(register=build.register)
     registry.add(register=doctor.register)
+    registry.add(register=login_commands.register)
     return registry
 
 
@@ -54,6 +55,7 @@ def default_context(
         settings=settings,
         env=os.environ,
         cache_dir=cache_dir,
+        login_paths=default_login_paths(),
         err=err,
     )
     return AppContext(

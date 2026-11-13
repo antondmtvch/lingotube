@@ -6,7 +6,9 @@ import pytest
 from lingotube.config import (
     Settings,
     TranslatorSettings,
+    default_login_paths,
     default_paths,
+    forget_remembered_cookie_sources,
     load_settings,
     remember_cookies_file,
 )
@@ -315,3 +317,44 @@ async def test_remember_same_value_does_not_rewrite_file(tmp_path):
         settings_path=sp,
     )
     assert sp.read_bytes() == original.encode("utf-8")
+
+
+async def test_forget_removes_cookies_file_and_browser(tmp_path):
+    settings_path = tmp_path / "settings.toml"
+    settings_path.write_text(
+        'lang = "ru"\ncookies_file = "x"\nbrowser = "edge"\n',
+        encoding="utf-8",
+    )
+    removed = await forget_remembered_cookie_sources(settings_path=settings_path)
+    assert removed == ["cookies_file", "browser"]
+    settings = load_settings(
+        path=settings_path,
+        env={},
+    )
+    assert settings.lang == "ru"
+    assert settings.cookies_file is None
+    assert settings.browser is None
+
+
+async def test_forget_without_keys_leaves_file_untouched(tmp_path):
+    settings_path = tmp_path / "settings.toml"
+    original = b'# my comment\nlang   =   "ru"\n'
+    settings_path.write_bytes(original)
+    removed = await forget_remembered_cookie_sources(settings_path=settings_path)
+    assert removed == []
+    assert settings_path.read_bytes() == original
+
+
+async def test_forget_missing_file_returns_empty(tmp_path):
+    removed = await forget_remembered_cookie_sources(
+        settings_path=tmp_path / "settings.toml"
+    )
+    assert removed == []
+
+
+def test_default_login_paths_under_user_data_dir():
+    paths = default_login_paths()
+    assert paths.profile_dir.name == "login-profile"
+    assert paths.cookies_file.name == "login-cookies.json"
+    assert paths.profile_dir.parent == paths.cookies_file.parent
+    assert paths.profile_dir.parent.name == "lingotube"

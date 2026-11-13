@@ -6,10 +6,11 @@ import pytest
 from dependency_injector import providers
 
 from lingotube import cli
-from lingotube.auth.base import Credentials
+from lingotube.auth.base import LOGIN_HINT, Credentials
 from lingotube.auth.browser import BROWSERS
+from lingotube.auth.login_store import LoginCookieStore, SavedLogin
 from lingotube.commands import AppContext
-from lingotube.config import Settings
+from lingotube.config import LoginPaths, Settings
 from lingotube.container import build_container
 from lingotube.doctor import (
     CHAT,
@@ -294,6 +295,10 @@ class Harness:
             settings=self.settings,
             env={},
             cache_dir=self.tmp / "cache",
+            login_paths=LoginPaths(
+                profile_dir=self.tmp / "login-profile",
+                cookies_file=self.tmp / "login-cookies.json",
+            ),
             err=err,
         )
         container.doctor_sources.override(provider=providers.Object(self.sources))
@@ -353,7 +358,7 @@ def test_doctor_command_all_sources_fail_exit_4(tmp_path):
     code, out, err = h.run()
     assert code == 4
     assert "--cookies-file" in err
-    assert "cookies.txt" in err
+    assert "lingotube login" in err
     assert h.opened == []
 
 
@@ -438,11 +443,22 @@ async def test_container_doctor_sources(tmp_path):
             settings=settings,
             env={},
             cache_dir=tmp_path / "c",
+            login_paths=LoginPaths(
+                profile_dir=tmp_path / "login-profile",
+                cookies_file=tmp_path / "login-cookies.json",
+            ),
             err=io.StringIO(),
         )
 
     plain = make(settings=Settings()).doctor_sources()
-    assert list(plain) == ["файл cookies", *[f"браузер {b}" for b in BROWSERS]]
+    assert list(plain) == [
+        "файл cookies",
+        "профиль входа",
+        *[f"браузер {b}" for b in BROWSERS],
+    ]
+    with pytest.raises(expected_exception=AuthError) as unset_login:
+        await plain["профиль входа"].load()
+    assert unset_login.value.hint == LOGIN_HINT
     with pytest.raises(expected_exception=AuthError) as info:
         await plain["файл cookies"].load()
     assert "--cookies-file" in (info.value.hint or "")
@@ -453,7 +469,7 @@ async def test_container_doctor_sources(tmp_path):
             browser="firefox",
         )
     ).doctor_sources()
-    assert list(chosen) == ["файл cookies", "браузер firefox"]
+    assert list(chosen) == ["файл cookies", "профиль входа", "браузер firefox"]
 
     loaded: list[str] = []
 
@@ -474,6 +490,10 @@ async def test_container_ask_factory_builds_youtube_clients(tmp_path):
         settings=Settings(),
         env={},
         cache_dir=tmp_path / "c",
+        login_paths=LoginPaths(
+            profile_dir=tmp_path / "login-profile",
+            cookies_file=tmp_path / "login-cookies.json",
+        ),
         err=io.StringIO(),
     )
     try:
@@ -696,3 +716,52 @@ def test_doctor_command_unexpected_error_still_prints_table(tmp_path):
     assert code == 0
     assert "файл cookies" in out and "RuntimeError" in out and LOGIN in out
     assert SECRET_SAPISID not in out + err
+
+
+async def test_doctor_lists_login_profile_row_after_file(tmp_path):
+    await LoginCookieStore(cookies_file=tmp_path / "login-cookies.json").write(
+        saved=SavedLogin(browser="chrome", cookies={"SAPISID": SECRET_SAPISID})
+    )
+    container = build_container(
+        settings=Settings(),
+        env={},
+        cache_dir=tmp_path / "c",
+        login_paths=LoginPaths(
+            profile_dir=tmp_path / "login-profile",
+            cookies_file=tmp_path / "login-cookies.json",
+        ),
+        err=io.StringIO(),
+    )
+    sources = container.doctor_sources()
+    assert list(sources)[:2] == ["файл cookies", "профиль входа"]
+    assert (await sources["профиль входа"].load()).sapisid() == SECRET_SAPISID
+
+
+async def test_doctor_login_profile_works_marks_others_non_critical():
+    checks = await run_doctor(
+        sources={
+            "файл cookies": BadSource(),
+            "профиль входа": GoodSource(),
+            "браузер chrome": BadSource(),
+        },
+        make_ask=ask_factory(),
+        test_video_id="abcdefghijk",
+    )
+    assert by_name(checks=checks, name="профиль входа").ok
+    assert not by_name(checks=checks, name="файл cookies").critical
+    assert not by_name(checks=checks, name="браузер chrome").critical
+    assert doctor_exit_code(checks=checks) == 0
+
+
+async def test_final_error_hint_starts_with_login_hint():
+    from lingotube.doctor import doctor_error
+
+    checks = await run_doctor(
+        sources={"файл cookies": BadSource(), "профиль входа": BadSource()},
+        make_ask=ask_factory(),
+        test_video_id="abcdefghijk",
+    )
+    error = doctor_error(checks=checks)
+    assert isinstance(error, AuthError)
+    assert (error.hint or "").startswith(LOGIN_HINT)
+    assert "--cookies-file" in (error.hint or "")

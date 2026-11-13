@@ -22,9 +22,22 @@ from lingotube.auth.browser import (
     default_loader,
 )
 from lingotube.auth.file import FileCookieSource
+from lingotube.auth.login_browser import (
+    find_browser_executable,
+    find_first_installed_browser,
+)
+from lingotube.auth.login_flow import sign_in_with_login_browser
+from lingotube.auth.login_source import LoginProfileCookieSource
+from lingotube.auth.login_store import LoginCookieStore
 from lingotube.cache import Cache
-from lingotube.config import Settings
-from lingotube.doctor import FILE_SOURCE, UnsetCookieFile, browser_source_name
+from lingotube.config import LoginPaths, Settings
+from lingotube.doctor import (
+    FILE_SOURCE,
+    LOGIN_PROFILE_SOURCE,
+    UnsetCookieFile,
+    UnsetLoginProfile,
+    browser_source_name,
+)
 from lingotube.errors import AuthError
 from lingotube.features.build import BuildFeature
 from lingotube.features.subtitles import SubtitlesFeature
@@ -78,6 +91,8 @@ BrowserLoader = Callable[[str], Mapping[str, str]]
 def make_cookie_source(
     settings: Settings,
     warn: Callable[[str], None],
+    login_store: LoginCookieStore,
+    login_paths: LoginPaths,
     loader: BrowserLoader = default_loader,
 ) -> CookieSource:
     if settings.cookies_file is not None:
@@ -89,6 +104,11 @@ def make_cookie_source(
         return BrowserCookieSource(
             browser=settings.browser,
             loader=loader,
+        )
+    if login_store.exists():
+        return LoginProfileCookieSource(
+            store=login_store,
+            paths=login_paths,
         )
     return ChainCookieSource(
         sources=[
@@ -103,10 +123,12 @@ def make_cookie_source(
 def make_doctor_sources(
     settings: Settings,
     warn: Callable[[str], None],
+    login_store: LoginCookieStore,
+    login_paths: LoginPaths,
     loader: BrowserLoader = default_loader,
 ) -> dict[str, CookieSource]:
-    """Every cookie source `doctor` checks separately: the file, then each browser
-    (only the chosen one when a browser is set)."""
+    """Every cookie source `doctor` checks separately: the file, the login profile,
+    then each browser (only the chosen one when a browser is set). Never refreshes."""
     sources: dict[str, CookieSource] = {
         FILE_SOURCE: (
             FileCookieSource(
@@ -115,7 +137,15 @@ def make_doctor_sources(
             )
             if settings.cookies_file is not None
             else UnsetCookieFile()
-        )
+        ),
+        LOGIN_PROFILE_SOURCE: (
+            LoginProfileCookieSource(
+                store=login_store,
+                paths=login_paths,
+            )
+            if login_store.exists()
+            else UnsetLoginProfile()
+        ),
     }
     for browser in (settings.browser,) if settings.browser is not None else BROWSERS:
         sources[browser_source_name(browser=browser)] = BrowserCookieSource(
@@ -165,6 +195,7 @@ class Container(containers.DeclarativeContainer):
     settings = providers.Dependency(instance_of=Settings)
     env = providers.Dependency(instance_of=Mapping)
     cache_dir = providers.Dependency(instance_of=Path)
+    login_paths = providers.Dependency(instance_of=LoginPaths)
     err = providers.Dependency()
 
     warn = providers.Singleton(
@@ -180,18 +211,29 @@ class Container(containers.DeclarativeContainer):
     translator_http = providers.Resource(translator_http)
 
     browser_loader = providers.Object(default_loader)
+    login_store = providers.Singleton(
+        LoginCookieStore,
+        cookies_file=login_paths.provided.cookies_file,
+    )
     cookie_source = providers.Singleton(
         make_cookie_source,
         settings=settings,
         warn=warn,
+        login_store=login_store,
+        login_paths=login_paths,
         loader=browser_loader,
     )
     doctor_sources = providers.Singleton(
         make_doctor_sources,
         settings=settings,
         warn=warn,
+        login_store=login_store,
+        login_paths=login_paths,
         loader=browser_loader,
     )
+    sign_in_flow = providers.Object(sign_in_with_login_browser)
+    browser_finder = providers.Object(find_first_installed_browser)
+    single_browser_finder = providers.Object(find_browser_executable)
     pacer = providers.Singleton(
         Pacer,
         min_interval=settings.provided.min_interval,
@@ -275,11 +317,13 @@ def build_container(
     settings: Settings,
     env: Mapping[str, str],
     cache_dir: Path,
+    login_paths: LoginPaths,
     err: TextIO,
 ) -> Container:
     return Container(
         settings=providers.Object(settings),
         env=providers.Object(env),
         cache_dir=providers.Object(cache_dir),
+        login_paths=providers.Object(login_paths),
         err=providers.Object(err),
     )
