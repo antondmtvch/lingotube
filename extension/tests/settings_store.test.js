@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_SETTINGS, SettingsStore } from '../src/page/settings_store.js';
+import { DEFAULT_SETTINGS, SettingsStore, loadSettingsWithRetries } from '../src/page/settings_store.js';
 
 /** In-memory stand-in for the extension storage client. */
 function fakeStorage(initial = {}) {
@@ -89,4 +89,39 @@ test('settings: a typed language ({code: null}) survives a save and load round-t
   const storage = fakeStorage();
   await new SettingsStore(storage).save({ language: { code: null, name: '  Татарский ' } });
   assert.deepEqual((await new SettingsStore(storage).load()).language, { code: null, name: 'Татарский' });
+});
+
+// --- Loading at page start, when the storage host may answer late (Task 12). ---
+
+/** A settings store whose first `failures` loads reject, as a late storage bridge would. */
+function lateSettingsStore(failures, settings) {
+  let calls = 0;
+  return {
+    get calls() {
+      return calls;
+    },
+    async load() {
+      calls += 1;
+      if (calls <= failures) throw new Error('extension storage did not answer');
+      return settings;
+    },
+  };
+}
+
+test('settings retry: two rejected loads, then the stored settings are used', async () => {
+  const stored = { ...DEFAULT_SETTINGS, enabled: true };
+  const store = lateSettingsStore(2, stored);
+  const pauses = [];
+  const settings = await loadSettingsWithRetries(store, { sleep: async (ms) => pauses.push(ms) });
+  assert.equal(settings, stored);
+  assert.equal(store.calls, 3);
+  assert.deepEqual(pauses, [1000, 1000]);
+});
+
+test('settings retry: a store that keeps rejecting gives fresh defaults after three attempts', async () => {
+  const store = lateSettingsStore(Infinity, null);
+  const settings = await loadSettingsWithRetries(store, { sleep: async () => {} });
+  assert.equal(store.calls, 3);
+  assert.deepEqual(settings, DEFAULT_SETTINGS);
+  assert.ok(!Object.isFrozen(settings) && !Object.isFrozen(settings.language));
 });

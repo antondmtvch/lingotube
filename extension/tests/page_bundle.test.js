@@ -37,13 +37,19 @@ test('page bundle compiles as a classic script', () => {
   assert.doesNotThrow(() => new vm.Script(committedBundleText, { filename: 'bundle.js' }));
 });
 
-test('page bundle runs in a fake page and completes the storage round trip', async () => {
+test('page bundle runs in a fake page, loads the settings through the bridge and logs nothing', async () => {
   const infoMessages = [];
   const errorMessages = [];
   const messageListeners = new Set();
-  const storedItems = new Map();
+  const storedItems = new Map([['settings', { enabled: true }]]);
+  const storageRequests = [];
 
+  let settingsAnswered;
+  const settingsAnsweredPromise = new Promise((resolve) => {
+    settingsAnswered = resolve;
+  });
   const fakeWindow = {
+    location: { href: 'https://www.youtube.com/' },
     addEventListener(type, listener) {
       if (type === 'message') messageListeners.add(listener);
     },
@@ -53,6 +59,8 @@ test('page bundle runs in a fake page and completes the storage round trip', asy
     // Plays the storage host: answers each storage request asynchronously.
     postMessage(data) {
       if (data?.kind !== 'request') return;
+      // Copied out of the vm realm, so deepStrictEqual compares plain objects of this realm.
+      storageRequests.push(JSON.parse(JSON.stringify({ operation: data.operation, payload: data.payload })));
       const payload = data.payload ?? {};
       let result = {};
       if (data.operation === 'set') for (const [key, value] of Object.entries(payload.items)) storedItems.set(key, value);
@@ -61,37 +69,41 @@ test('page bundle runs in a fake page and completes the storage round trip', asy
       const response = { channel: data.channel, kind: 'response', requestId: data.requestId, result, errorText: null };
       queueMicrotask(() => {
         for (const listener of [...messageListeners]) listener({ source: fakeWindow, data: response });
+        settingsAnswered();
       });
     },
   };
+  const documentListeners = new Map();
+  const fakeDocument = {
+    visibilityState: 'visible',
+    addEventListener: (type, listener) => documentListeners.set(type, listener),
+    removeEventListener: (type) => documentListeners.delete(type),
+    querySelector: () => null,
+  };
 
-  let roundTripFinished;
-  const roundTripFinishedPromise = new Promise((resolve) => {
-    roundTripFinished = resolve;
-  });
   const context = vm.createContext({
     window: fakeWindow,
-    document: {},
-    location: { pathname: '/' },
+    document: fakeDocument,
     console: {
-      info: (message) => {
-        infoMessages.push(message);
-        roundTripFinished();
-      },
-      error: (message) => errorMessages.push(message),
+      info: (...parts) => infoMessages.push(parts),
+      error: (...parts) => errorMessages.push(parts),
     },
     // Timers are recorded but never fire, so the test cannot depend on wall-clock time.
     setTimeout: () => 0,
     clearTimeout: () => {},
+    setInterval: () => 0,
+    clearInterval: () => {},
     queueMicrotask,
   });
 
   new vm.Script(committedBundleText, { filename: 'bundle.js' }).runInContext(context);
-  await roundTripFinishedPromise;
+  await settingsAnsweredPromise;
+  await new Promise((resolve) => setImmediate(resolve));
 
-  assert.deepEqual(infoMessages, ['lingotube: page ready, storage ok']);
+  assert.deepEqual(storageRequests, [{ operation: 'get', payload: { keys: ['settings'] } }]);
+  assert.ok(documentListeners.has('yt-navigate-finish'));
+  assert.deepEqual(infoMessages, []);
   assert.deepEqual(errorMessages, []);
-  assert.equal(storedItems.size, 0);
 });
 
 test('loader.js does not inject the page bundle itself', () => {

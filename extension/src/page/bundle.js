@@ -3,8 +3,615 @@
 (function () {
 'use strict';
 
-// Module: src/shared/storage_messages.js
+// Module: src/shared/ask_chat_wire.js
 const bundledModule0Exports = (function () {
+// Pure functions for YouTube's internal Ask-chat requests (port of src/lingotube/ask/wire.py).
+// No network and no clocks here: data in, data out.
+
+const CHAT_PANEL_ID = 'PAyouchat';
+
+/** @typedef {{continuation: string, clickTrackingParams: string}} SendCommand */
+
+/** Yield every object of a JSON tree (iterative: answers are deep and large). */
+function* walkObjects(root) {
+  const stack = [root];
+  while (stack.length) {
+    const current = stack.pop();
+    if (Array.isArray(current)) {
+      for (let i = current.length - 1; i >= 0; i--) stack.push(current[i]);
+    } else if (current !== null && typeof current === 'object') {
+      yield current;
+      const values = Object.values(current);
+      for (let i = values.length - 1; i >= 0; i--) stack.push(values[i]);
+    }
+  }
+}
+
+function* chatPanels(data) {
+  for (const node of walkObjects(data)) {
+    const renderer = node.engagementPanelSectionListRenderer;
+    if (renderer !== null && typeof renderer === 'object' && renderer.panelIdentifier === CHAT_PANEL_ID) {
+      yield renderer;
+    }
+  }
+}
+
+const isNonEmptyString = (value) => typeof value === 'string' && value !== '';
+
+/** @returns {SendCommand|null} */
+function commandFrom(raw) {
+  const inner = raw?.innertubeCommand;
+  const token = inner?.continuationCommand?.token;
+  const clickTrackingParams = inner?.clickTrackingParams;
+  if (isNonEmptyString(token) && isNonEmptyString(clickTrackingParams)) {
+    return { continuation: token, clickTrackingParams };
+  }
+  return null;
+}
+
+/**
+ * First complete `sendUserQueryCommand` inside a `PAyouchat` panel (or anywhere if not panelOnly).
+ * @param {object} response
+ * @param {{panelOnly?: boolean}} [options]
+ * @returns {SendCommand|null}
+ */
+function findSendCommand(response, { panelOnly = true } = {}) {
+  const roots = panelOnly ? [...chatPanels(response)] : [response];
+  for (const root of roots) {
+    for (const node of walkObjects(root)) {
+      const command = commandFrom(node.sendUserQueryCommand);
+      if (command !== null) return command;
+    }
+  }
+  return null;
+}
+
+/**
+ * First continuation token of the `PAyouchat` panel (for the "empty initial get_panel").
+ * @returns {string|null}
+ */
+function findChatPanelToken(nextResponse) {
+  for (const panel of chatPanels(nextResponse)) {
+    for (const node of walkObjects(panel)) {
+      const token = node.continuationCommand?.token;
+      if (isNonEmptyString(token)) return token;
+    }
+  }
+  return null;
+}
+
+/** @returns {boolean} true only when YouTube explicitly says the user is not logged out */
+function isSignedIn(nextResponse) {
+  return nextResponse?.responseContext?.mainAppWebResponseContext?.loggedOut === false;
+}
+
+/**
+ * Body of a get_panel request that sends one chat message. Does not mutate `context`.
+ * @param {{context: object, command: SendCommand, prompt: string, nowMs: number}} params
+ */
+function buildAskBody({ context, command, prompt, nowMs }) {
+  return {
+    context: { ...context, clickTracking: { clickTrackingParams: command.clickTrackingParams } },
+    continuation: command.continuation,
+    formData: {
+      inputComposerFormData: {
+        clientMessageId: `youchat-${nowMs}`,
+        playerOffsetMs: '0',
+        userInputText: prompt,
+      },
+    },
+  };
+}
+
+/**
+ * Only `youChatItemViewModel.text.content`; snackbars, chips and disclaimers are ignored.
+ * @returns {string} '' when there is no answer
+ */
+function extractAnswer(getPanelResponse) {
+  const parts = [];
+  for (const node of walkObjects(getPanelResponse)) {
+    const content = node.youChatItemViewModel?.text?.content;
+    if (typeof content === 'string' && content.trim()) parts.push(content);
+  }
+  return parts.join('\n');
+}
+return Object.freeze({ findSendCommand: findSendCommand, findChatPanelToken: findChatPanelToken, isSignedIn: isSignedIn, buildAskBody: buildAskBody, extractAnswer: extractAnswer });
+})();
+
+// Module: src/shared/chat_errors.js
+const bundledModule1Exports = (function () {
+// Errors of the Ask chat. Messages are fixed English text: never put request data
+// (URL, headers, tokens, response bodies) into them.
+
+/** The video has no Ask chat (no panel or no send command). */
+class ChatUnavailableError extends Error {
+  constructor() {
+    super('The YouTube Ask chat is not available for this video.');
+    this.name = 'ChatUnavailableError';
+  }
+}
+
+/** YouTube does not see a signed-in account. */
+class NotSignedInError extends Error {
+  constructor() {
+    super('YouTube does not see a signed-in account.');
+    this.name = 'NotSignedInError';
+  }
+}
+
+/** YouTube answered HTTP 429; no chat request should be sent before `retryAtMs`. */
+class ChatRateLimitedError extends Error {
+  /** @param {number} retryAtMs epoch milliseconds when requests may resume */
+  constructor(retryAtMs) {
+    super('YouTube is rate limiting the chat.');
+    this.name = 'ChatRateLimitedError';
+    this.retryAtMs = retryAtMs;
+  }
+}
+
+/** The chat request failed and retrying did not help (or is pointless). */
+class ChatRequestFailedError extends Error {
+  constructor() {
+    super('The YouTube chat request failed.');
+    this.name = 'ChatRequestFailedError';
+  }
+}
+return Object.freeze({ ChatUnavailableError: ChatUnavailableError, NotSignedInError: NotSignedInError, ChatRateLimitedError: ChatRateLimitedError, ChatRequestFailedError: ChatRequestFailedError });
+})();
+
+// Module: src/page/ask_chat_client.js
+const bundledModule2Exports = (function () {
+const { findSendCommand, findChatPanelToken, isSignedIn, buildAskBody, extractAnswer } = bundledModule0Exports;
+const { ChatUnavailableError, NotSignedInError, ChatRateLimitedError, ChatRequestFailedError } = bundledModule1Exports;
+// Client of YouTube's Ask chat, running inside the YouTube page (MAIN world).
+// Port of src/lingotube/ask/client.py. Requests are same-origin relative URLs; everything
+// environment-specific is injected so the module is testable without a browser.
+// Tokens (SAPISID, the hash, chat continuation, visitorData) are never logged or put into errors.
+
+
+const YOUTUBE_ORIGIN = 'https://www.youtube.com';
+const REQUEST_TIMEOUT_MS = 60000;
+const MAX_RETRIES = 2;
+
+/**
+ * @param {{cookieText: string, origin: string, nowSeconds: number, sha1Hex: (text: string) => Promise<string>}} params
+ * @returns {Promise<string>} the Authorization header value
+ */
+async function sapisidHashHeader({ cookieText, origin, nowSeconds, sha1Hex }) {
+  const cookies = new Map();
+  for (const pair of cookieText.split(';')) {
+    const at = pair.indexOf('=');
+    if (at > 0) cookies.set(pair.slice(0, at).trim(), pair.slice(at + 1).trim());
+  }
+  const sapisid = cookies.get('SAPISID') || cookies.get('__Secure-3PAPISID');
+  if (!sapisid) throw new NotSignedInError();
+  const digest = await sha1Hex(`${nowSeconds} ${sapisid} ${origin}`);
+  return `SAPISIDHASH ${nowSeconds}_${digest}`;
+}
+
+/** Internal marker: this attempt failed in a way that is worth repeating. */
+class RetryableFailure extends Error {}
+
+/**
+ * @typedef {object} Environment
+ * @property {object} context innertube context (window.ytcfg.get('INNERTUBE_CONTEXT'))
+ * @property {number} sessionIndex
+ * @property {typeof fetch} fetch
+ * @property {{run: Function, startCooldown: Function, cooldownRemainingMs: () => number}} gate
+ * @property {string} cookieText
+ * @property {() => number} now epoch milliseconds
+ * @property {(text: string) => Promise<string>} sha1Hex
+ */
+
+/** One request attempt through the gate. Throws RetryableFailure or a final chat error. */
+async function postOnce(environment, path, body) {
+  const { context, sessionIndex, fetch, gate, cookieText, now, sha1Hex } = environment;
+  // Everything time-sensitive (the SAPISIDHASH timestamp) is computed inside the gate closure,
+  // right before fetch: the gate may hold the send for seconds. Only fetch failures are turned
+  // into a retryable failure; anything the gate itself throws escapes unchanged.
+  const response = await gate.run(async () => {
+    const headers = {
+      'Content-Type': 'application/json',
+      Authorization: await sapisidHashHeader({
+        cookieText,
+        origin: YOUTUBE_ORIGIN,
+        nowSeconds: Math.floor(now() / 1000),
+        sha1Hex,
+      }),
+      'X-Origin': YOUTUBE_ORIGIN,
+      'X-Goog-AuthUser': String(sessionIndex),
+      'X-Youtube-Client-Name': '1',
+    };
+    if (typeof context?.client?.clientVersion === 'string') {
+      headers['X-Youtube-Client-Version'] = context.client.clientVersion;
+    }
+    if (typeof context?.client?.visitorData === 'string') {
+      headers['X-Goog-Visitor-Id'] = context.client.visitorData;
+    }
+    try {
+      return await fetch(`/youtubei/v1/${path}?prettyPrint=false`, {
+        method: 'POST',
+        credentials: 'include',
+        redirect: 'error',
+        headers,
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+    } catch {
+      throw new RetryableFailure();
+    }
+  });
+  const { status } = response;
+  if (status === 401 || status === 403) throw new NotSignedInError();
+  if (status === 429) {
+    gate.startCooldown();
+    throw new ChatRateLimitedError(now() + gate.cooldownRemainingMs());
+  }
+  if (status >= 500) throw new RetryableFailure();
+  if (status < 200 || status >= 300) throw new ChatRequestFailedError();
+  try {
+    return await response.json();
+  } catch {
+    throw new RetryableFailure();
+  }
+}
+
+/**
+ * POST with up to MAX_RETRIES repeats of the same request on retryable failures.
+ * @param {object} body request body, reused unchanged by every attempt
+ * @param {(data: object) => T} accept validates/derives the result; throw RetryableFailure to retry
+ * @template T
+ */
+async function postWithRetries(environment, path, body, accept = (data) => data) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const data = await postOnce(environment, path, body);
+      if (data === null || typeof data !== 'object') throw new RetryableFailure();
+      return accept(data);
+    } catch (error) {
+      if (!(error instanceof RetryableFailure)) throw error;
+      if (attempt >= MAX_RETRIES) throw new ChatRequestFailedError();
+    }
+  }
+}
+
+/** One Ask chat for one video. Remembers the current send command between questions. */
+class AskChatSession {
+  #environment;
+  #command;
+
+  constructor(environment, command) {
+    this.#environment = environment;
+    this.#command = command;
+  }
+
+  /**
+   * @param {string} prompt
+   * @returns {Promise<string>} the chat's answer
+   */
+  async ask(prompt) {
+    const command = this.#command;
+    // Built once: every retry re-sends the same message (same clientMessageId).
+    const body = buildAskBody({
+      context: this.#environment.context,
+      command,
+      prompt,
+      nowMs: this.#environment.now(),
+    });
+    const { answer, fresh } = await postWithRetries(
+      this.#environment,
+      'get_panel',
+      body,
+      (data) => {
+        const text = extractAnswer(data);
+        if (!text) throw new RetryableFailure();
+        return { answer: text, fresh: findSendCommand(data, { panelOnly: false }) };
+      },
+    );
+    if (fresh !== null) this.#command = fresh;
+    return answer;
+  }
+}
+
+/**
+ * Open the Ask chat of a video: `next` → send command (→ optional empty initial get_panel).
+ * @param {Environment & {videoId: string}} params
+ * @returns {Promise<AskChatSession>}
+ */
+async function openAskChat({ videoId, ...environment }) {
+  const { context } = environment;
+  const next = await postWithRetries(environment, 'next', { context, videoId });
+  if (!isSignedIn(next)) throw new NotSignedInError();
+  let command = findSendCommand(next);
+  if (command === null) {
+    const panelToken = findChatPanelToken(next);
+    if (panelToken) {
+      const initial = await postWithRetries(environment, 'get_panel', { context, continuation: panelToken });
+      command = findSendCommand(initial, { panelOnly: false });
+    }
+  }
+  if (command === null) throw new ChatUnavailableError();
+  return new AskChatSession(environment, command);
+}
+return Object.freeze({ sapisidHashHeader: sapisidHashHeader, openAskChat: openAskChat });
+})();
+
+// Module: src/page/chat_request_gate.js
+const bundledModule3Exports = (function () {
+const { ChatRateLimitedError } = bundledModule1Exports;
+// Paces Ask chat requests across ALL tabs of the browser: one request at a time, at least
+// MIN_GAP_BETWEEN_STARTS_MS between starts, nothing from a hidden tab, and a shared cooldown
+// after HTTP 429. Only two timestamps are stored; tokens never reach storage.
+
+
+const LOCK_NAME = 'lingotube-chat-request';
+const LAST_START_KEY = 'lingotube:lastChatRequestStartedAtMs';
+const COOLDOWN_UNTIL_KEY = 'lingotube:chatCooldownUntilMs';
+const MIN_GAP_BETWEEN_STARTS_MS = 5000;
+const COOLDOWN_DURATION_MS = 600000;
+const RETRY_OUTSIDE_LOCK = Symbol('retry outside lock');
+
+class ChatRequestGate {
+  /**
+   * @param {object} dependencies
+   * @param {{request: (name: string, callback: () => Promise<any>) => Promise<any>}} dependencies.lockManager navigator.locks shape
+   * @param {{getItem: Function, setItem: Function, removeItem: Function}} dependencies.keyValueStorage localStorage shape; may throw
+   * @param {() => boolean} dependencies.isTabVisible
+   * @param {() => Promise<void>} dependencies.waitUntilTabVisible resolves on the next change to visible
+   * @param {() => number} dependencies.now epoch milliseconds
+   * @param {(ms: number) => Promise<void>} dependencies.sleep
+   */
+  constructor({ lockManager, keyValueStorage, isTabVisible, waitUntilTabVisible, now, sleep }) {
+    this.lockManager = lockManager;
+    this.keyValueStorage = keyValueStorage;
+    this.isTabVisible = isTabVisible;
+    this.waitUntilTabVisible = waitUntilTabVisible;
+    this.now = now;
+    this.sleep = sleep;
+    this.lastStartInThisTabMs = null;
+    this.cooldownUntilInThisTabMs = null;
+  }
+
+  /**
+   * Runs `sendRequest` when the tab is visible, no cooldown is active and the gap since the
+   * previous start (in any tab) has passed. Returns or rethrows whatever `sendRequest` does.
+   * @template T
+   * @param {() => Promise<T>} sendRequest
+   * @returns {Promise<T>}
+   */
+  async run(sendRequest) {
+    for (;;) {
+      while (!this.isTabVisible()) {
+        await this.waitUntilTabVisible();
+      }
+      this.#throwIfCoolingDown();
+      const outcome = await this.lockManager.request(LOCK_NAME, async () => {
+        // A cooldown may have started in another tab while this request waited in the queue.
+        this.#throwIfCoolingDown();
+        // Clamp: a future last start (clock moved back, garbage value) must not hold the lock long.
+        const waitMs = Math.min(
+          this.#lastStartMs() + MIN_GAP_BETWEEN_STARTS_MS - this.now(),
+          MIN_GAP_BETWEEN_STARTS_MS,
+        );
+        if (waitMs > 0) {
+          await this.sleep(waitMs);
+        }
+        // The tab may have been hidden, or another tab hit a 429, during the wait. Never wait
+        // for visibility inside the lock (it would block other tabs): leave and retry outside.
+        if (!this.isTabVisible() || this.cooldownRemainingMs() > 0) {
+          return RETRY_OUTSIDE_LOCK;
+        }
+        const startedAtMs = this.now();
+        this.lastStartInThisTabMs = startedAtMs;
+        this.#writeNumber(LAST_START_KEY, startedAtMs);
+        return { result: await sendRequest() };
+      });
+      if (outcome === RETRY_OUTSIDE_LOCK) {
+        this.#throwIfCoolingDown();
+        continue;
+      }
+      return outcome.result;
+    }
+  }
+
+  /** Stops all chat requests from every tab for 10 minutes. */
+  startCooldown() {
+    const untilMs = this.now() + COOLDOWN_DURATION_MS;
+    // Kept in memory only when storage refused the write; otherwise storage is the single truth,
+    // so a manual clear in another tab is honoured here too.
+    this.cooldownUntilInThisTabMs = this.#writeNumber(COOLDOWN_UNTIL_KEY, untilMs) ? null : untilMs;
+  }
+
+  /** @returns {number} milliseconds left of the cooldown, 0 when none */
+  cooldownRemainingMs() {
+    const untilMs = Math.max(
+      this.#readNumber(COOLDOWN_UNTIL_KEY) ?? -Infinity,
+      this.cooldownUntilInThisTabMs ?? -Infinity,
+    );
+    // Capped: a far-future value (clock moved back, garbage) must not lock requests out for long.
+    return Math.min(COOLDOWN_DURATION_MS, Math.max(0, untilMs - this.now()));
+  }
+
+  /** Ends the cooldown early (the manual retry button). */
+  clearCooldown() {
+    this.cooldownUntilInThisTabMs = null;
+    try {
+      this.keyValueStorage.removeItem(COOLDOWN_UNTIL_KEY);
+    } catch {
+      // Storage unavailable: nothing to clear.
+    }
+  }
+
+  #throwIfCoolingDown() {
+    const remainingMs = this.cooldownRemainingMs();
+    if (remainingMs > 0) {
+      throw new ChatRateLimitedError(this.now() + remainingMs);
+    }
+  }
+
+  /** Latest known start of a chat request, from storage or this tab; -Infinity when unknown. */
+  #lastStartMs() {
+    const stored = this.#readNumber(LAST_START_KEY);
+    return Math.max(stored ?? -Infinity, this.lastStartInThisTabMs ?? -Infinity);
+  }
+
+  #readNumber(key) {
+    try {
+      const text = this.keyValueStorage.getItem(key);
+      if (text === null || text === undefined || text === '') return null;
+      const value = Number(text);
+      return Number.isFinite(value) ? value : null;
+    } catch {
+      return null;
+    }
+  }
+
+  #writeNumber(key, value) {
+    try {
+      this.keyValueStorage.setItem(key, String(value));
+      return true;
+    } catch {
+      // Storage unavailable: pacing falls back to this tab's memory.
+      return false;
+    }
+  }
+}
+return Object.freeze({ ChatRequestGate: ChatRequestGate });
+})();
+
+// Module: src/shared/prompt_texts.js
+const bundledModule4Exports = (function () {
+/** Version of the prompt texts; matches PROMPT_VERSION of the Python package. */
+const PROMPT_VERSION = '1';
+
+/**
+ * Exact copies of src/lingotube/prompts/<name>.v1.txt (there is no build step to share them);
+ * tests/prompt_texts.test.js compares them with the package files.
+ */
+const PROMPT_TEXTS = Object.freeze({
+  translate_batch: "Переведи на язык: {language}.\nНа входе строки вида «номер<TAB>текст», где <TAB> — символ табуляции, например:\n12\tHello, world\n13\tSee you\nНа выходе дай строки в том же виде «номер<TAB>перевод»: те же номера, в том же порядке и в том же количестве, по одной строке на каждую входную; переводи только текст после табуляции. Не объединяй и не разделяй строки, не пропускай их, ничего не добавляй. Без вступления, без заключения, без комментариев — только строки перевода.\n",
+  transcript_translated: "Дай полную дословную транскрипцию всей речи в видео с {start} по {end} и переведи её дословно на язык: {language}. Одна строка на одну реплику в формате (м:сс) текст, где время — начало реплики (после первого часа — (ч:мм:сс)), а текст — перевод этой реплики. Выводи только строки перевода: оригинал не выводи совсем, не чередуй оригинал и перевод, не повторяй тайм-коды. Одна реплика — одна строка, в том же порядке, без пропусков и объединения реплик; ничего не добавляй от себя, не пересказывай и не сокращай. Без вступления, без заключения, без комментариев — только строки перевода.\n",
+});
+
+const PLACEHOLDER_PATTERN = /\{(\w+)\}/g;
+
+/**
+ * Fills the {word} placeholders of a prompt in one pass; values are not scanned again.
+ * @param {keyof typeof PROMPT_TEXTS} name
+ * @param {Record<string, string>} variables
+ * @returns {string}
+ */
+function fillPrompt(name, variables) {
+  return PROMPT_TEXTS[name].replace(PLACEHOLDER_PATTERN, (_placeholder, word) => {
+    if (!Object.hasOwn(variables, word)) {
+      throw new Error(`Prompt variable is missing: ${word}`);
+    }
+    return variables[word];
+  });
+}
+return Object.freeze({ PROMPT_VERSION: PROMPT_VERSION, PROMPT_TEXTS: PROMPT_TEXTS, fillPrompt: fillPrompt });
+})();
+
+// Module: src/shared/translation_batch.js
+const bundledModule5Exports = (function () {
+const { fillPrompt } = bundledModule4Exports;
+/** @typedef {import('./sentence_cues.js').Cue} Cue */
+
+const MAX_LANGUAGE_NAME_LENGTH = 60;
+const REPLY_LINE_PATTERN = /^\s*(\d+)(?:[\t ]+|[.):]\s*)(.*?)\s*$/;
+
+/**
+ * Turns the language typed by the person into one short line.
+ * @param {string} text
+ * @returns {string}
+ */
+function sanitizeLanguageName(text) {
+  return text.split(/\s+/).filter(Boolean).join(' ').slice(0, MAX_LANGUAGE_NAME_LENGTH).trim();
+}
+
+/**
+ * Builds the chat message: the batch prompt, then one "<id>\t<text>" line per cue.
+ * @param {string} languageName
+ * @param {Cue[]} cues
+ * @returns {string}
+ */
+function buildTranslationPrompt(languageName, cues) {
+  const head = fillPrompt('translate_batch', { language: sanitizeLanguageName(languageName) });
+  const lines = cues.map((cue) => `${cue.id}\t${cue.sourceText.split(/\s+/).filter(Boolean).join(' ')}`);
+  return `${head}\n${lines.join('\n')}`;
+}
+
+/**
+ * Matches reply lines to cues by id only. A reply whose ids are out of the expected
+ * order or repeat is rejected whole; ids that were not asked for are skipped.
+ * @param {string} answer
+ * @param {number[]} expectedCueIds
+ * @returns {{translationsByCueId: Map<number, string>, missingCueIds: number[]}}
+ */
+function parseTranslationReply(answer, expectedCueIds) {
+  const positionByCueId = new Map(expectedCueIds.map((id, position) => [id, position]));
+  const translationsByCueId = new Map();
+  let lastPosition = -1;
+  for (const line of answer.split(/\r?\n/)) {
+    const match = REPLY_LINE_PATTERN.exec(line);
+    if (!match) continue;
+    const id = Number(match[1]);
+    const text = match[2];
+    const position = positionByCueId.get(id);
+    if (position === undefined || text === '') continue;
+    if (translationsByCueId.has(id) || position < lastPosition) {
+      return { translationsByCueId: new Map(), missingCueIds: [...expectedCueIds] };
+    }
+    lastPosition = position;
+    translationsByCueId.set(id, text);
+  }
+  return {
+    translationsByCueId,
+    missingCueIds: expectedCueIds.filter((id) => !translationsByCueId.has(id)),
+  };
+}
+return Object.freeze({ sanitizeLanguageName: sanitizeLanguageName, buildTranslationPrompt: buildTranslationPrompt, parseTranslationReply: parseTranslationReply });
+})();
+
+// Module: src/page/chat_translator.js
+const bundledModule6Exports = (function () {
+const { buildTranslationPrompt, parseTranslationReply } = bundledModule5Exports;
+/** @typedef {import('../shared/sentence_cues.js').Cue} Cue */
+
+/** Translates cue batches through the Ask chat; one call sends at most two messages. */
+class ChatTranslator {
+  /**
+   * @param {{chatSession: {ask: (prompt: string) => Promise<string>}, languageName: string}} options
+   */
+  constructor({ chatSession, languageName }) {
+    this.chatSession = chatSession;
+    this.languageName = languageName;
+  }
+
+  /**
+   * Asks for all cues, then once more for the cues the chat dropped.
+   * Errors of the chat session propagate unchanged.
+   * @param {Cue[]} cues
+   * @returns {Promise<{translationsByCueId: Map<number, string>, failedCueIds: number[]}>}
+   */
+  async translateCues(cues) {
+    const translationsByCueId = new Map();
+    let pendingCues = cues;
+    for (let attempt = 0; attempt < 2 && pendingCues.length > 0; attempt += 1) {
+      const answer = await this.chatSession.ask(buildTranslationPrompt(this.languageName, pendingCues));
+      const reply = parseTranslationReply(answer, pendingCues.map((cue) => cue.id));
+      for (const [cueId, text] of reply.translationsByCueId) translationsByCueId.set(cueId, text);
+      const missing = new Set(reply.missingCueIds);
+      pendingCues = pendingCues.filter((cue) => missing.has(cue.id));
+    }
+    return { translationsByCueId, failedCueIds: pendingCues.map((cue) => cue.id) };
+  }
+}
+return Object.freeze({ ChatTranslator: ChatTranslator });
+})();
+
+// Module: src/shared/storage_messages.js
+const bundledModule7Exports = (function () {
 const STORAGE_CHANNEL = 'lingotube-storage';
 
 const STORAGE_OPERATIONS = ['get', 'set', 'remove'];
@@ -43,8 +650,8 @@ return Object.freeze({ STORAGE_CHANNEL: STORAGE_CHANNEL, createStorageRequest: c
 })();
 
 // Module: src/page/extension_storage.js
-const bundledModule1Exports = (function () {
-const { createStorageRequest, isStorageResponse } = bundledModule0Exports;
+const bundledModule8Exports = (function () {
+const { createStorageRequest, isStorageResponse } = bundledModule7Exports;
 /** Storage client for the MAIN world: talks to the storage host by window messages. */
 function createExtensionStorage({ window, timeoutMs = 3000 }) {
   let lastRequestId = 0;
@@ -84,44 +691,286 @@ function createExtensionStorage({ window, timeoutMs = 3000 }) {
 return Object.freeze({ createExtensionStorage: createExtensionStorage });
 })();
 
-// Module: src/page/youtube_player.js
-const bundledModule2Exports = (function () {
-/** @returns {HTMLElement|null} */
-function findPlayerElement(document) {
-  return document.querySelector('#movie_player');
+// Module: src/shared/overlay_position.js
+const bundledModule9Exports = (function () {
+/**
+ * Pure geometry of the subtitle box. The position is stored as fractions of the
+ * container so it survives resizing and fullscreen.
+ * centerXFraction: horizontal centre of the box / container width.
+ * bottomYFraction: BOTTOM edge of the box / container height (measured from the top).
+ * @typedef {{centerXFraction: number, bottomYFraction: number}} OverlayPosition
+ */
+
+/** @type {OverlayPosition} */
+const DEFAULT_OVERLAY_POSITION = { centerXFraction: 0.5, bottomYFraction: 0.86 };
+
+/** Limits a value to [low, high]; when the range is empty or inverted the fallback wins. */
+function clampWithin(value, low, high, fallback) {
+  if (!(low <= high)) return fallback;
+  return Math.min(high, Math.max(low, value));
 }
 
 /**
- * @param {HTMLElement} playerElement
- * @returns {import('../shared/caption_track_choice.js').CaptionTrackInfo[]}
+ * Turns a centre and a bottom edge in pixels into clamped fractions,
+ * so that the whole box stays inside the container.
  */
-function readCaptionTracks(playerElement) {
-  const tracks =
-    playerElement.getPlayerResponse?.()?.captions?.playerCaptionsTracklistRenderer?.captionTracks ?? [];
-  return tracks.map((track) => ({
-    languageCode: track.languageCode,
-    kind: track.kind === 'asr' ? 'asr' : 'manual',
-    baseUrl: track.baseUrl,
-  }));
-}
-
-/**
- * @param {HTMLElement} playerElement
- * @returns {{videoId: string, durationMs: number, isLive: boolean}}
- */
-function readVideoDetails(playerElement) {
-  const details = playerElement.getPlayerResponse?.()?.videoDetails ?? {};
+function fractionsFromPixels(centerX, bottomY, { boxWidth, boxHeight, containerWidth, containerHeight }) {
+  if (!(containerWidth > 0) || !(containerHeight > 0)) {
+    return { ...DEFAULT_OVERLAY_POSITION };
+  }
+  const halfWidth = boxWidth / 2;
+  // A box wider than the container is centred; a taller one sits on the bottom edge.
+  const clampedCenterX = clampWithin(
+    centerX,
+    halfWidth,
+    containerWidth - halfWidth,
+    containerWidth / 2,
+  );
+  const clampedBottomY = clampWithin(bottomY, boxHeight, containerHeight, containerHeight);
   return {
-    videoId: details.videoId ?? '',
-    durationMs: Number(details.lengthSeconds ?? 0) * 1000,
-    isLive: Boolean(details.isLive),
+    centerXFraction: clampedCenterX / containerWidth,
+    bottomYFraction: clampedBottomY / containerHeight,
   };
 }
-return Object.freeze({ findPlayerElement: findPlayerElement, readCaptionTracks: readCaptionTracks, readVideoDetails: readVideoDetails });
+
+/**
+ * Pulls a position back so the whole box is visible in the container.
+ * @param {OverlayPosition} position
+ * @param {{boxWidth: number, boxHeight: number, containerWidth: number, containerHeight: number}} sizes
+ * @returns {OverlayPosition}
+ */
+function clampOverlayPosition(position, sizes) {
+  const { containerWidth, containerHeight } = sizes;
+  // A stored position may be corrupt: each non-finite field falls back to its default.
+  const source = position !== null && typeof position === 'object' ? position : {};
+  const centerXFraction = Number.isFinite(source.centerXFraction)
+    ? source.centerXFraction
+    : DEFAULT_OVERLAY_POSITION.centerXFraction;
+  const bottomYFraction = Number.isFinite(source.bottomYFraction)
+    ? source.bottomYFraction
+    : DEFAULT_OVERLAY_POSITION.bottomYFraction;
+  return fractionsFromPixels(centerXFraction * containerWidth, bottomYFraction * containerHeight, sizes);
+}
+
+/**
+ * Position for a box dragged by a point inside it.
+ * All coordinates are pixels relative to the container's top-left corner;
+ * the grab offset is the grab point measured from the box's top-left corner.
+ * @param {{pointerX: number, pointerY: number, grabOffsetX: number, grabOffsetY: number,
+ *   boxWidth: number, boxHeight: number, containerWidth: number, containerHeight: number}} drag
+ * @returns {OverlayPosition}
+ */
+function positionFromDrag(drag) {
+  const { pointerX, pointerY, grabOffsetX, grabOffsetY, boxWidth, boxHeight } = drag;
+  const boxLeft = pointerX - grabOffsetX;
+  const boxTop = pointerY - grabOffsetY;
+  return fractionsFromPixels(boxLeft + boxWidth / 2, boxTop + boxHeight, drag);
+}
+return Object.freeze({ DEFAULT_OVERLAY_POSITION: DEFAULT_OVERLAY_POSITION, clampOverlayPosition: clampOverlayPosition, positionFromDrag: positionFromDrag });
+})();
+
+// Module: src/page/overlay_view.js
+const bundledModule10Exports = (function () {
+const { DEFAULT_OVERLAY_POSITION, clampOverlayPosition, positionFromDrag } = bundledModule9Exports;
+/** A pointer movement shorter than this many pixels is a click, not a drag. */
+const DRAG_THRESHOLD_PX = 4;
+
+const APPROXIMATE_TIMING_LABEL_TEXT = 'Время приблизительное';
+
+/**
+ * A draggable subtitle box over any element that wraps a video.
+ * It knows nothing about the text source: it only displays what it is given.
+ */
+class OverlayView {
+  #container;
+  #onPositionChanged;
+  #position;
+  #boxElement;
+  #textElement;
+  #labelElement;
+  #resizeObserver;
+  #isEmpty = true;
+  #isHiddenByOwner = false;
+  #drag = null;
+  #isNextClickSwallowed = false;
+
+  /**
+   * @param {{document: Document, containerElement: HTMLElement,
+   *   position: import('../shared/overlay_position.js').OverlayPosition|null,
+   *   textScale: number, onPositionChanged: (position: object) => void}} options
+   */
+  constructor({ document, containerElement, position, textScale, onPositionChanged }) {
+    this.#container = containerElement;
+    this.#onPositionChanged = onPositionChanged;
+    this.#position = position ?? { ...DEFAULT_OVERLAY_POSITION };
+
+    this.#boxElement = document.createElement('div');
+    this.#boxElement.className = 'lingotube-overlay';
+    this.#textElement = document.createElement('div');
+    this.#textElement.className = 'lingotube-overlay-text';
+    this.#labelElement = document.createElement('div');
+    this.#labelElement.className = 'lingotube-overlay-label';
+    this.#labelElement.textContent = APPROXIMATE_TIMING_LABEL_TEXT;
+    this.#labelElement.hidden = true;
+    this.#boxElement.append(this.#textElement, this.#labelElement);
+    this.#boxElement.hidden = true;
+    this.#boxElement.style.setProperty('--lingotube-text-scale', String(textScale));
+
+    this.#boxElement.addEventListener('pointerdown', this.#handlePointerDown);
+    this.#boxElement.addEventListener('pointermove', this.#handlePointerMove);
+    this.#boxElement.addEventListener('pointerup', this.#handlePointerUp);
+    this.#boxElement.addEventListener('pointercancel', this.#handlePointerCancel);
+    // Capture phase: the click that ends a drag must not reach the player, which toggles playback on click.
+    this.#boxElement.addEventListener('click', this.#handleClick, true);
+
+    this.#container.appendChild(this.#boxElement);
+    // Re-place the box when the container resizes (including fullscreen) or the box changes size.
+    this.#resizeObserver = new ResizeObserver(() => this.#applyPosition());
+    this.#resizeObserver.observe(this.#container);
+    this.#resizeObserver.observe(this.#boxElement);
+  }
+
+  /** Shows a translated or source cue text. */
+  showCueText(text) {
+    this.#textElement.classList.remove('lingotube-overlay-status');
+    this.#showText(text);
+  }
+
+  /** Shows a status such as "Перевожу…" in a muted style. */
+  showStatus(text) {
+    this.#textElement.classList.add('lingotube-overlay-status');
+    this.#showText(text);
+  }
+
+  /** Empties and hides the box. */
+  clear() {
+    this.#showText('');
+  }
+
+  /** @param {boolean} isVisible */
+  setApproximateTimingLabel(isVisible) {
+    this.#labelElement.hidden = !isVisible;
+    this.#applyPosition();
+  }
+
+  /** @param {number} scale multiplier of the base font size */
+  setTextScale(scale) {
+    this.#boxElement.style.setProperty('--lingotube-text-scale', String(scale));
+    this.#applyPosition();
+  }
+
+  /** Hides the box regardless of its text, for example during ads. */
+  setHidden(isHidden) {
+    this.#isHiddenByOwner = isHidden;
+    this.#updateVisibility();
+  }
+
+  /** Removes the element, the observer and all listeners. */
+  destroy() {
+    this.#resizeObserver.disconnect();
+    this.#boxElement.removeEventListener('pointerdown', this.#handlePointerDown);
+    this.#boxElement.removeEventListener('pointermove', this.#handlePointerMove);
+    this.#boxElement.removeEventListener('pointerup', this.#handlePointerUp);
+    this.#boxElement.removeEventListener('pointercancel', this.#handlePointerCancel);
+    this.#boxElement.removeEventListener('click', this.#handleClick, true);
+    this.#boxElement.remove();
+  }
+
+  #showText(text) {
+    this.#textElement.textContent = text;
+    this.#isEmpty = text === '';
+    this.#updateVisibility();
+  }
+
+  #updateVisibility() {
+    this.#boxElement.hidden = this.#isEmpty || this.#isHiddenByOwner;
+    this.#applyPosition();
+  }
+
+  #measureSizes() {
+    return {
+      boxWidth: this.#boxElement.offsetWidth,
+      boxHeight: this.#boxElement.offsetHeight,
+      containerWidth: this.#container.clientWidth,
+      containerHeight: this.#container.clientHeight,
+    };
+  }
+
+  /** Places the box by the stored position clamped to the current sizes; the stored position is kept. */
+  #applyPosition() {
+    if (this.#boxElement.hidden) return;
+    const placed = clampOverlayPosition(this.#position, this.#measureSizes());
+    this.#boxElement.style.left = `${placed.centerXFraction * 100}%`;
+    this.#boxElement.style.top = `${placed.bottomYFraction * 100}%`;
+    this.#boxElement.style.transform = 'translate(-50%, -100%)';
+  }
+
+  #handlePointerDown = (event) => {
+    if (event.button !== 0 || this.#drag) return;
+    const boxRect = this.#boxElement.getBoundingClientRect();
+    this.#isNextClickSwallowed = false;
+    this.#drag = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      grabOffsetX: event.clientX - boxRect.left,
+      grabOffsetY: event.clientY - boxRect.top,
+      isMoving: false,
+    };
+    this.#boxElement.setPointerCapture(event.pointerId);
+  };
+
+  #handlePointerMove = (event) => {
+    const drag = this.#drag;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    if (!drag.isMoving) {
+      const distance = Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY);
+      if (distance < DRAG_THRESHOLD_PX) return;
+      drag.isMoving = true;
+      this.#boxElement.classList.add('lingotube-dragging');
+    }
+    const containerRect = this.#container.getBoundingClientRect();
+    this.#position = positionFromDrag({
+      pointerX: event.clientX - containerRect.left,
+      pointerY: event.clientY - containerRect.top,
+      grabOffsetX: drag.grabOffsetX,
+      grabOffsetY: drag.grabOffsetY,
+      ...this.#measureSizes(),
+    });
+    this.#applyPosition();
+  };
+
+  #handlePointerUp = (event) => {
+    const drag = this.#drag;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    this.#finishDrag();
+    if (drag.isMoving) {
+      this.#isNextClickSwallowed = true;
+      this.#onPositionChanged({ ...this.#position });
+    }
+  };
+
+  #handlePointerCancel = (event) => {
+    if (this.#drag && event.pointerId === this.#drag.pointerId) this.#finishDrag();
+  };
+
+  #finishDrag() {
+    this.#boxElement.classList.remove('lingotube-dragging');
+    this.#drag = null;
+  }
+
+  #handleClick = (event) => {
+    if (!this.#isNextClickSwallowed) return;
+    this.#isNextClickSwallowed = false;
+    event.stopPropagation();
+    event.preventDefault();
+  };
+}
+return Object.freeze({ OverlayView: OverlayView });
 })();
 
 // Module: src/page/player_caption_request.js
-const bundledModule3Exports = (function () {
+const bundledModule11Exports = (function () {
 // The caption URL and its `pot` token never leave the MAIN world and are never logged.
 
 const YOUTUBE_ORIGIN = 'https://www.youtube.com';
@@ -323,8 +1172,1376 @@ async function capturePlayerCaptionRequestUrl({
 return Object.freeze({ mergePlayerRequestParameters: mergePlayerRequestParameters, isPlayerCaptionRequest: isPlayerCaptionRequest, captureDiagnostics: captureDiagnostics, activateSubtitleButton: activateSubtitleButton, capturePlayerCaptionRequestUrl: capturePlayerCaptionRequestUrl });
 })();
 
+// Module: src/shared/language_choices.js
+const bundledModule12Exports = (function () {
+const { sanitizeLanguageName } = bundledModule5Exports;
+/**
+ * @typedef {{code: string|null, name: string}} TargetLanguage
+ * A listed language has its list code and English name; a typed one has code null.
+ */
+
+const OTHER_LANGUAGE_VALUE = '__other__';
+const CUSTOM_VALUE_PREFIX = 'custom:';
+const FALLBACK_PROMPT_LANGUAGE = 'Russian';
+
+/** The 30 languages of the dropdown, in the order of the spec; each is labeled in its own language. */
+const LANGUAGE_CHOICES = [
+  { code: 'en', nativeName: 'English', englishName: 'English' },
+  { code: 'zh-Hans', nativeName: '简体中文', englishName: 'Chinese (Simplified)' },
+  { code: 'zh-Hant', nativeName: '繁體中文', englishName: 'Chinese (Traditional)' },
+  { code: 'hi', nativeName: 'हिन्दी', englishName: 'Hindi' },
+  { code: 'es', nativeName: 'Español', englishName: 'Spanish' },
+  { code: 'fr', nativeName: 'Français', englishName: 'French' },
+  { code: 'ar', nativeName: 'العربية', englishName: 'Arabic' },
+  { code: 'bn', nativeName: 'বাংলা', englishName: 'Bengali' },
+  { code: 'pt', nativeName: 'Português', englishName: 'Portuguese' },
+  { code: 'ru', nativeName: 'Русский', englishName: 'Russian' },
+  { code: 'ur', nativeName: 'اردو', englishName: 'Urdu' },
+  { code: 'id', nativeName: 'Bahasa Indonesia', englishName: 'Indonesian' },
+  { code: 'de', nativeName: 'Deutsch', englishName: 'German' },
+  { code: 'ja', nativeName: '日本語', englishName: 'Japanese' },
+  { code: 'tr', nativeName: 'Türkçe', englishName: 'Turkish' },
+  { code: 'ko', nativeName: '한국어', englishName: 'Korean' },
+  { code: 'vi', nativeName: 'Tiếng Việt', englishName: 'Vietnamese' },
+  { code: 'it', nativeName: 'Italiano', englishName: 'Italian' },
+  { code: 'th', nativeName: 'ไทย', englishName: 'Thai' },
+  { code: 'pl', nativeName: 'Polski', englishName: 'Polish' },
+  { code: 'uk', nativeName: 'Українська', englishName: 'Ukrainian' },
+  { code: 'nl', nativeName: 'Nederlands', englishName: 'Dutch' },
+  { code: 'fa', nativeName: 'فارسی', englishName: 'Persian' },
+  { code: 'he', nativeName: 'עברית', englishName: 'Hebrew' },
+  { code: 'el', nativeName: 'Ελληνικά', englishName: 'Greek' },
+  { code: 'cs', nativeName: 'Čeština', englishName: 'Czech' },
+  { code: 'sv', nativeName: 'Svenska', englishName: 'Swedish' },
+  { code: 'ro', nativeName: 'Română', englishName: 'Romanian' },
+  { code: 'hu', nativeName: 'Magyar', englishName: 'Hungarian' },
+  { code: 'kk', nativeName: 'Қазақша', englishName: 'Kazakh' },
+];
+
+/**
+ * Items of the language dropdown: typed names first, then the listed languages, then "other".
+ * @param {string[]} customLanguageNames
+ * @returns {{value: string, label: string}[]}
+ */
+function buildLanguageMenu(customLanguageNames) {
+  return [
+    ...customLanguageNames.map((name) => ({ value: `${CUSTOM_VALUE_PREFIX}${name}`, label: name })),
+    ...LANGUAGE_CHOICES.map((choice) => ({ value: choice.code, label: choice.nativeName })),
+    { value: OTHER_LANGUAGE_VALUE, label: 'Другой язык…' },
+  ];
+}
+
+/**
+ * @param {string} value a value of the menu built by buildLanguageMenu
+ * @returns {TargetLanguage|null} null for "other", unknown values and empty typed names
+ */
+function targetLanguageFromMenuValue(value) {
+  if (value.startsWith(CUSTOM_VALUE_PREFIX)) {
+    const name = sanitizeLanguageName(value.slice(CUSTOM_VALUE_PREFIX.length));
+    return name ? { code: null, name } : null;
+  }
+  const choice = LANGUAGE_CHOICES.find((candidate) => candidate.code === value);
+  return choice ? { code: choice.code, name: choice.englishName } : null;
+}
+
+/**
+ * The language name that goes into the prompt; never empty.
+ * @param {TargetLanguage} language
+ * @returns {string}
+ */
+function promptLanguageName(language) {
+  const choice = LANGUAGE_CHOICES.find((candidate) => candidate.code === language.code);
+  if (choice) return choice.englishName;
+  return sanitizeLanguageName(String(language.name ?? '')) || FALLBACK_PROMPT_LANGUAGE;
+}
+return Object.freeze({ OTHER_LANGUAGE_VALUE: OTHER_LANGUAGE_VALUE, LANGUAGE_CHOICES: LANGUAGE_CHOICES, buildLanguageMenu: buildLanguageMenu, targetLanguageFromMenuValue: targetLanguageFromMenuValue, promptLanguageName: promptLanguageName });
+})();
+
+// Module: src/shared/player_panel_logic.js
+const bundledModule13Exports = (function () {
+const { sanitizeLanguageName } = bundledModule5Exports;
+const TEXT_SCALE_STEP = 0.2;
+const MIN_TEXT_SCALE = 0.6;
+const MAX_TEXT_SCALE = 2.0;
+const CUSTOM_VALUE_PREFIX = 'custom:';
+
+/**
+ * Turns the text typed into the "other language" input into a target language.
+ * @param {string} typedText
+ * @returns {import('./language_choices.js').TargetLanguage|null} null for empty or whitespace-only text
+ */
+function languageFromTypedText(typedText) {
+  const name = sanitizeLanguageName(String(typedText ?? ''));
+  return name ? { code: null, name } : null;
+}
+
+/**
+ * The dropdown value that stands for the given language (the inverse of targetLanguageFromMenuValue).
+ * @param {import('./language_choices.js').TargetLanguage} language
+ * @returns {string}
+ */
+function menuValueForLanguage(language) {
+  return language.code === null ? `${CUSTOM_VALUE_PREFIX}${language.name}` : language.code;
+}
+
+/**
+ * Typed language names for the dropdown: the remembered ones, plus the current language
+ * when it is typed and not remembered yet, so the select can always show it.
+ * @param {string[]} customLanguageNames
+ * @param {import('./language_choices.js').TargetLanguage} currentLanguage
+ * @returns {string[]}
+ */
+function customNamesForMenu(customLanguageNames, currentLanguage) {
+  if (currentLanguage.code !== null) return [...customLanguageNames];
+  const currentIdentity = currentLanguage.name.toLowerCase();
+  const isRemembered = customLanguageNames.some((name) => name.toLowerCase() === currentIdentity);
+  return isRemembered ? [...customLanguageNames] : [currentLanguage.name, ...customLanguageNames];
+}
+
+/**
+ * @param {number} currentScale
+ * @param {1|-1} direction 1 to enlarge, -1 to shrink
+ * @returns {number} the scale one step away, kept within the allowed range
+ */
+function steppedTextScale(currentScale, direction) {
+  const stepped = Math.round((currentScale + direction * TEXT_SCALE_STEP) * 100) / 100;
+  return Math.min(MAX_TEXT_SCALE, Math.max(MIN_TEXT_SCALE, stepped));
+}
+
+/**
+ * The dropdown value to show once the "other language" input is abandoned or confirmed:
+ * always the value of the language that is actually in use, never the "other" item.
+ * @param {import('./language_choices.js').TargetLanguage} currentLanguage
+ * @returns {string}
+ */
+function selectValueAfterClose(currentLanguage) {
+  return menuValueForLanguage(currentLanguage);
+}
+
+/**
+ * Puts the button right before the subtitles button, in whatever element holds it
+ * (it may be nested inside a wrapper); without that button, first among the right controls.
+ * @param {{rightControls: object, subtitlesButton: object|null, button: object}} elements
+ */
+function placeButtonNextToSubtitlesButton({ rightControls, subtitlesButton, button }) {
+  if (subtitlesButton && subtitlesButton.parentNode) {
+    subtitlesButton.parentNode.insertBefore(button, subtitlesButton);
+    return;
+  }
+  rightControls.insertBefore(button, rightControls.firstChild);
+}
+return Object.freeze({ TEXT_SCALE_STEP: TEXT_SCALE_STEP, MIN_TEXT_SCALE: MIN_TEXT_SCALE, MAX_TEXT_SCALE: MAX_TEXT_SCALE, languageFromTypedText: languageFromTypedText, menuValueForLanguage: menuValueForLanguage, customNamesForMenu: customNamesForMenu, steppedTextScale: steppedTextScale, selectValueAfterClose: selectValueAfterClose, placeButtonNextToSubtitlesButton: placeButtonNextToSubtitlesButton });
+})();
+
+// Module: src/page/player_controls.js
+const bundledModule14Exports = (function () {
+const { OTHER_LANGUAGE_VALUE, buildLanguageMenu, targetLanguageFromMenuValue } = bundledModule12Exports;
+const { customNamesForMenu, languageFromTypedText, placeButtonNextToSubtitlesButton, selectValueAfterClose, steppedTextScale } = bundledModule13Exports;
+const MAX_TYPED_LANGUAGE_LENGTH = 60;
+const KEYBOARD_EVENT_TYPES = ['keydown', 'keyup', 'keypress'];
+
+/**
+ * The lingotube button in the player control bar and its settings panel.
+ * DOM only: every decision is taken by the shared pure functions or by the callbacks.
+ */
+class PlayerControls {
+  #document;
+  #playerElement;
+  #settings;
+  #callbacks;
+  #buttonElement;
+  #panelElement;
+  #languageSelect;
+  #otherLanguageRow;
+  #otherLanguageInput;
+  #toggleEnabledButton;
+  #textScaleValueElement;
+  #statusLineElement;
+  #retryButton;
+  #controlsObserver = null;
+  #isOpen = false;
+
+  /**
+   * @param {{document: Document, playerElement: HTMLElement,
+   *   settings: import('./settings_store.js').Settings,
+   *   onEnabledChanged: (isEnabled: boolean) => void,
+   *   onLanguageChanged: (language: import('../shared/language_choices.js').TargetLanguage) => void,
+   *   onTextScaleChanged: (scale: number) => void,
+   *   onRetryRequested: () => void}} options
+   */
+  constructor({ document, playerElement, settings, onEnabledChanged, onLanguageChanged, onTextScaleChanged, onRetryRequested }) {
+    this.#document = document;
+    this.#playerElement = playerElement;
+    this.#settings = settings;
+    this.#callbacks = { onEnabledChanged, onLanguageChanged, onTextScaleChanged, onRetryRequested };
+
+    this.#buildButton();
+    this.#buildPanel();
+    this.#playerElement.appendChild(this.#panelElement);
+    this.#attachButtonWhenControlsExist();
+    this.#document.addEventListener('pointerdown', this.#handleDocumentPointerDown, true);
+    this.applySettings(settings);
+  }
+
+  /** @param {string|null} text null clears the line */
+  setStatusLine(text) {
+    this.#statusLineElement.textContent = text ?? '';
+    this.#statusLineElement.hidden = !text;
+  }
+
+  /** @param {boolean} isVisible */
+  setRetryButtonVisible(isVisible) {
+    this.#retryButton.hidden = !isVisible;
+  }
+
+  /** @param {import('./settings_store.js').Settings} settings */
+  applySettings(settings) {
+    this.#settings = settings;
+    this.#renderLanguageMenu();
+    this.#toggleEnabledButton.textContent = settings.enabled ? 'Выключить субтитры' : 'Включить субтитры';
+    this.#buttonElement.classList.toggle('lingotube-player-button-pressed', settings.enabled);
+    this.#buttonElement.setAttribute('aria-pressed', String(settings.enabled));
+    this.#textScaleValueElement.textContent = `${Math.round(settings.textScale * 100)}%`;
+  }
+
+  destroy() {
+    this.#controlsObserver?.disconnect();
+    this.#controlsObserver = null;
+    this.#document.removeEventListener('pointerdown', this.#handleDocumentPointerDown, true);
+    this.#buttonElement.remove();
+    this.#panelElement.remove();
+  }
+
+  #createElement(tagName, className, text) {
+    const element = this.#document.createElement(tagName);
+    element.className = className;
+    if (text !== undefined) element.textContent = text;
+    if (tagName === 'button') element.type = 'button';
+    return element;
+  }
+
+  #buildButton() {
+    this.#buttonElement = this.#createElement('button', 'ytp-button lingotube-player-button', 'LT');
+    this.#buttonElement.title = 'lingotube';
+    this.#buttonElement.setAttribute('aria-label', 'lingotube');
+    this.#buttonElement.setAttribute('aria-haspopup', 'dialog');
+    this.#buttonElement.addEventListener('click', () => this.#setOpen(!this.#isOpen));
+    this.#buttonElement.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && this.#isOpen) this.#setOpen(false);
+    });
+  }
+
+  #buildPanel() {
+    const panel = this.#createElement('div', 'lingotube-panel');
+    panel.id = 'lingotube-panel';
+    panel.setAttribute('role', 'dialog');
+    panel.setAttribute('aria-label', 'lingotube');
+    panel.hidden = true;
+
+    const title = this.#createElement('div', 'lingotube-panel-title', 'lingotube');
+
+    const languageRow = this.#createElement('label', 'lingotube-panel-row');
+    languageRow.append(this.#createElement('span', 'lingotube-panel-label', 'Язык перевода:'));
+    this.#languageSelect = this.#createElement('select', 'lingotube-language-select');
+    this.#languageSelect.id = 'lingotube-language-select';
+    this.#languageSelect.addEventListener('change', this.#handleLanguageSelected);
+    languageRow.append(this.#languageSelect);
+
+    this.#otherLanguageRow = this.#createElement('div', 'lingotube-panel-row lingotube-other-language-row');
+    this.#otherLanguageRow.hidden = true;
+    this.#otherLanguageInput = this.#createElement('input', 'lingotube-other-language-input');
+    this.#otherLanguageInput.type = 'text';
+    this.#otherLanguageInput.setAttribute('maxlength', String(MAX_TYPED_LANGUAGE_LENGTH));
+    this.#otherLanguageInput.placeholder = 'Название языка';
+    this.#otherLanguageInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') this.#confirmTypedLanguage();
+    });
+    const confirmButton = this.#createElement('button', 'lingotube-panel-button', 'Готово');
+    confirmButton.addEventListener('click', () => this.#confirmTypedLanguage());
+    this.#otherLanguageRow.append(this.#otherLanguageInput, confirmButton);
+
+    this.#toggleEnabledButton = this.#createElement('button', 'lingotube-panel-button lingotube-toggle-button');
+    this.#toggleEnabledButton.addEventListener('click', () => {
+      this.#callbacks.onEnabledChanged(!this.#settings.enabled);
+    });
+
+    const scaleRow = this.#createElement('div', 'lingotube-panel-row');
+    const smallerButton = this.#createElement('button', 'lingotube-panel-button lingotube-scale-button', '−');
+    smallerButton.setAttribute('aria-label', 'Уменьшить текст');
+    smallerButton.addEventListener('click', () => this.#changeTextScale(-1));
+    const largerButton = this.#createElement('button', 'lingotube-panel-button lingotube-scale-button', '+');
+    largerButton.setAttribute('aria-label', 'Увеличить текст');
+    largerButton.addEventListener('click', () => this.#changeTextScale(1));
+    this.#textScaleValueElement = this.#createElement('span', 'lingotube-scale-value');
+    scaleRow.append(
+      this.#createElement('span', 'lingotube-panel-label', 'Размер текста:'),
+      smallerButton,
+      this.#textScaleValueElement,
+      largerButton,
+    );
+
+    this.#statusLineElement = this.#createElement('div', 'lingotube-status-line');
+    this.#statusLineElement.hidden = true;
+    this.#statusLineElement.setAttribute('role', 'status');
+
+    this.#retryButton = this.#createElement('button', 'lingotube-panel-button lingotube-retry-button', 'Повторить сейчас');
+    this.#retryButton.hidden = true;
+    this.#retryButton.addEventListener('click', () => this.#callbacks.onRetryRequested());
+
+    panel.append(
+      title,
+      languageRow,
+      this.#otherLanguageRow,
+      this.#toggleEnabledButton,
+      scaleRow,
+      this.#statusLineElement,
+      this.#retryButton,
+    );
+
+    // YouTube binds letters and space as player shortcuts; keep keys typed here away from the player.
+    panel.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') this.#setOpen(false);
+    });
+    for (const type of KEYBOARD_EVENT_TYPES) {
+      panel.addEventListener(type, (event) => event.stopPropagation());
+    }
+    this.#panelElement = panel;
+  }
+
+  #attachButtonWhenControlsExist() {
+    if (this.#tryAttachButton()) return;
+    // The control bar may be built after this object; watch until it appears.
+    this.#controlsObserver = new MutationObserver(() => {
+      if (this.#tryAttachButton()) {
+        this.#controlsObserver.disconnect();
+        this.#controlsObserver = null;
+      }
+    });
+    this.#controlsObserver.observe(this.#playerElement, { childList: true, subtree: true });
+  }
+
+  #tryAttachButton() {
+    const rightControls = this.#playerElement.querySelector('.ytp-right-controls');
+    if (!rightControls) return false;
+    const subtitlesButton = rightControls.querySelector('.ytp-subtitles-button');
+    placeButtonNextToSubtitlesButton({ rightControls, subtitlesButton, button: this.#buttonElement });
+    return true;
+  }
+
+  #renderLanguageMenu() {
+    const language = this.#settings.language;
+    const items = buildLanguageMenu(customNamesForMenu(this.#settings.customLanguageNames, language));
+    this.#languageSelect.replaceChildren();
+    for (const item of items) {
+      const option = this.#document.createElement('option');
+      option.value = item.value;
+      option.textContent = item.label;
+      this.#languageSelect.append(option);
+    }
+    this.#languageSelect.value = selectValueAfterClose(language);
+    this.#otherLanguageRow.hidden = true;
+  }
+
+  #handleLanguageSelected = () => {
+    const value = this.#languageSelect.value;
+    if (value === OTHER_LANGUAGE_VALUE) {
+      this.#otherLanguageInput.value = '';
+      this.#otherLanguageRow.hidden = false;
+      this.#otherLanguageInput.focus();
+      return;
+    }
+    const language = targetLanguageFromMenuValue(value);
+    if (!language) {
+      this.#renderLanguageMenu();
+      return;
+    }
+    // The language may equal the current one, so no settings change would re-render the select.
+    this.#renderLanguageMenu();
+    this.#callbacks.onLanguageChanged(language);
+  };
+
+  #confirmTypedLanguage() {
+    const language = languageFromTypedText(this.#otherLanguageInput.value);
+    if (!language) {
+      // Nothing usable was typed: go back to the language that was selected before.
+      this.#renderLanguageMenu();
+      return;
+    }
+    // The typed name may equal the current language, so no settings change would re-render the select.
+    this.#renderLanguageMenu();
+    this.#callbacks.onLanguageChanged(language);
+  }
+
+  #changeTextScale(direction) {
+    const scale = steppedTextScale(this.#settings.textScale, direction);
+    if (scale !== this.#settings.textScale) this.#callbacks.onTextScaleChanged(scale);
+  }
+
+  #setOpen(isOpen) {
+    this.#isOpen = isOpen;
+    // Closing abandons an open "other language" input: the select must show the language in use.
+    if (!isOpen) this.#renderLanguageMenu();
+    this.#panelElement.hidden = !isOpen;
+    this.#buttonElement.setAttribute('aria-expanded', String(isOpen));
+  }
+
+  #handleDocumentPointerDown = (event) => {
+    if (!this.#isOpen) return;
+    const path = event.composedPath();
+    if (path.includes(this.#panelElement) || path.includes(this.#buttonElement)) return;
+    this.#setOpen(false);
+  };
+}
+return Object.freeze({ PlayerControls: PlayerControls });
+})();
+
+// Module: src/page/settings_store.js
+const bundledModule15Exports = (function () {
+const { LANGUAGE_CHOICES } = bundledModule12Exports;
+const { sanitizeLanguageName } = bundledModule5Exports;
+const SETTINGS_STORAGE_KEY = 'settings';
+const MIN_TEXT_SCALE = 0.6;
+const MAX_TEXT_SCALE = 2.0;
+const MAX_CUSTOM_LANGUAGE_NAMES = 5;
+
+/**
+ * @typedef {{enabled: boolean, language: import('../shared/language_choices.js').TargetLanguage,
+ *   customLanguageNames: string[], textScale: number, overlayPosition: {centerXFraction: number, bottomYFraction: number}|null}} Settings
+ */
+
+/** @type {Settings} */
+const DEFAULT_SETTINGS = Object.freeze({
+  enabled: false,
+  language: Object.freeze({ code: 'ru', name: 'Russian' }),
+  customLanguageNames: Object.freeze([]),
+  textScale: 1,
+  overlayPosition: null,
+});
+
+function isPlainObject(value) {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function normalizeLanguage(value) {
+  if (!isPlainObject(value)) return { ...DEFAULT_SETTINGS.language };
+  const choice = LANGUAGE_CHOICES.find((candidate) => candidate.code === value.code);
+  if (choice) return { code: choice.code, name: choice.englishName };
+  if (value.code !== null || typeof value.name !== 'string') return { ...DEFAULT_SETTINGS.language };
+  const name = sanitizeLanguageName(value.name);
+  return name ? { code: null, name } : { ...DEFAULT_SETTINGS.language };
+}
+
+/** Sanitizes names, drops empty ones and case-insensitive duplicates (the first wins), keeps five. */
+function normalizeCustomLanguageNames(value) {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set();
+  const names = [];
+  for (const item of value) {
+    if (typeof item !== 'string') continue;
+    const name = sanitizeLanguageName(item);
+    const identity = name.toLowerCase();
+    if (!name || seen.has(identity)) continue;
+    seen.add(identity);
+    names.push(name);
+  }
+  return names.slice(0, MAX_CUSTOM_LANGUAGE_NAMES);
+}
+
+function normalizeTextScale(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return DEFAULT_SETTINGS.textScale;
+  return Math.min(MAX_TEXT_SCALE, Math.max(MIN_TEXT_SCALE, value));
+}
+
+function isFractionOfPlayer(value) {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1;
+}
+
+function normalizeOverlayPosition(value) {
+  if (!isPlainObject(value)) return null;
+  const { centerXFraction, bottomYFraction } = value;
+  if (!isFractionOfPlayer(centerXFraction) || !isFractionOfPlayer(bottomYFraction)) return null;
+  return { centerXFraction, bottomYFraction };
+}
+
+/** @returns {Settings} every field valid, missing or invalid ones taken from the defaults */
+function normalizeSettings(raw) {
+  const source = isPlainObject(raw) ? raw : {};
+  return {
+    enabled: typeof source.enabled === 'boolean' ? source.enabled : DEFAULT_SETTINGS.enabled,
+    language: normalizeLanguage(source.language),
+    customLanguageNames: normalizeCustomLanguageNames(source.customLanguageNames),
+    textScale: normalizeTextScale(source.textScale),
+    overlayPosition: normalizeOverlayPosition(source.overlayPosition),
+  };
+}
+
+/** @returns {Settings} a fresh, mutable copy of the defaults */
+function copyOfDefaultSettings() {
+  return normalizeSettings({});
+}
+
+/**
+ * Loads the settings at page start. The storage host runs in another content script that may
+ * start later, so a rejected load (bridge timeout) is retried after a pause; when every attempt
+ * fails the defaults are used. Never rejects.
+ * @param {{load: () => Promise<Settings>}} settingsStore
+ * @param {{sleep: (ms: number) => Promise<void>, attempts?: number, pauseMs?: number}} options
+ * @returns {Promise<Settings>}
+ */
+async function loadSettingsWithRetries(settingsStore, { sleep, attempts = 3, pauseMs = 1000 }) {
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await settingsStore.load();
+    } catch {
+      if (attempt < attempts) await sleep(pauseMs);
+    }
+  }
+  return copyOfDefaultSettings();
+}
+
+/** Display settings kept in the extension storage; holds no tokens or account data. */
+class SettingsStore {
+  /** @param {{get: Function, set: Function}} extensionStorage */
+  constructor(extensionStorage) {
+    this.extensionStorage = extensionStorage;
+  }
+
+  /** @returns {Promise<Settings>} */
+  async load() {
+    const stored = await this.extensionStorage.get([SETTINGS_STORAGE_KEY]);
+    return normalizeSettings(stored[SETTINGS_STORAGE_KEY]);
+  }
+
+  /**
+   * @param {Partial<Settings>} changes
+   * @returns {Promise<Settings>} the settings as stored
+   */
+  async save(changes) {
+    const merged = normalizeSettings({ ...(await this.load()), ...changes });
+    await this.extensionStorage.set({ [SETTINGS_STORAGE_KEY]: merged });
+    return merged;
+  }
+}
+return Object.freeze({ DEFAULT_SETTINGS: DEFAULT_SETTINGS, loadSettingsWithRetries: loadSettingsWithRetries, SettingsStore: SettingsStore });
+})();
+
+// Module: src/shared/sentence_cues.js
+const bundledModule16Exports = (function () {
+/** Bump when the cue-building rules change, so cached cues and translations are rebuilt. */
+const CUE_RULES_VERSION = '1';
+
+/**
+ * Starting values; they are tuned on real videos later.
+ * `maxChars` and `maxDurationMs` limit one cue, `pauseMs` is the silence that ends a cue.
+ */
+const DEFAULT_CUE_RULES = Object.freeze({
+  maxChars: 84,
+  maxDurationMs: 7000,
+  pauseMs: 700,
+});
+
+/**
+ * @typedef {{text: string, startMs: number, endMs: number}} TimedWord
+ * @typedef {{id: number, startMs: number, endMs: number, sourceText: string}} Cue
+ */
+
+const SENTENCE_END_PATTERN = /[.!?…。！？]["'”’»)\]」』）]*$/;
+const CLAUSE_END_PATTERN = /[,;:]["'”’»)\]」』）]*$/;
+
+const endsSentence = (word) => SENTENCE_END_PATTERN.test(word.text);
+const endsClause = (word) => CLAUSE_END_PATTERN.test(word.text);
+const joinWords = (words) => words.map((word) => word.text).join(' ');
+
+/**
+ * Groups timed words into cues: whole sentences, or parts of long sentences,
+ * split at pauses and commas so each cue fits the subtitle box and its own duration.
+ * @param {TimedWord[]} words
+ * @param {{maxChars: number, maxDurationMs: number, pauseMs: number}} rules
+ * @returns {Cue[]}
+ */
+function buildCues(words, rules = DEFAULT_CUE_RULES) {
+  const wordGroups = [];
+  let current = [];
+
+  const closeCurrent = () => {
+    if (current.length > 0) wordGroups.push(current);
+    current = [];
+  };
+
+  const wouldOverflow = (nextWord) =>
+    joinWords(current).length + 1 + nextWord.text.length > rules.maxChars ||
+    nextWord.endMs - current[0].startMs > rules.maxDurationMs;
+
+  words.forEach((word, index) => {
+    while (current.length > 0 && wouldOverflow(word)) {
+      const remainder = splitAtClauseEnd(current);
+      closeCurrent();
+      current = remainder;
+    }
+    current.push(word);
+
+    const nextWord = words[index + 1];
+    if (endsSentence(word) || (nextWord && nextWord.startMs - word.endMs >= rules.pauseMs)) {
+      closeCurrent();
+    }
+  });
+  closeCurrent();
+
+  return wordGroups.map((group, index) => {
+    const nextGroup = wordGroups[index + 1];
+    const lastWordEndMs = group[group.length - 1].endMs;
+    return {
+      id: index + 1,
+      startMs: group[0].startMs,
+      endMs: nextGroup ? Math.min(lastWordEndMs, nextGroup[0].startMs) : lastWordEndMs,
+      sourceText: joinWords(group),
+    };
+  });
+}
+
+/**
+ * Pushes `groupWords` back to a closable state when a word overflows the cue:
+ * if the last clause end lies past the midpoint of the text, the words after it
+ * are returned as the remainder and `groupWords` is cut after it; otherwise
+ * nothing is cut and the remainder is empty.
+ * Mutates `groupWords` (truncates it) and returns the words that were cut off.
+ */
+function splitAtClauseEnd(groupWords) {
+  const midpoint = joinWords(groupWords).length / 2;
+  let lengthSoFar = 0;
+  let cutAfterIndex = -1;
+  groupWords.forEach((word, index) => {
+    lengthSoFar += word.text.length + (index > 0 ? 1 : 0);
+    if (endsClause(word) && lengthSoFar > midpoint) cutAfterIndex = index;
+  });
+  if (cutAfterIndex === -1) return [];
+  return groupWords.splice(cutAfterIndex + 1);
+}
+return Object.freeze({ CUE_RULES_VERSION: CUE_RULES_VERSION, DEFAULT_CUE_RULES: DEFAULT_CUE_RULES, buildCues: buildCues });
+})();
+
+// Module: src/shared/cache_key.js
+const bundledModule17Exports = (function () {
+const { PROMPT_VERSION } = bundledModule4Exports;
+const { CUE_RULES_VERSION } = bundledModule16Exports;
+/** Source key of cues taken from the chat transcript instead of a caption track. */
+const CHAT_TRANSCRIPT_SOURCE_KEY = 'chat';
+
+/**
+ * The code of a listed language, or "custom:" plus the typed name, trimmed and lower-cased.
+ * @param {import('./language_choices.js').TargetLanguage} language
+ * @returns {string}
+ */
+function languageCacheKey(language) {
+  if (language.code === null) return `custom:${language.name.trim().toLowerCase()}`;
+  return language.code;
+}
+
+/**
+ * @param {import('./caption_track_choice.js').CaptionTrackInfo} track
+ * @returns {string}
+ */
+function captionSourceKey(track) {
+  return `${track.languageCode}.${track.kind}`;
+}
+
+/**
+ * Storage key of one cached translation; holds no account data.
+ * @param {{videoId: string, language: import('./language_choices.js').TargetLanguage, sourceKey: string}} parts
+ * @returns {string}
+ */
+function translationCacheKey({ videoId, language, sourceKey }) {
+  return `cache:${videoId}|${languageCacheKey(language)}|${sourceKey}|p${PROMPT_VERSION}|c${CUE_RULES_VERSION}`;
+}
+return Object.freeze({ CHAT_TRANSCRIPT_SOURCE_KEY: CHAT_TRANSCRIPT_SOURCE_KEY, languageCacheKey: languageCacheKey, captionSourceKey: captionSourceKey, translationCacheKey: translationCacheKey });
+})();
+
+// Module: src/shared/cue_track.js
+const bundledModule18Exports = (function () {
+/** @typedef {{id: number, startMs: number, endMs: number, sourceText: string}} Cue */
+/** @typedef {'none'|'pending'|'done'|'failed'} TranslationState */
+
+/** The in-memory model of one video: its cues and the translation state of each. */
+class CueTrack {
+  #cues;
+  #stateByCueId = new Map();
+  #translationTextByCueId = new Map();
+
+  /** @param {Cue[]} cues cues sorted by startMs; gaps between them are allowed */
+  constructor(cues) {
+    this.#cues = cues;
+    for (const cue of cues) this.#stateByCueId.set(cue.id, 'none');
+  }
+
+  /** @returns {readonly Cue[]} */
+  get cues() {
+    return this.#cues;
+  }
+
+  /** Index of the first cue whose endMs is greater than timeMs (cues.length when none). */
+  #indexOfFirstCueEndingAfter(timeMs) {
+    let low = 0;
+    let high = this.#cues.length;
+    while (low < high) {
+      const middle = (low + high) >> 1;
+      if (this.#cues[middle].endMs > timeMs) high = middle;
+      else low = middle + 1;
+    }
+    return low;
+  }
+
+  /** @returns {Cue|null} the cue with startMs <= timeMs < endMs */
+  cueAt(timeMs) {
+    const cue = this.#cues[this.#indexOfFirstCueEndingAfter(timeMs)];
+    return cue && cue.startMs <= timeMs ? cue : null;
+  }
+
+  /** @returns {TranslationState} */
+  translationState(cueId) {
+    return this.#stateByCueId.get(cueId) ?? 'none';
+  }
+
+  markPending(cueIds) {
+    for (const cueId of cueIds) this.#setStateOfKnownCue(cueId, 'pending');
+  }
+
+  setTranslation(cueId, text) {
+    if (!this.#stateByCueId.has(cueId)) return;
+    this.#translationTextByCueId.set(cueId, text);
+    this.#stateByCueId.set(cueId, 'done');
+  }
+
+  markFailed(cueIds) {
+    for (const cueId of cueIds) this.#setStateOfKnownCue(cueId, 'failed');
+  }
+
+  /** Turns every pending cue back into none. */
+  resetPending() {
+    this.#resetStateToNone('pending');
+  }
+
+  /** Turns every failed cue back into none. */
+  resetFailed() {
+    this.#resetStateToNone('failed');
+  }
+
+  /** @param {Record<string,string>} translationsByCueId unknown ids are ignored */
+  loadTranslations(translationsByCueId) {
+    for (const [cueId, text] of Object.entries(translationsByCueId)) {
+      this.setTranslation(Number(cueId), text);
+    }
+  }
+
+  /** @returns {Record<string,string>} translations of done cues only */
+  translationsByCueId() {
+    const result = {};
+    for (const [cueId, text] of this.#translationTextByCueId) {
+      if (this.#stateByCueId.get(cueId) === 'done') result[cueId] = text;
+    }
+    return result;
+  }
+
+  /** @returns {{kind:'nothing'}|{kind:'text',text:string}|{kind:'waiting'}|{kind:'failed'}} */
+  displayAt(timeMs) {
+    const cue = this.cueAt(timeMs);
+    if (!cue) return { kind: 'nothing' };
+    const state = this.translationState(cue.id);
+    if (state === 'done') return { kind: 'text', text: this.#translationTextByCueId.get(cue.id) };
+    if (state === 'failed') return { kind: 'failed' };
+    return { kind: 'waiting' };
+  }
+
+  /**
+   * Milliseconds from timeMs to the start of the first cue at or after timeMs that is still
+   * none or pending (0 when the current cue is such a cue). Failed cues count as covered.
+   * Infinity when no such cue is left.
+   */
+  translatedAheadMs(timeMs) {
+    for (let index = this.#indexOfFirstCueEndingAfter(timeMs); index < this.#cues.length; index++) {
+      const cue = this.#cues[index];
+      const state = this.#stateByCueId.get(cue.id);
+      if (state === 'none' || state === 'pending') return Math.max(0, cue.startMs - timeMs);
+    }
+    return Infinity;
+  }
+
+  /** @returns {Cue[]} up to `limit` cues in state none, from the cue containing timeMs (or the next one) on */
+  untranslatedFrom(timeMs, limit) {
+    const untranslatedCues = [];
+    for (
+      let index = this.#indexOfFirstCueEndingAfter(timeMs);
+      index < this.#cues.length && untranslatedCues.length < limit;
+      index++
+    ) {
+      const cue = this.#cues[index];
+      if (this.#stateByCueId.get(cue.id) === 'none') untranslatedCues.push(cue);
+    }
+    return untranslatedCues;
+  }
+
+  #setStateOfKnownCue(cueId, state) {
+    if (this.#stateByCueId.has(cueId)) this.#stateByCueId.set(cueId, state);
+  }
+
+  #resetStateToNone(stateToReset) {
+    for (const [cueId, state] of this.#stateByCueId) {
+      if (state === stateToReset) this.#stateByCueId.set(cueId, 'none');
+    }
+  }
+}
+return Object.freeze({ CueTrack: CueTrack });
+})();
+
+// Module: src/shared/status_texts.js
+const bundledModule19Exports = (function () {
+// User-facing status texts of the overlay (Russian).
+
+const STATUS_TEXTS = {
+  translating: 'Перевожу…',
+  approximateTiming: 'Время приблизительное',
+  captionsNotFetched: 'Не удалось получить субтитры YouTube',
+  chatUnavailable: 'Чат «Спросить» недоступен для этого видео или аккаунта',
+  notSignedIn: 'Войдите в аккаунт YouTube',
+  repeatedFailures: 'Чат не отвечает. Включите субтитры заново, чтобы повторить',
+  noSpeech: 'У видео нет субтитров, и чат не дал транскрипцию',
+};
+
+/** @param {number} minutesLeft whole minutes until requests may resume */
+function rateLimitedText(minutesLeft) {
+  return `Чат ограничил запросы. Повтор через ${minutesLeft} мин`;
+}
+return Object.freeze({ STATUS_TEXTS: STATUS_TEXTS, rateLimitedText: rateLimitedText });
+})();
+
+// Module: src/shared/translation_schedule.js
+const bundledModule20Exports = (function () {
+/** @typedef {import('./cue_track.js').CueTrack} CueTrack */
+/** @typedef {import('./sentence_cues.js').Cue} Cue */
+
+/** How far ahead of playback cues stay translated, and how many cues one chat message carries. */
+const DEFAULT_SCHEDULE = { reserveAheadMs: 120000, batchSize: 30 };
+
+/**
+ * Picks the cues to translate next: none while the translated reserve ahead of the
+ * playhead is large enough, otherwise the next untranslated cues from the playhead on.
+ * @param {CueTrack} track
+ * @param {number} positionMs playhead position
+ * @param {{reserveAheadMs: number, batchSize: number}} schedule
+ * @returns {Cue[]}
+ */
+function chooseNextBatch(track, positionMs, schedule = DEFAULT_SCHEDULE) {
+  if (track.translatedAheadMs(positionMs) >= schedule.reserveAheadMs) return [];
+  return track.untranslatedFrom(positionMs, schedule.batchSize);
+}
+return Object.freeze({ DEFAULT_SCHEDULE: DEFAULT_SCHEDULE, chooseNextBatch: chooseNextBatch });
+})();
+
+// Module: src/shared/translation_pump.js
+const bundledModule21Exports = (function () {
+const { ChatRateLimitedError, ChatUnavailableError, NotSignedInError } = bundledModule1Exports;
+const { DEFAULT_SCHEDULE, chooseNextBatch } = bundledModule20Exports;
+/** @typedef {'rate-limited'|'not-signed-in'|'chat-unavailable'|'repeated-failures'} PumpStopReason */
+
+const FAILED_MESSAGES_IN_A_ROW_LIMIT = 3;
+
+/**
+ * Translates cues ahead of playback, one chat request at a time. The owner calls tick()
+ * on its own timer; the pump has no timers, DOM or network of its own.
+ */
+class TranslationPump {
+  #track;
+  #translator;
+  #getPositionMs;
+  #schedule;
+  #onTranslationsChanged;
+  #onStopped;
+  #isStopped = false;
+  #isEndedByOwner = false;
+  #stopReason = null;
+  #isRequestInFlight = false;
+  #failedMessagesInARow = 0;
+
+  /**
+   * @param {{
+   *   track: import('./cue_track.js').CueTrack,
+   *   translator: {translateCues: (cues: object[]) => Promise<{translationsByCueId: Map<number,string>, failedCueIds: number[]}>},
+   *   getPositionMs: () => number,
+   *   schedule?: {reserveAheadMs: number, batchSize: number},
+   *   onTranslationsChanged: () => void,
+   *   onStopped: (reason: PumpStopReason) => void,
+   * }} options
+   */
+  constructor({ track, translator, getPositionMs, schedule = DEFAULT_SCHEDULE, onTranslationsChanged, onStopped }) {
+    this.#track = track;
+    this.#translator = translator;
+    this.#getPositionMs = getPositionMs;
+    this.#schedule = schedule;
+    this.#onTranslationsChanged = onTranslationsChanged;
+    this.#onStopped = onStopped;
+  }
+
+  /** @returns {PumpStopReason|null} why the pump stopped by itself; null when running or stopped by the owner */
+  get stopReason() {
+    return this.#stopReason;
+  }
+
+  /** Ends the session: results of an in-flight request are discarded and no callback is called. */
+  stop() {
+    this.#isStopped = true;
+    this.#isEndedByOwner = true;
+  }
+
+  /**
+   * Starts working again after a stop caused by an error reason (the "retry" action).
+   * Does nothing after stop() called by the owner.
+   */
+  resume() {
+    if (this.#isEndedByOwner || this.#stopReason === null) return;
+    this.#stopReason = null;
+    this.#isStopped = false;
+    this.#failedMessagesInARow = 0;
+  }
+
+  /** Sends the next batch when the translated reserve is short; does nothing when stopped or busy. */
+  async tick() {
+    if (this.#isStopped || this.#isRequestInFlight) return;
+    const batch = chooseNextBatch(this.#track, this.#getPositionMs(), this.#schedule);
+    if (batch.length === 0) return;
+
+    this.#track.markPending(batch.map((cue) => cue.id));
+    this.#isRequestInFlight = true;
+    let result;
+    try {
+      result = await this.#translator.translateCues(batch);
+    } catch (error) {
+      this.#isRequestInFlight = false;
+      if (this.#isStopped) return;
+      this.#track.resetPending();
+      this.#handleError(error);
+      return;
+    }
+    this.#isRequestInFlight = false;
+    if (this.#isStopped) return;
+    this.#applyResult(result);
+  }
+
+  #applyResult({ translationsByCueId, failedCueIds }) {
+    for (const [cueId, text] of translationsByCueId) this.#track.setTranslation(cueId, text);
+    this.#track.markFailed(failedCueIds);
+    if (translationsByCueId.size > 0) this.#failedMessagesInARow = 0;
+    else this.#countFailedMessage();
+    this.#onTranslationsChanged();
+  }
+
+  #handleError(error) {
+    if (error instanceof ChatRateLimitedError) this.#stopWithReason('rate-limited');
+    else if (error instanceof NotSignedInError) this.#stopWithReason('not-signed-in');
+    else if (error instanceof ChatUnavailableError) this.#stopWithReason('chat-unavailable');
+    else this.#countFailedMessage(); // ChatRequestFailedError and anything unexpected
+  }
+
+  #countFailedMessage() {
+    this.#failedMessagesInARow += 1;
+    if (this.#failedMessagesInARow >= FAILED_MESSAGES_IN_A_ROW_LIMIT) this.#stopWithReason('repeated-failures');
+  }
+
+  #stopWithReason(reason) {
+    this.#isStopped = true;
+    this.#stopReason = reason;
+    this.#onStopped(reason);
+  }
+}
+return Object.freeze({ TranslationPump: TranslationPump });
+})();
+
+// Module: src/page/subtitle_session.js
+const bundledModule22Exports = (function () {
+const { translationCacheKey } = bundledModule17Exports;
+const { ChatRateLimitedError } = bundledModule1Exports;
+const { CueTrack } = bundledModule18Exports;
+const { promptLanguageName } = bundledModule12Exports;
+const { STATUS_TEXTS, rateLimitedText } = bundledModule19Exports;
+const { TranslationPump } = bundledModule21Exports;
+const { DEFAULT_SCHEDULE } = bundledModule20Exports;
+/** @typedef {import('../shared/sentence_cues.js').Cue} Cue */
+
+const TICK_INTERVAL_MS = 250;
+const MS_PER_MINUTE = 60000;
+
+const STATUS_TEXT_BY_STOP_REASON = {
+  'not-signed-in': STATUS_TEXTS.notSignedIn,
+  'chat-unavailable': STATUS_TEXTS.chatUnavailable,
+  'repeated-failures': STATUS_TEXTS.repeatedFailures,
+};
+
+/**
+ * Translated subtitles of ONE video in ONE language: loads the cues, restores cached
+ * translations, and on a 250 ms timer shows the cue under the playhead and lets the pump
+ * translate ahead. A new video or language gets a new session; after stop() nothing of
+ * this session reaches the view, the status callback or the cache.
+ */
+class SubtitleSession {
+  #videoId;
+  #language;
+  #languageName;
+  #loadCues;
+  #createTranslator;
+  #cache;
+  #overlayView;
+  #getPositionMs;
+  #isPaused;
+  #setTimer;
+  #clearTimer;
+  #onStatusChanged;
+  #logInfo;
+  #now;
+  #schedule;
+
+  #isStarted = false;
+  #isStopped = false;
+  #isAdPlaying = false;
+  #timerHandle = null;
+  #track = null;
+  #pump = null;
+  #cacheKey = null;
+  #translator = null;
+  #rateLimitedUntilMs = null;
+  /** Shown in the box instead of "Перевожу…" while the pump is stopped by an error. */
+  #stopStatusText = null;
+  #lastRenderedKey = null;
+
+  /**
+   * @param {{
+   *   videoId: string,
+   *   language: import('../shared/language_choices.js').TargetLanguage,
+   *   loadCues: () => Promise<{cues: Cue[], sourceKey: string}>,
+   *   createTranslator: (languageName: string) => Promise<{translateCues: Function}>,
+   *   cache: {load: (key: string) => Promise<object|null>, save: (key: string, entry: object) => Promise<void>},
+   *   overlayView: {showCueText: Function, showStatus: Function, clear: Function, setHidden: Function},
+   *   getPositionMs: () => number,
+   *   isPaused?: () => boolean,
+   *   setTimer: (callback: () => void, intervalMs: number) => any,
+   *   clearTimer: (handle: any) => void,
+   *   onStatusChanged: (statusText: string|null, details: {canRetry: boolean}) => void,
+   *   logInfo?: (message: string, details: object) => void,
+   *   now?: () => number,
+   *   schedule?: {reserveAheadMs: number, batchSize: number},
+   * }} options
+   */
+  constructor({
+    videoId,
+    language,
+    loadCues,
+    createTranslator,
+    cache,
+    overlayView,
+    getPositionMs,
+    isPaused = () => false,
+    setTimer,
+    clearTimer,
+    onStatusChanged,
+    logInfo = () => {},
+    now = () => Date.now(),
+    schedule = DEFAULT_SCHEDULE,
+  }) {
+    this.#videoId = videoId;
+    this.#language = language;
+    this.#languageName = promptLanguageName(language);
+    this.#loadCues = loadCues;
+    this.#createTranslator = createTranslator;
+    this.#cache = cache;
+    this.#overlayView = overlayView;
+    this.#getPositionMs = getPositionMs;
+    this.#isPaused = isPaused;
+    this.#setTimer = setTimer;
+    this.#clearTimer = clearTimer;
+    this.#onStatusChanged = onStatusChanged;
+    this.#logInfo = logInfo;
+    this.#now = now;
+    this.#schedule = schedule;
+  }
+
+  /** Loads the cues and cached translations, then starts the timer. Never rejects. */
+  async start() {
+    if (this.#isStarted || this.#isStopped) return;
+    this.#isStarted = true;
+    if (!this.#isAdPlaying) this.#overlayView.showStatus(STATUS_TEXTS.translating);
+
+    let loaded = null;
+    try {
+      loaded = await this.#loadCues();
+    } catch {
+      loaded = null;
+    }
+    if (this.#isStopped) return;
+    if (!loaded || !Array.isArray(loaded.cues) || loaded.cues.length === 0) {
+      // Task 13 adds the chat transcript fallback here, behind the same loadCues seam.
+      this.#overlayView.clear();
+      this.#onStatusChanged(STATUS_TEXTS.captionsNotFetched, { canRetry: false });
+      return;
+    }
+
+    this.#track = new CueTrack(loaded.cues);
+    this.#cacheKey = translationCacheKey({
+      videoId: this.#videoId,
+      language: this.#language,
+      sourceKey: loaded.sourceKey,
+    });
+    const cachedEntry = await this.#loadCachedEntry();
+    if (this.#isStopped) return;
+    if (cachedEntry) this.#track.loadTranslations(cachedEntry.translations);
+
+    this.#pump = new TranslationPump({
+      track: this.#track,
+      translator: { translateCues: (cues) => this.#translateCues(cues) },
+      getPositionMs: this.#getPositionMs,
+      schedule: this.#schedule,
+      onTranslationsChanged: () => this.#saveTranslations(),
+      onStopped: (reason) => this.#handlePumpStopped(reason),
+    });
+    this.#logInfo('lingotube: session started', {
+      cues: loaded.cues.length,
+      cachedTranslations: Object.keys(this.#track.translationsByCueId()).length,
+    });
+    this.#lastRenderedKey = null;
+    this.#timerHandle = this.#setTimer(() => this.#tick(), TICK_INTERVAL_MS);
+    this.#tick();
+  }
+
+  /** Idempotent: stops the timer and the pump; late chat replies are discarded. */
+  stop() {
+    if (this.#isStopped) return;
+    this.#isStopped = true;
+    if (this.#timerHandle !== null) this.#clearTimer(this.#timerHandle);
+    this.#timerHandle = null;
+    this.#pump?.stop();
+  }
+
+  /** The "retry" action: resumes a pump stopped by an error and re-schedules failed cues. */
+  retry() {
+    if (this.#isStopped || !this.#pump) return;
+    this.#pump.resume();
+    this.#track.resetFailed();
+    this.#rateLimitedUntilMs = null;
+    this.#stopStatusText = null;
+    this.#lastRenderedKey = null;
+    this.#onStatusChanged(null, { canRetry: false });
+  }
+
+  /**
+   * While an ad plays the box is emptied and hidden and nothing ticks (the video position is
+   * the ad's). The box is emptied first, so un-hiding it after the ad never shows stale text.
+   * @param {boolean} isAdPlaying
+   */
+  setAdPlaying(isAdPlaying) {
+    if (this.#isStopped || isAdPlaying === this.#isAdPlaying) return;
+    this.#isAdPlaying = isAdPlaying;
+    this.#lastRenderedKey = null;
+    if (isAdPlaying) this.#overlayView.clear();
+    this.#overlayView.setHidden(isAdPlaying);
+  }
+
+  #tick() {
+    if (this.#isStopped || this.#isAdPlaying || !this.#pump) return;
+    this.#resumeWhenRateLimitPassed();
+    if (this.#isStopped) return;
+    const positionMs = this.#getPositionMs();
+    this.#render(positionMs);
+    if (this.#pump.stopReason !== null) return;
+    // On pause the reserve is topped up once; after that no request is sent until playback moves on.
+    if (this.#isPaused() && this.#track.translatedAheadMs(positionMs) >= this.#schedule.reserveAheadMs) return;
+    this.#pump.tick().catch(() => {});
+  }
+
+  #render(positionMs) {
+    const display = this.#track.displayAt(positionMs);
+    let key;
+    let draw;
+    if (display.kind === 'text') {
+      key = `text:${display.text}`;
+      draw = () => this.#overlayView.showCueText(display.text);
+    } else if ((display.kind === 'waiting' || display.kind === 'failed') && this.#stopStatusText !== null) {
+      const statusText = this.#stopStatusText;
+      key = `status:${statusText}`;
+      draw = () => this.#overlayView.showStatus(statusText);
+    } else if (display.kind === 'waiting') {
+      key = `status:${STATUS_TEXTS.translating}`;
+      draw = () => this.#overlayView.showStatus(STATUS_TEXTS.translating);
+    } else {
+      key = 'clear';
+      draw = () => this.#overlayView.clear();
+    }
+    if (key === this.#lastRenderedKey) return;
+    this.#lastRenderedKey = key;
+    draw();
+  }
+
+  /** Opens the translator on the first batch that needs it, so a fully cached video sends nothing. */
+  async #translateCues(cues) {
+    try {
+      if (!this.#translator) this.#translator = await this.#createTranslator(this.#languageName);
+      return await this.#translator.translateCues(cues);
+    } catch (error) {
+      if (error instanceof ChatRateLimitedError) this.#rateLimitedUntilMs = error.retryAtMs;
+      throw error;
+    }
+  }
+
+  #handlePumpStopped(reason) {
+    if (this.#isStopped) return;
+    let statusText;
+    let canRetry = false;
+    if (reason === 'rate-limited') {
+      statusText = rateLimitedText(this.#minutesUntilRateLimitEnds());
+      canRetry = true;
+    } else {
+      statusText = STATUS_TEXT_BY_STOP_REASON[reason] ?? STATUS_TEXTS.repeatedFailures;
+    }
+    this.#reportStopStatus(statusText, canRetry);
+  }
+
+  #reportStopStatus(statusText, canRetry) {
+    this.#stopStatusText = statusText;
+    this.#lastRenderedKey = null;
+    this.#onStatusChanged(statusText, { canRetry });
+  }
+
+  #minutesUntilRateLimitEnds() {
+    const remainingMs = (this.#rateLimitedUntilMs ?? this.#now()) - this.#now();
+    return Math.max(1, Math.ceil(remainingMs / MS_PER_MINUTE));
+  }
+
+  /** Keeps the minutes of the rate-limit text current and resumes once the limit has passed. */
+  #resumeWhenRateLimitPassed() {
+    if (this.#pump.stopReason !== 'rate-limited') return;
+    if (this.#rateLimitedUntilMs !== null && this.#now() >= this.#rateLimitedUntilMs) {
+      this.retry();
+      return;
+    }
+    const statusText = rateLimitedText(this.#minutesUntilRateLimitEnds());
+    if (statusText !== this.#stopStatusText) this.#reportStopStatus(statusText, true);
+  }
+
+  async #loadCachedEntry() {
+    try {
+      return await this.#cache.load(this.#cacheKey);
+    } catch {
+      return null;
+    }
+  }
+
+  /** Saves every translation of the track as one entry {translations: {<cueId>: string}}. */
+  #saveTranslations() {
+    if (this.#isStopped) return;
+    const translations = this.#track.translationsByCueId();
+    if (Object.keys(translations).length === 0) return;
+    try {
+      Promise.resolve(this.#cache.save(this.#cacheKey, { translations })).catch(() => {});
+    } catch {
+      // The cache is an optimisation only.
+    }
+  }
+}
+return Object.freeze({ SubtitleSession: SubtitleSession });
+})();
+
+// Module: src/page/translation_cache.js
+const bundledModule23Exports = (function () {
+const CACHE_INDEX_KEY = 'cacheIndex';
+const DEFAULT_MAX_TOTAL_BYTES = 4000000;
+
+function isPlainObject(value) {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** A well-formed entry is an object whose `translations` is an object holding only strings. */
+function isWellFormedEntry(value) {
+  return isPlainObject(value)
+    && isPlainObject(value.translations)
+    && Object.values(value.translations).every((text) => typeof text === 'string');
+}
+
+function isIndexItem(item) {
+  return isPlainObject(item) && typeof item.key === 'string'
+    && Number.isFinite(item.savedAtMs) && Number.isFinite(item.bytes);
+}
+
+/**
+ * Bounded cache of translations in the extension storage. Storage failures never
+ * reach the caller: subtitles keep working without the cache.
+ */
+class TranslationCache {
+  /**
+   * @param {{get: Function, set: Function, remove: Function}} extensionStorage
+   * @param {{maxTotalBytes?: number, now?: () => number}} [options]
+   */
+  #saveQueue = Promise.resolve();
+
+  constructor(extensionStorage, { maxTotalBytes = DEFAULT_MAX_TOTAL_BYTES, now = () => Date.now() } = {}) {
+    this.extensionStorage = extensionStorage;
+    this.maxTotalBytes = maxTotalBytes;
+    this.now = now;
+  }
+
+  /**
+   * @param {string} key
+   * @returns {Promise<{translations: Object<string, string>}|null>} null when missing, malformed or unreadable
+   */
+  async load(key) {
+    try {
+      const stored = await this.extensionStorage.get([key]);
+      return isWellFormedEntry(stored[key]) ? stored[key] : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Stores the entry, evicting the oldest ones until the total fits. Resolves even on failure.
+   * @param {string} key
+   * @param {{translations: Object<string, string>}} entry
+   * @returns {Promise<void>}
+   */
+  save(key, entry) {
+    // Saves read-modify-write the shared index, so they run one after another.
+    const result = this.#saveQueue.then(() => this.#saveNow(key, entry));
+    this.#saveQueue = result;
+    return result;
+  }
+
+  async #saveNow(key, entry) {
+    try {
+      if (!isWellFormedEntry(entry)) return;
+      const bytes = JSON.stringify(entry).length;
+      if (bytes > this.maxTotalBytes) return;
+
+      const stored = await this.extensionStorage.get([CACHE_INDEX_KEY]);
+      const rawIndex = stored[CACHE_INDEX_KEY];
+      const index = (Array.isArray(rawIndex) ? rawIndex.filter(isIndexItem) : [])
+        .filter((item) => item.key !== key)
+        .sort((first, second) => first.savedAtMs - second.savedAtMs);
+
+      let totalBytes = bytes + index.reduce((sum, item) => sum + item.bytes, 0);
+      const evictedKeys = [];
+      while (totalBytes > this.maxTotalBytes && index.length > 0) {
+        const oldest = index.shift();
+        totalBytes -= oldest.bytes;
+        evictedKeys.push(oldest.key);
+      }
+
+      if (evictedKeys.length > 0) await this.extensionStorage.remove(evictedKeys);
+      index.push({ key, savedAtMs: this.now(), bytes });
+      await this.extensionStorage.set({ [key]: entry, [CACHE_INDEX_KEY]: index });
+    } catch {
+      // The cache is an optimisation only; a full or silent storage must not break subtitles.
+    }
+  }
+}
+return Object.freeze({ TranslationCache: TranslationCache });
+})();
+
 // Module: src/shared/json3_captions.js
-const bundledModule4Exports = (function () {
+const bundledModule24Exports = (function () {
 /** A word is never shown as lasting longer than this before a pause. */
 const MAX_WORD_DURATION_MS = 1500;
 
@@ -383,9 +2600,9 @@ return Object.freeze({ MAX_WORD_DURATION_MS: MAX_WORD_DURATION_MS, timedWordsFro
 })();
 
 // Module: src/page/youtube_captions_source.js
-const bundledModule5Exports = (function () {
-const { timedWordsFromJson3 } = bundledModule4Exports;
-const { mergePlayerRequestParameters } = bundledModule3Exports;
+const bundledModule25Exports = (function () {
+const { timedWordsFromJson3 } = bundledModule24Exports;
+const { mergePlayerRequestParameters } = bundledModule11Exports;
 class CaptionsUnavailableError extends Error {
   constructor(message) {
     super(message);
@@ -420,8 +2637,139 @@ async function fetchCaptionWords({ track, playerRequestUrl, fetch }) {
 return Object.freeze({ CaptionsUnavailableError: CaptionsUnavailableError, fetchCaptionWords: fetchCaptionWords });
 })();
 
+// Module: src/shared/video_url.js
+const bundledModule26Exports = (function () {
+const VIDEO_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/;
+
+/**
+ * The video id of a YouTube watch page. Only https://www.youtube.com/watch?v=<id> counts:
+ * Shorts, embeds, channel pages, other hosts and malformed ids give null.
+ * @param {string} url
+ * @returns {string|null}
+ */
+function watchVideoIdFromUrl(url) {
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== 'https:' || parsed.hostname !== 'www.youtube.com' || parsed.pathname !== '/watch') {
+    return null;
+  }
+  const videoId = parsed.searchParams.get('v');
+  return videoId !== null && VIDEO_ID_PATTERN.test(videoId) ? videoId : null;
+}
+return Object.freeze({ watchVideoIdFromUrl: watchVideoIdFromUrl });
+})();
+
+// Module: src/page/youtube_page_watcher.js
+const bundledModule27Exports = (function () {
+const { watchVideoIdFromUrl } = bundledModule26Exports;
+const NAVIGATION_FINISHED_EVENT = 'yt-navigate-finish';
+const AD_SHOWING_CLASS = 'ad-showing';
+const PLAYER_SELECTOR = '#movie_player';
+
+/**
+ * Follows YouTube's in-page navigation and ads. YouTube changes videos without reloading
+ * the page, so the video id is re-read from the URL after every `yt-navigate-finish`.
+ * Both callbacks fire only on a change; the first video is reported at once.
+ * @param {{document: Document, window: Window,
+ *   onVideoChanged: (videoId: string|null) => void,
+ *   onAdStateChanged: (isAdPlaying: boolean) => void}} options
+ * @returns {{stop: () => void}}
+ */
+function watchYouTubePage({ document, window, onVideoChanged, onAdStateChanged }) {
+  let isStopped = false;
+  let reportedVideoId;
+  let isAdPlaying = false;
+  let observedPlayerElement = null;
+  let adObserver = null;
+
+  const reportAdState = () => {
+    const isAdPlayingNow = Boolean(observedPlayerElement?.classList.contains(AD_SHOWING_CLASS));
+    if (isAdPlayingNow === isAdPlaying) return;
+    isAdPlaying = isAdPlayingNow;
+    onAdStateChanged(isAdPlaying);
+  };
+
+  // The player is created on the first watch page and normally kept afterwards;
+  // follow it whenever the element under #movie_player changes.
+  const observeCurrentPlayer = () => {
+    const playerElement = document.querySelector(PLAYER_SELECTOR);
+    if (playerElement === observedPlayerElement) return;
+    adObserver?.disconnect();
+    adObserver = null;
+    observedPlayerElement = playerElement;
+    if (playerElement) {
+      adObserver = new window.MutationObserver(reportAdState);
+      adObserver.observe(playerElement, { attributes: true, attributeFilter: ['class'] });
+    }
+    reportAdState();
+  };
+
+  const handleNavigation = () => {
+    if (isStopped) return;
+    observeCurrentPlayer();
+    const videoId = watchVideoIdFromUrl(window.location.href);
+    if (videoId === reportedVideoId) return;
+    reportedVideoId = videoId;
+    onVideoChanged(videoId);
+  };
+
+  document.addEventListener(NAVIGATION_FINISHED_EVENT, handleNavigation);
+  handleNavigation();
+
+  return {
+    stop() {
+      isStopped = true;
+      document.removeEventListener(NAVIGATION_FINISHED_EVENT, handleNavigation);
+      adObserver?.disconnect();
+      adObserver = null;
+    },
+  };
+}
+return Object.freeze({ watchYouTubePage: watchYouTubePage });
+})();
+
+// Module: src/page/youtube_player.js
+const bundledModule28Exports = (function () {
+/** @returns {HTMLElement|null} */
+function findPlayerElement(document) {
+  return document.querySelector('#movie_player');
+}
+
+/**
+ * @param {HTMLElement} playerElement
+ * @returns {import('../shared/caption_track_choice.js').CaptionTrackInfo[]}
+ */
+function readCaptionTracks(playerElement) {
+  const tracks =
+    playerElement.getPlayerResponse?.()?.captions?.playerCaptionsTracklistRenderer?.captionTracks ?? [];
+  return tracks.map((track) => ({
+    languageCode: track.languageCode,
+    kind: track.kind === 'asr' ? 'asr' : 'manual',
+    baseUrl: track.baseUrl,
+  }));
+}
+
+/**
+ * @param {HTMLElement} playerElement
+ * @returns {{videoId: string, durationMs: number, isLive: boolean}}
+ */
+function readVideoDetails(playerElement) {
+  const details = playerElement.getPlayerResponse?.()?.videoDetails ?? {};
+  return {
+    videoId: details.videoId ?? '',
+    durationMs: Number(details.lengthSeconds ?? 0) * 1000,
+    isLive: Boolean(details.isLive),
+  };
+}
+return Object.freeze({ findPlayerElement: findPlayerElement, readCaptionTracks: readCaptionTracks, readVideoDetails: readVideoDetails });
+})();
+
 // Module: src/shared/caption_track_choice.js
-const bundledModule6Exports = (function () {
+const bundledModule29Exports = (function () {
 /**
  * @typedef {{languageCode: string, kind: 'asr'|'manual', baseUrl: string, name?: string}} CaptionTrackInfo
  */
@@ -448,71 +2796,281 @@ return Object.freeze({ chooseCaptionTrack: chooseCaptionTrack });
 
 // Module: src/page/main.js (entry)
 (function () {
-const { createExtensionStorage } = bundledModule1Exports;
-const { findPlayerElement, readCaptionTracks, readVideoDetails } = bundledModule2Exports;
-const { capturePlayerCaptionRequestUrl, captureDiagnostics } = bundledModule3Exports;
-const { fetchCaptionWords } = bundledModule5Exports;
-const { chooseCaptionTrack } = bundledModule6Exports;
-async function checkStorageRoundTrip() {
-  const extensionStorage = createExtensionStorage({ window });
-  try {
-    await extensionStorage.set({ 'lingotube:probe': 'ok' });
-    const stored = await extensionStorage.get(['lingotube:probe']);
-    await extensionStorage.remove(['lingotube:probe']);
-    console.info(
-      stored['lingotube:probe'] === 'ok'
-        ? 'lingotube: page ready, storage ok'
-        : 'lingotube: page ready, storage failed',
-    );
-  } catch (error) {
-    console.info('lingotube: page ready, storage failed', error);
-  }
+const { openAskChat } = bundledModule2Exports;
+const { ChatRequestGate } = bundledModule3Exports;
+const { ChatTranslator } = bundledModule6Exports;
+const { createExtensionStorage } = bundledModule8Exports;
+const { OverlayView } = bundledModule10Exports;
+const { capturePlayerCaptionRequestUrl } = bundledModule11Exports;
+const { PlayerControls } = bundledModule14Exports;
+const { SettingsStore, loadSettingsWithRetries } = bundledModule15Exports;
+const { SubtitleSession } = bundledModule22Exports;
+const { TranslationCache } = bundledModule23Exports;
+const { CaptionsUnavailableError, fetchCaptionWords } = bundledModule25Exports;
+const { watchYouTubePage } = bundledModule27Exports;
+const { findPlayerElement, readCaptionTracks, readVideoDetails } = bundledModule28Exports;
+const { captionSourceKey } = bundledModule17Exports;
+const { chooseCaptionTrack } = bundledModule29Exports;
+const { DEFAULT_CUE_RULES, buildCues } = bundledModule16Exports;
+// Entry of the page bundle (MAIN world): builds every component once per page and wires them.
+// Tokens, chat commands and the authorization header never leave this world and are never
+// logged; logs carry no URL, token or video id.
+
+
+const PLAYER_POLL_INTERVAL_MS = 250;
+const PLAYER_WAIT_LIMIT_MS = 15000;
+const MAX_REMEMBERED_TYPED_LANGUAGES = 5;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Hex SHA-1 for the SAPISIDHASH header, computed by the page's WebCrypto. */
+async function sha1Hex(text) {
+  const digest = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
-/** Debug run: reads the captions once and logs only a summary (never URLs or tokens). */
-async function debugReadCaptions() {
-  if (location.pathname !== '/watch') return;
-  try {
+/** Only the error name: messages of foreign errors may hold request data. */
+function reportUnexpectedError(error) {
+  console.error('lingotube: unexpected error', error?.name ?? 'unknown');
+}
+
+/** The chat request gate over the page's own lock manager, localStorage and visibility. */
+function createChatRequestGate({ window, document }) {
+  const lockManager = window.navigator?.locks ?? { request: (name, callback) => callback() };
+  return new ChatRequestGate({
+    lockManager,
+    // localStorage itself may throw (blocked site data); the gate treats a throw as "unavailable".
+    keyValueStorage: {
+      getItem: (key) => window.localStorage.getItem(key),
+      setItem: (key, value) => window.localStorage.setItem(key, value),
+      removeItem: (key) => window.localStorage.removeItem(key),
+    },
+    isTabVisible: () => document.visibilityState === 'visible',
+    waitUntilTabVisible: () => new Promise((resolve) => {
+      const handleVisibilityChange = () => {
+        if (document.visibilityState !== 'visible') return;
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        resolve();
+      };
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+    }),
+    now: () => Date.now(),
+    sleep,
+  });
+}
+
+/**
+ * Waits until the player shows the given video (YouTube swaps the player data some time after
+ * the navigation event). Resolves null on timeout or when `isStillWanted` turns false.
+ */
+async function waitForPlayerOfVideo({ document, videoId, isStillWanted }) {
+  for (let waitedMs = 0; waitedMs <= PLAYER_WAIT_LIMIT_MS; waitedMs += PLAYER_POLL_INTERVAL_MS) {
+    if (!isStillWanted()) return null;
     const playerElement = findPlayerElement(document);
-    const track = playerElement && chooseCaptionTrack(readCaptionTracks(playerElement));
-    if (!track) {
-      console.info('lingotube: captions', { track: null });
-      return;
+    if (playerElement && readVideoDetails(playerElement).videoId === videoId) return playerElement;
+    await sleep(PLAYER_POLL_INTERVAL_MS);
+  }
+  return null;
+}
+
+/**
+ * Cues of the playing video from its YouTube caption track: the player's own caption request is
+ * captured once (slow: grace period plus timeout), then the chosen track is fetched as json3.
+ */
+async function loadYouTubeCues({ window, document, playerElement, videoId }) {
+  const track = chooseCaptionTrack(readCaptionTracks(playerElement));
+  if (!track) throw new CaptionsUnavailableError('The video has no usable caption track');
+  const playerRequestUrl = await capturePlayerCaptionRequestUrl({
+    document,
+    playerElement,
+    expectedVideoId: videoId,
+    performanceObserverClass: window.PerformanceObserver,
+    sleep,
+  });
+  if (!playerRequestUrl) throw new CaptionsUnavailableError('The player caption request was not captured');
+  const words = await fetchCaptionWords({ track, playerRequestUrl, fetch: window.fetch.bind(window) });
+  return { cues: buildCues(words, DEFAULT_CUE_RULES), sourceKey: captionSourceKey(track) };
+}
+
+/** Builds the page-lifetime components and reacts to navigation, ads and the player panel. */
+function startLingotubePage({ window, document }) {
+  const extensionStorage = createExtensionStorage({ window });
+  const settingsStore = new SettingsStore(extensionStorage);
+  // One cache and one gate for the page lifetime, shared by every session.
+  const translationCache = new TranslationCache(extensionStorage);
+  const chatRequestGate = createChatRequestGate({ window, document });
+  const settingsLoading = loadSettingsWithRetries(settingsStore, { sleep });
+
+  let settings = null;
+  let settingsSaveQueue = Promise.resolve();
+  let currentVideoId = null;
+  let isAdPlaying = false;
+  let navigationCount = 0;
+  let subtitlesGeneration = 0;
+  let playerControls = null;
+  let playerElementWithControls = null;
+  /** @type {{session: SubtitleSession, overlayView: OverlayView}|null} */
+  let activeSubtitles = null;
+  /** Cues of one video, kept so a language change does not capture the player request again. */
+  let cuesLoadOfVideo = null;
+
+  const readYouTubeConfig = (name) => window.ytcfg?.get?.(name);
+
+  function showSessionStatus(statusText, canRetry) {
+    playerControls?.setStatusLine(statusText);
+    playerControls?.setRetryButtonVisible(canRetry);
+  }
+
+  function changeSettings(changes) {
+    settings = { ...settings, ...changes };
+    playerControls?.applySettings(settings);
+    // The whole snapshot is saved, one save after another, so quick changes never undo each other.
+    const snapshot = settings;
+    settingsSaveQueue = settingsSaveQueue.then(() => settingsStore.save(snapshot)).catch(() => {});
+  }
+
+  function loadCuesOfVideo(videoId, playerElement) {
+    if (cuesLoadOfVideo?.videoId === videoId) return cuesLoadOfVideo.promise;
+    const load = { videoId, promise: loadYouTubeCues({ window, document, playerElement, videoId }) };
+    cuesLoadOfVideo = load;
+    load.promise.catch(() => {
+      if (cuesLoadOfVideo === load) cuesLoadOfVideo = null;
+    });
+    return load.promise;
+  }
+
+  async function createTranslator(videoId, languageName) {
+    const chatSession = await openAskChat({
+      videoId,
+      context: readYouTubeConfig('INNERTUBE_CONTEXT'),
+      sessionIndex: Number(readYouTubeConfig('SESSION_INDEX')) || 0,
+      fetch: window.fetch.bind(window),
+      gate: chatRequestGate,
+      cookieText: document.cookie,
+      now: () => Date.now(),
+      sha1Hex,
+    });
+    return new ChatTranslator({ chatSession, languageName });
+  }
+
+  function stopSubtitles() {
+    subtitlesGeneration += 1;
+    if (activeSubtitles) {
+      activeSubtitles.session.stop();
+      activeSubtitles.overlayView.destroy();
+      activeSubtitles = null;
     }
-    let forcedByButton = false;
-    let buttonObservation = {};
-    const expectedVideoId = readVideoDetails(playerElement).videoId || '';
-    const playerRequestUrl = await capturePlayerCaptionRequestUrl({
+    showSessionStatus(null, false);
+  }
+
+  /** (Re)starts the subtitles of the current video with the current settings. */
+  async function startSubtitles() {
+    stopSubtitles();
+    const generation = subtitlesGeneration;
+    const videoId = currentVideoId;
+    if (videoId === null || !settings?.enabled) return;
+    const playerElement = await waitForPlayerOfVideo({
+      document,
+      videoId,
+      isStillWanted: () => generation === subtitlesGeneration,
+    });
+    if (!playerElement || generation !== subtitlesGeneration) return;
+    if (readVideoDetails(playerElement).isLive) return;
+
+    const findVideoElement = () => playerElement.querySelector('video');
+    const overlayView = new OverlayView({
+      document,
+      containerElement: playerElement,
+      position: settings.overlayPosition,
+      textScale: settings.textScale,
+      onPositionChanged: (position) => changeSettings({ overlayPosition: position }),
+    });
+    const session = new SubtitleSession({
+      videoId,
+      language: settings.language,
+      loadCues: () => loadCuesOfVideo(videoId, playerElement),
+      createTranslator: (languageName) => createTranslator(videoId, languageName),
+      cache: translationCache,
+      overlayView,
+      getPositionMs: () => (findVideoElement()?.currentTime ?? 0) * 1000,
+      isPaused: () => findVideoElement()?.paused ?? true,
+      setTimer: (callback, intervalMs) => setInterval(callback, intervalMs),
+      clearTimer: (handle) => clearInterval(handle),
+      onStatusChanged: (statusText, { canRetry }) => showSessionStatus(statusText, canRetry),
+      logInfo: (message, details) => console.info(message, details),
+    });
+    activeSubtitles = { session, overlayView };
+    session.setAdPlaying(isAdPlaying);
+    await session.start();
+  }
+
+  function attachPlayerControls(playerElement) {
+    if (playerElementWithControls === playerElement) return;
+    playerControls?.destroy();
+    playerElementWithControls = playerElement;
+    playerControls = new PlayerControls({
       document,
       playerElement,
-      expectedVideoId,
-      performanceObserverClass: PerformanceObserver,
-      sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-      onButtonForced: () => {
-        forcedByButton = true;
+      settings,
+      onEnabledChanged: (isEnabled) => {
+        changeSettings({ enabled: isEnabled });
+        if (isEnabled) startSubtitles().catch(reportUnexpectedError);
+        else stopSubtitles();
       },
-      onButtonObserved: (observation) => {
-        buttonObservation = observation;
+      onLanguageChanged: (language) => {
+        if (language.code === settings.language.code && language.name === settings.language.name) return;
+        // A typed language is remembered newest first, without case-insensitive duplicates.
+        const customLanguageNames = language.code === null
+          ? [
+            language.name,
+            ...settings.customLanguageNames.filter((name) => name.toLowerCase() !== language.name.toLowerCase()),
+          ].slice(0, MAX_REMEMBERED_TYPED_LANGUAGES)
+          : settings.customLanguageNames;
+        changeSettings({ language, customLanguageNames });
+        if (settings.enabled) startSubtitles().catch(reportUnexpectedError);
+      },
+      onTextScaleChanged: (scale) => {
+        changeSettings({ textScale: scale });
+        activeSubtitles?.overlayView.setTextScale(scale);
+      },
+      onRetryRequested: () => {
+        chatRequestGate.clearCooldown();
+        activeSubtitles?.session.retry();
       },
     });
-    if (!playerRequestUrl) {
-      console.info('lingotube: captions', { track: { languageCode: track.languageCode, kind: track.kind }, error: 'player request not captured', forcedByButton, ...buttonObservation, ...captureDiagnostics(playerElement, expectedVideoId, performance.getEntriesByType('resource')) });
-      return;
-    }
-    const words = await fetchCaptionWords({ track, playerRequestUrl, fetch: window.fetch.bind(window) });
-    console.info('lingotube: captions', {
-      track: { languageCode: track.languageCode, kind: track.kind },
-      words: words.length,
-      firstStartMs: words[0].startMs,
-      lastStartMs: words.at(-1).startMs,
-      forcedByButton,
-    });
-  } catch (error) {
-    console.info('lingotube: captions failed', error?.name);
   }
+
+  async function openVideo(videoId) {
+    navigationCount += 1;
+    const navigation = navigationCount;
+    currentVideoId = videoId;
+    // The old session goes first: a late chat reply of the old video never reaches the new one.
+    stopSubtitles();
+    if (videoId === null) return;
+    if (settings === null) settings = await settingsLoading;
+    const playerElement = await waitForPlayerOfVideo({
+      document,
+      videoId,
+      isStillWanted: () => navigation === navigationCount,
+    });
+    if (!playerElement || navigation !== navigationCount) return;
+    attachPlayerControls(playerElement);
+    if (settings.enabled) await startSubtitles();
+  }
+
+  watchYouTubePage({
+    document,
+    window,
+    onVideoChanged: (videoId) => {
+      openVideo(videoId).catch(reportUnexpectedError);
+    },
+    onAdStateChanged: (isAdPlayingNow) => {
+      isAdPlaying = isAdPlayingNow;
+      activeSubtitles?.session.setAdPlaying(isAdPlayingNow);
+    },
+  });
 }
 
-checkStorageRoundTrip();
-debugReadCaptions();
+startLingotubePage({ window, document });
 })();
 })();

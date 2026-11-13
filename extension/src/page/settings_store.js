@@ -77,6 +77,30 @@ function normalizeSettings(raw) {
   };
 }
 
+/** @returns {Settings} a fresh, mutable copy of the defaults */
+function copyOfDefaultSettings() {
+  return normalizeSettings({});
+}
+
+/**
+ * Loads the settings at page start. The storage host runs in another content script that may
+ * start later, so a rejected load (bridge timeout) is retried after a pause; when every attempt
+ * fails the defaults are used. Never rejects.
+ * @param {{load: () => Promise<Settings>}} settingsStore
+ * @param {{sleep: (ms: number) => Promise<void>, attempts?: number, pauseMs?: number}} options
+ * @returns {Promise<Settings>}
+ */
+export async function loadSettingsWithRetries(settingsStore, { sleep, attempts = 3, pauseMs = 1000 }) {
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await settingsStore.load();
+    } catch {
+      if (attempt < attempts) await sleep(pauseMs);
+    }
+  }
+  return copyOfDefaultSettings();
+}
+
 /** Display settings kept in the extension storage; holds no tokens or account data. */
 export class SettingsStore {
   /** @param {{get: Function, set: Function}} extensionStorage */
