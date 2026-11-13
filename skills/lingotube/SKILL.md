@@ -15,7 +15,8 @@ video by asking YouTube's built-in chat. You run it in the terminal and work wit
 - **Consent first.** You install or change nothing without the person's explicit "yes" to the
   exact command you showed them.
 - **Hands off the browser.** You never open, close or change the person's browser, its profiles,
-  processes, policies or flags.
+  processes, policies or flags. The only window you may cause is the one `lingotube login` opens
+  itself, and only after warning the person.
 - **Chat unavailable means stop.** If lingotube says the YouTube chat is unavailable for this
   video, account or country, say so plainly and stop. Do not suggest workarounds.
 - **Reply in the person's language** (the language they write to you in), unless they ask for
@@ -84,10 +85,10 @@ When the person asks where in the video something is said or shown, follow
 | Code | What it means | What you do |
 |---|---|---|
 | 0 | Success | Work with the result. |
-| 1 | Other error (e.g. a file could not be written) | Show the person lingotube's error message (it never contains secrets). |
+| 1 | Other error (e.g. a file could not be written, or the lingotube login window is still open) | If the login window is open, ask the person to close it and retry. Otherwise show the person lingotube's error message (it never contains secrets). |
 | 2 | Wrong command options | Fix the command (often a missing `--lang`) and retry once. |
 | 3 | YouTube chat unavailable for this video, account or country | Say so plainly. Do not retry, do not suggest workarounds. |
-| 4 | Sign-in problem: cookies missing or expired, or a translation model key is missing | Cookies: go to step "3. Cookies" in [references/setup.md](references/setup.md). Model key: explain that the key from the person's lingotube settings is missing and point to the README section "Перевод: три режима"; do not set it up yourself. |
+| 4 | Sign-in problem: cookies missing or expired, or a translation model key is missing | Cookies: go to step "3. Cookies" in [references/setup.md](references/setup.md); for Chrome or Edge, `lingotube login` first. Model key: explain that the key from the person's lingotube settings is missing and point to the README section "Перевод: три режима"; do not set it up yourself. |
 | 5 | Result incomplete (file written, transcript stops before the end) | Tell the person where it stops (see `warnings`) and offer to rerun; a rerun fetches only the missing part. |
 | 6 | Network failure after retries | Suggest trying again later. |
 | 7 | Invalid input (link, file, settings) | Check the link and arguments, fix and retry once; otherwise explain the message. |

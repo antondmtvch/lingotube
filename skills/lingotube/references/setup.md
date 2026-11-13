@@ -44,8 +44,22 @@ lingotube signs in to YouTube with the person's browser cookies. Run
 
 - **Firefox:** ask them to sign in to youtube.com in Firefox, then rerun
   `lingotube doctor --json`. lingotube reads Firefox directly.
-- **Chrome, Edge or another browser:** these cannot be read directly (on Windows the browser
-  encrypts cookies), so the person exports a `cookies.txt` file. Guide them step by step:
+- **Chrome or Edge:** use `lingotube login` first. Tell the person that a browser window will
+  open (a separate lingotube profile, not their own), that they sign in to YouTube there, that
+  the window closes by itself, and that Google may ask for an identity check such as a selfie,
+  which can be skipped. The command waits up to 10 minutes for the sign-in. If you can run
+  commands in the background, run `lingotube login` that way and wait for it to finish;
+  otherwise run it with the longest timeout you have; if neither works, ask the person to run
+  `lingotube login` in their own terminal and tell you when it is done. Then run
+  `lingotube doctor --json`. You only run the command: do not open, close or touch the browser
+  window yourself.
+  - Exit code 1 with a message that the login profile is open (`профиль входа ... открыт`):
+    ask the person to close the lingotube login window and retry.
+  - If `lingotube login` fails (for example, no Chrome or Edge is found) or the person prefers
+    not to use it, fall back to the `cookies.txt` export below.
+- **Another browser, or the fallback for Chrome and Edge:** these cannot be read directly (on
+  Windows the browser encrypts cookies), so the person exports a `cookies.txt` file. Guide them
+  step by step:
   1. Install a browser extension that exports cookies in Netscape `cookies.txt` format (for
      example, "Get cookies.txt LOCALLY").
   2. Open an incognito / InPrivate window (Ctrl+Shift+N) and allow the extension to run in
@@ -61,7 +75,8 @@ lingotube signs in to YouTube with the person's browser cookies. Run
 
 Never open, print or check the contents of the cookies file yourself; only pass its path.
 Tell the person that exported cookies can expire after a while (sometimes within an hour);
-when that happens, only this step is repeated.
+when that happens, only this step is repeated. Sign-in via `lingotube login` can also stop
+working later; the fix is the same.
 
 ## 4. Doctor
 
@@ -79,4 +94,5 @@ Read the `lingotube doctor --json` result (`result.checks`, each with `name`, `o
 ## Coming back later
 
 If a lingotube command ends with exit code 4 after setup has worked once, the cookies have
-expired. Redo only step 3 (and step 4 to confirm); everything else is already in place.
+expired. Redo only step 3 (and step 4 to confirm); everything else is already in place. If the
+person signed in with `lingotube login`, run `lingotube login` again first.
