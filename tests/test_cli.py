@@ -11,7 +11,7 @@ from lingotube import cli
 from lingotube.ask.client import AskClient, AskSession
 from lingotube.auth.base import Credentials
 from lingotube.commands import AppContext
-from lingotube.config import Settings, TranslatorSettings
+from lingotube.config import LoginPaths, Settings, TranslatorSettings
 from lingotube.container import build_container
 from lingotube.errors import (
     AuthError,
@@ -164,6 +164,10 @@ class Harness:
             settings=self.settings,
             env=self.env,
             cache_dir=self.tmp / "cache",
+            login_paths=LoginPaths(
+                profile_dir=self.tmp / "login-profile",
+                cookies_file=self.tmp / "login-cookies.json",
+            ),
             err=err,
         )
         container.ask_client.override(provider=providers.Singleton(self.make_ask))
@@ -838,6 +842,10 @@ def _container(
         settings=settings or Settings(),
         env=env or {},
         cache_dir=tmp_path / "cache",
+        login_paths=LoginPaths(
+            profile_dir=tmp_path / "login-profile",
+            cookies_file=tmp_path / "login-cookies.json",
+        ),
         err=io.StringIO(),
     )
 

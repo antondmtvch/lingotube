@@ -9,7 +9,7 @@ from lingotube import cli
 from lingotube.auth.base import Credentials
 from lingotube.auth.browser import BROWSERS
 from lingotube.commands import AppContext
-from lingotube.config import Settings
+from lingotube.config import LoginPaths, Settings
 from lingotube.container import build_container
 from lingotube.doctor import (
     CHAT,
@@ -294,6 +294,10 @@ class Harness:
             settings=self.settings,
             env={},
             cache_dir=self.tmp / "cache",
+            login_paths=LoginPaths(
+                profile_dir=self.tmp / "login-profile",
+                cookies_file=self.tmp / "login-cookies.json",
+            ),
             err=err,
         )
         container.doctor_sources.override(provider=providers.Object(self.sources))
@@ -438,6 +442,10 @@ async def test_container_doctor_sources(tmp_path):
             settings=settings,
             env={},
             cache_dir=tmp_path / "c",
+            login_paths=LoginPaths(
+                profile_dir=tmp_path / "login-profile",
+                cookies_file=tmp_path / "login-cookies.json",
+            ),
             err=io.StringIO(),
         )
 
@@ -474,6 +482,10 @@ async def test_container_ask_factory_builds_youtube_clients(tmp_path):
         settings=Settings(),
         env={},
         cache_dir=tmp_path / "c",
+        login_paths=LoginPaths(
+            profile_dir=tmp_path / "login-profile",
+            cookies_file=tmp_path / "login-cookies.json",
+        ),
         err=io.StringIO(),
     )
     try:

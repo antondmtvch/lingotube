@@ -20,7 +20,7 @@ from dependency_injector import providers
 
 from lingotube import cli
 from lingotube.commands import AppContext
-from lingotube.config import Settings, TranslatorSettings
+from lingotube.config import LoginPaths, Settings, TranslatorSettings
 from lingotube.container import build_container
 
 MARK = "LEAKME"
@@ -400,6 +400,10 @@ class Leak:
             settings=self.settings,
             env=self.env,
             cache_dir=self.tmp / "cache",
+            login_paths=LoginPaths(
+                profile_dir=self.tmp / "login-profile",
+                cookies_file=self.tmp / "login-cookies.json",
+            ),
             err=err,
         )
         # never touch a real browser profile in tests

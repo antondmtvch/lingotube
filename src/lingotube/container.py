@@ -22,8 +22,14 @@ from lingotube.auth.browser import (
     default_loader,
 )
 from lingotube.auth.file import FileCookieSource
+from lingotube.auth.login_browser import (
+    find_browser_executable,
+    find_first_installed_browser,
+)
+from lingotube.auth.login_flow import sign_in_with_login_browser
+from lingotube.auth.login_store import LoginCookieStore
 from lingotube.cache import Cache
-from lingotube.config import Settings
+from lingotube.config import LoginPaths, Settings
 from lingotube.doctor import FILE_SOURCE, UnsetCookieFile, browser_source_name
 from lingotube.errors import AuthError
 from lingotube.features.build import BuildFeature
@@ -165,6 +171,7 @@ class Container(containers.DeclarativeContainer):
     settings = providers.Dependency(instance_of=Settings)
     env = providers.Dependency(instance_of=Mapping)
     cache_dir = providers.Dependency(instance_of=Path)
+    login_paths = providers.Dependency(instance_of=LoginPaths)
     err = providers.Dependency()
 
     warn = providers.Singleton(
@@ -192,6 +199,13 @@ class Container(containers.DeclarativeContainer):
         warn=warn,
         loader=browser_loader,
     )
+    login_store = providers.Singleton(
+        LoginCookieStore,
+        cookies_file=login_paths.provided.cookies_file,
+    )
+    sign_in_flow = providers.Object(sign_in_with_login_browser)
+    browser_finder = providers.Object(find_first_installed_browser)
+    single_browser_finder = providers.Object(find_browser_executable)
     pacer = providers.Singleton(
         Pacer,
         min_interval=settings.provided.min_interval,
@@ -275,11 +289,13 @@ def build_container(
     settings: Settings,
     env: Mapping[str, str],
     cache_dir: Path,
+    login_paths: LoginPaths,
     err: TextIO,
 ) -> Container:
     return Container(
         settings=providers.Object(settings),
         env=providers.Object(env),
         cache_dir=providers.Object(cache_dir),
+        login_paths=providers.Object(login_paths),
         err=providers.Object(err),
     )
