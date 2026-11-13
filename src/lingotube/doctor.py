@@ -246,16 +246,18 @@ def _passed(
 
 def doctor_error(checks: list[Check]) -> LingotubeError | None:
     """None when ready; otherwise the error whose exit code `doctor` ends with."""
+    if _passed(
+        checks=checks,
+        name=CHAT,
+    ):
+        return (
+            None  # a source works and the chat is reachable: a crashed row is not fatal
+        )
     if any(c.unexpected for c in checks):
         return LingotubeError(
             message="Одна из проверок завершилась неожиданной ошибкой.",
             hint="Повторите команду; если ошибка повторяется — сообщите о ней.",
         )
-    if _passed(
-        checks=checks,
-        name=CHAT,
-    ):
-        return None
     if _failed(
         checks=checks,
         name=NETWORK,

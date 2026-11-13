@@ -385,6 +385,20 @@ def test_doctor_command_json(tmp_path):
     assert SECRET_SAPISID not in out and SECRET_SID not in out
 
 
+def test_doctor_command_json_unexpected_source_row_is_neutral_for_exit(tmp_path):
+    h = Harness(
+        tmp_path=tmp_path,
+        sources={"файл cookies": CrashingSource(), "браузер chrome": GoodSource()},
+    )
+    code, out, _ = h.run("--json")
+    assert code == 0
+    doc = json.loads(s=out)
+    assert doc["ok"] is True and doc.get("error") is None
+    row = doc["result"]["checks"][0]
+    assert row["name"] == "файл cookies" and row["ok"] is False
+    assert "RuntimeError" in row["detail"] and SECRET_SAPISID not in out
+
+
 @pytest.mark.parametrize(
     argnames="arg",
     argvalues=["-n5MqamatXE", "https://youtu.be/-n5MqamatXE", "abcdefghijk"],
@@ -626,7 +640,7 @@ class CrashingSource:
         raise RuntimeError(f"boom {SECRET_SAPISID}")
 
 
-async def test_unexpected_error_in_source_marks_row_failed_and_exit_1():
+async def test_unexpected_error_in_source_keeps_row_failed_but_exit_0_when_another_works():
     checks = await run_doctor(
         sources={"файл cookies": CrashingSource(), "браузер chrome": GoodSource()},
         make_ask=ask_factory(),
@@ -643,6 +657,18 @@ async def test_unexpected_error_in_source_marks_row_failed_and_exit_1():
         checks=checks,
         name="браузер chrome",
     ).ok
+    assert doctor_exit_code(checks=checks) == 0
+    from lingotube.doctor import render_table
+
+    assert "ошибка" in render_table(checks=checks)
+
+
+async def test_unexpected_error_without_a_working_source_still_exits_1():
+    checks = await run_doctor(
+        sources={"файл cookies": CrashingSource()},
+        make_ask=ask_factory(),
+        test_video_id="abcdefghijk",
+    )
     assert doctor_exit_code(checks=checks) == 1
 
 
@@ -667,6 +693,6 @@ def test_doctor_command_unexpected_error_still_prints_table(tmp_path):
         sources={"файл cookies": CrashingSource(), "браузер chrome": GoodSource()},
     )
     code, out, err = h.run()
-    assert code == 1
+    assert code == 0
     assert "файл cookies" in out and "RuntimeError" in out and LOGIN in out
     assert SECRET_SAPISID not in out + err
