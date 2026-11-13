@@ -34,6 +34,24 @@ uv tool install git+https://github.com/antondmtvch/lingotube
 После установки в системе появится команда `lingotube`. Обновить её можно командой
 `uv tool upgrade lingotube`, удалить — `uv tool uninstall lingotube`.
 
+## Skill для ИИ-агентов
+
+В репозитории есть skill в открытом формате Agent Skills: с ним ИИ-агент (Claude Code, Codex,
+Cursor, Gemini CLI и другие) сам пересказывает видео, делает транскрипцию и субтитры и находит
+нужный момент по описанию, а при первом запуске помогает установить lingotube и настроить вход.
+
+Установка (нужен Node.js 22.20 или новее):
+
+```
+npx skills add antondmtvch/lingotube
+```
+
+Без Node.js скопируйте папку `skills/lingotube/` в папку skills своего агента:
+`~/.claude/skills/` для Claude Code или `~/.agents/skills/` для большинства остальных.
+
+Сам lingotube ставится отдельно (см. «Установка»); skill предложит сделать это при первом
+запуске.
+
 ## Первый запуск
 
 1. Войдите в YouTube в браузере. Чат должен открываться у вас и на сайте: под видео
