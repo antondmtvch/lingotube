@@ -120,6 +120,27 @@ def test_setup_chat_unavailable_stops():
     assert "stop" in t
 
 
+def test_find_moment_exists_and_linked():
+    assert (SKILL_DIR / "references" / "find-moment.md").is_file()
+    assert "references/find-moment.md" in skill_text("SKILL.md")
+
+
+def test_find_moment_link_format():
+    t = skill_text("references/find-moment.md")
+    assert "https://youtu.be/<id>?t=<seconds>" in t
+
+
+def test_find_moment_honesty():
+    t = skill_text("references/find-moment.md").lower()
+    assert "approximately" in t
+    assert "not found" in t
+
+
+def test_find_moment_reads_in_parts():
+    t = skill_text("references/find-moment.md").lower()
+    assert "do not read the whole" in t
+
+
 def test_readme_install_commands():
     t = (ROOT / "README.md").read_text(encoding="utf-8")
     assert "npx skills add antondmtvch/lingotube" in t
