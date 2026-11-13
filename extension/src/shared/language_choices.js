@@ -1,11 +1,10 @@
 import { sanitizeLanguageName } from './translation_batch.js';
 
 /**
- * @typedef {{code: string, name: string}} TargetLanguage
- * A listed language has its list code and English name; a typed one has code 'custom'.
+ * @typedef {{code: string|null, name: string}} TargetLanguage
+ * A listed language has its list code and English name; a typed one has code null.
  */
 
-export const CUSTOM_LANGUAGE_CODE = 'custom';
 export const OTHER_LANGUAGE_VALUE = '__other__';
 const CUSTOM_VALUE_PREFIX = 'custom:';
 const FALLBACK_PROMPT_LANGUAGE = 'Russian';
@@ -64,7 +63,7 @@ export function buildLanguageMenu(customLanguageNames) {
 export function targetLanguageFromMenuValue(value) {
   if (value.startsWith(CUSTOM_VALUE_PREFIX)) {
     const name = sanitizeLanguageName(value.slice(CUSTOM_VALUE_PREFIX.length));
-    return name ? { code: CUSTOM_LANGUAGE_CODE, name } : null;
+    return name ? { code: null, name } : null;
   }
   const choice = LANGUAGE_CHOICES.find((candidate) => candidate.code === value);
   return choice ? { code: choice.code, name: choice.englishName } : null;

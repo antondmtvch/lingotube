@@ -26,6 +26,8 @@ export class TranslationCache {
    * @param {{get: Function, set: Function, remove: Function}} extensionStorage
    * @param {{maxTotalBytes?: number, now?: () => number}} [options]
    */
+  #saveQueue = Promise.resolve();
+
   constructor(extensionStorage, { maxTotalBytes = DEFAULT_MAX_TOTAL_BYTES, now = () => Date.now() } = {}) {
     this.extensionStorage = extensionStorage;
     this.maxTotalBytes = maxTotalBytes;
@@ -51,7 +53,14 @@ export class TranslationCache {
    * @param {{translations: Object<string, string>}} entry
    * @returns {Promise<void>}
    */
-  async save(key, entry) {
+  save(key, entry) {
+    // Saves read-modify-write the shared index, so they run one after another.
+    const result = this.#saveQueue.then(() => this.#saveNow(key, entry));
+    this.#saveQueue = result;
+    return result;
+  }
+
+  async #saveNow(key, entry) {
     try {
       if (!isWellFormedEntry(entry)) return;
       const bytes = JSON.stringify(entry).length;

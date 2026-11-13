@@ -28,12 +28,19 @@ test('cache key carries the prompt version and the cue rules version', () => {
 });
 
 test('typed languages "Татарский " and "татарский" share one cache key', () => {
-  const first = { code: 'custom', name: 'Татарский ' };
-  const second = { code: 'custom', name: 'татарский' };
+  const first = { code: null, name: 'Татарский ' };
+  const second = { code: null, name: 'татарский' };
   assert.equal(languageCacheKey(first), 'custom:татарский');
   assert.equal(translationCacheKey({ ...base, language: first }), translationCacheKey({ ...base, language: second }));
 });
 
 test('captionSourceKey joins language code and kind', () => {
   assert.equal(captionSourceKey({ languageCode: 'en', kind: 'asr', baseUrl: 'x' }), 'en.asr');
+});
+
+test('a typed language with code null never collides with a listed code', () => {
+  const typedRu = { code: null, name: 'ru' };
+  assert.equal(languageCacheKey(typedRu), 'custom:ru');
+  assert.notEqual(languageCacheKey(typedRu), languageCacheKey({ code: 'ru', name: 'Russian' }));
+  assert.notEqual(languageCacheKey({ code: null, name: 'Latin' }), languageCacheKey({ code: null, name: 'Татарский' }));
 });

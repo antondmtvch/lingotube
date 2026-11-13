@@ -1,6 +1,5 @@
 import { PROMPT_VERSION } from './prompt_texts.js';
 import { CUE_RULES_VERSION } from './sentence_cues.js';
-import { CUSTOM_LANGUAGE_CODE } from './language_choices.js';
 
 /** Source key of cues taken from the chat transcript instead of a caption track. */
 export const CHAT_TRANSCRIPT_SOURCE_KEY = 'chat';
@@ -11,7 +10,7 @@ export const CHAT_TRANSCRIPT_SOURCE_KEY = 'chat';
  * @returns {string}
  */
 export function languageCacheKey(language) {
-  if (language.code === CUSTOM_LANGUAGE_CODE) return `custom:${language.name.trim().toLowerCase()}`;
+  if (language.code === null) return `custom:${language.name.trim().toLowerCase()}`;
   return language.code;
 }
 

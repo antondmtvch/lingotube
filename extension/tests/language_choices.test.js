@@ -40,7 +40,7 @@ test('menu: custom names first, "Другой язык…" last', () => {
 
 test('targetLanguageFromMenuValue maps codes, custom names and rejects the rest', () => {
   assert.deepEqual(targetLanguageFromMenuValue('ja'), { code: 'ja', name: 'Japanese' });
-  assert.deepEqual(targetLanguageFromMenuValue('custom:Татарский'), { code: 'custom', name: 'Татарский' });
+  assert.deepEqual(targetLanguageFromMenuValue('custom:Татарский'), { code: null, name: 'Татарский' });
   assert.equal(targetLanguageFromMenuValue(OTHER_LANGUAGE_VALUE), null);
   assert.equal(targetLanguageFromMenuValue('xx'), null);
   assert.equal(targetLanguageFromMenuValue('custom:   '), null);
@@ -48,10 +48,10 @@ test('targetLanguageFromMenuValue maps codes, custom names and rejects the rest'
 
 test('promptLanguageName: "ja" → "Japanese"; a typed name is passed sanitized', () => {
   assert.equal(promptLanguageName({ code: 'ja', name: 'whatever' }), 'Japanese');
-  assert.equal(promptLanguageName({ code: 'custom', name: '  Tatar \n  language ' }), 'Tatar language');
+  assert.equal(promptLanguageName({ code: null, name: '  Tatar \n  language ' }), 'Tatar language');
 });
 
 test('promptLanguageName never returns an empty name', () => {
-  assert.equal(promptLanguageName({ code: 'custom', name: '   ' }), 'Russian');
-  assert.equal(promptLanguageName({ code: 'custom', name: '' }), 'Russian');
+  assert.equal(promptLanguageName({ code: null, name: '   ' }), 'Russian');
+  assert.equal(promptLanguageName({ code: null, name: '' }), 'Russian');
 });

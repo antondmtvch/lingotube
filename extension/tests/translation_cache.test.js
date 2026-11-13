@@ -50,10 +50,27 @@ test('cache: an entry larger than maxTotalBytes is not stored and nothing else i
 
 test('cache: saving the same key again replaces it without double counting', async () => {
   const entry = entryOfSize(60);
-  const cache = new TranslationCache(fakeStorage(), { maxTotalBytes: sizeOf(entry) + 10 });
+  const storage = fakeStorage();
+  const cache = new TranslationCache(storage, { maxTotalBytes: sizeOf(entry) + 10 });
   await cache.save('cache:a', entry);
   await cache.save('cache:a', { translations: { 0: 'y'.repeat(60) } });
   assert.deepEqual(await cache.load('cache:a'), { translations: { 0: 'y'.repeat(60) } });
+  assert.deepEqual(storage.data.get('cacheIndex').map((item) => item.key), ['cache:a']);
+});
+
+test('cache: overlapping saves are serialized, so every entry reaches the index and the accounting', async () => {
+  const storage = fakeStorage();
+  const pause = () => new Promise((resolve) => setTimeout(resolve, 5));
+  const yielding = {
+    get: async (keys) => { const result = await storage.get(keys); await pause(); return result; },
+    set: async (items) => { await pause(); return storage.set(items); },
+    remove: (keys) => storage.remove(keys),
+  };
+  const entry = entryOfSize(60);
+  const cache = new TranslationCache(yielding, { maxTotalBytes: sizeOf(entry) * 2 + 10 });
+  await Promise.all([cache.save('cache:a', entry), cache.save('cache:b', entry), cache.save('cache:c', entry)]);
+  assert.deepEqual(storage.data.get('cacheIndex').map((item) => item.key), ['cache:b', 'cache:c']);
+  assert.ok(!storage.data.has('cache:a'));
 });
 
 test('cache: malformed stored entries load as null', async () => {

@@ -1,4 +1,4 @@
-import { CUSTOM_LANGUAGE_CODE, LANGUAGE_CHOICES } from '../shared/language_choices.js';
+import { LANGUAGE_CHOICES } from '../shared/language_choices.js';
 import { sanitizeLanguageName } from '../shared/translation_batch.js';
 
 const SETTINGS_STORAGE_KEY = 'settings';
@@ -8,7 +8,7 @@ const MAX_CUSTOM_LANGUAGE_NAMES = 5;
 
 /**
  * @typedef {{enabled: boolean, language: import('../shared/language_choices.js').TargetLanguage,
- *   customLanguageNames: string[], textScale: number, overlayPosition: {x: number, y: number}|null}} Settings
+ *   customLanguageNames: string[], textScale: number, overlayPosition: {centerXFraction: number, bottomYFraction: number}|null}} Settings
  */
 
 /** @type {Settings} */
@@ -25,12 +25,12 @@ function isPlainObject(value) {
 }
 
 function normalizeLanguage(value) {
-  if (!isPlainObject(value) || typeof value.code !== 'string') return { ...DEFAULT_SETTINGS.language };
+  if (!isPlainObject(value)) return { ...DEFAULT_SETTINGS.language };
   const choice = LANGUAGE_CHOICES.find((candidate) => candidate.code === value.code);
   if (choice) return { code: choice.code, name: choice.englishName };
-  if (value.code !== CUSTOM_LANGUAGE_CODE || typeof value.name !== 'string') return { ...DEFAULT_SETTINGS.language };
+  if (value.code !== null || typeof value.name !== 'string') return { ...DEFAULT_SETTINGS.language };
   const name = sanitizeLanguageName(value.name);
-  return name ? { code: CUSTOM_LANGUAGE_CODE, name } : { ...DEFAULT_SETTINGS.language };
+  return name ? { code: null, name } : { ...DEFAULT_SETTINGS.language };
 }
 
 /** Sanitizes names, drops empty ones and case-insensitive duplicates (the first wins), keeps five. */
@@ -54,9 +54,15 @@ function normalizeTextScale(value) {
   return Math.min(MAX_TEXT_SCALE, Math.max(MIN_TEXT_SCALE, value));
 }
 
+function isFractionOfPlayer(value) {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1;
+}
+
 function normalizeOverlayPosition(value) {
-  if (!isPlainObject(value) || !Number.isFinite(value.x) || !Number.isFinite(value.y)) return null;
-  return { x: value.x, y: value.y };
+  if (!isPlainObject(value)) return null;
+  const { centerXFraction, bottomYFraction } = value;
+  if (!isFractionOfPlayer(centerXFraction) || !isFractionOfPlayer(bottomYFraction)) return null;
+  return { centerXFraction, bottomYFraction };
 }
 
 /** @returns {Settings} every field valid, missing or invalid ones taken from the defaults */

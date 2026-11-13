@@ -34,7 +34,7 @@ test('settings: garbage in storage loads as defaults', async () => {
 });
 
 test('settings: a stored typed language with an empty name falls back to the default language', async () => {
-  const storage = fakeStorage({ settings: { language: { code: 'custom', name: '   ' } } });
+  const storage = fakeStorage({ settings: { language: { code: null, name: '   ' } } });
   assert.deepEqual((await new SettingsStore(storage).load()).language, DEFAULT_SETTINGS.language);
 });
 
@@ -49,10 +49,10 @@ test('settings: save merges changes and persists them', async () => {
   const storage = fakeStorage();
   const store = new SettingsStore(storage);
   await store.save({ enabled: true });
-  await store.save({ overlayPosition: { x: 0.5, y: 0.25 }, language: { code: 'ja', name: 'Japanese' } });
+  await store.save({ overlayPosition: { centerXFraction: 0.5, bottomYFraction: 0.25 }, language: { code: 'ja', name: 'Japanese' } });
   const loaded = await new SettingsStore(storage).load();
   assert.equal(loaded.enabled, true);
-  assert.deepEqual(loaded.overlayPosition, { x: 0.5, y: 0.25 });
+  assert.deepEqual(loaded.overlayPosition, { centerXFraction: 0.5, bottomYFraction: 0.25 });
   assert.deepEqual(loaded.language, { code: 'ja', name: 'Japanese' });
 });
 
@@ -69,4 +69,24 @@ test('settings: custom names have no duplicates (newest kept) and no empty names
   const store = new SettingsStore(fakeStorage());
   const settings = await store.save({ customLanguageNames: ['татарский', ' ', 'Татарский ', 'Latin'] });
   assert.deepEqual(settings.customLanguageNames, ['татарский', 'Latin']);
+});
+
+test('settings: overlayPosition keeps {centerXFraction, bottomYFraction} in [0, 1] and drops everything else', async () => {
+  const valid = { centerXFraction: 0, bottomYFraction: 1 };
+  const invalidPositions = [
+    { x: 0.5, y: 0.25 }, { centerXFraction: 1.5, bottomYFraction: 0.5 }, { centerXFraction: 0.5, bottomYFraction: -0.1 },
+    { centerXFraction: NaN, bottomYFraction: 0.5 }, { centerXFraction: 0.5, bottomYFraction: Infinity },
+    { centerXFraction: '0.5', bottomYFraction: '0.5' }, { centerXFraction: 0.5 },
+  ];
+  assert.deepEqual((await new SettingsStore(fakeStorage({ settings: { overlayPosition: valid } })).load()).overlayPosition, valid);
+  for (const overlayPosition of invalidPositions) {
+    const loaded = await new SettingsStore(fakeStorage({ settings: { overlayPosition } })).load();
+    assert.equal(loaded.overlayPosition, null);
+  }
+});
+
+test('settings: a typed language ({code: null}) survives a save and load round-trip', async () => {
+  const storage = fakeStorage();
+  await new SettingsStore(storage).save({ language: { code: null, name: '  Татарский ' } });
+  assert.deepEqual((await new SettingsStore(storage).load()).language, { code: null, name: 'Татарский' });
 });
