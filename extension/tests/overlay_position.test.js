@@ -135,3 +135,30 @@ test('positionFromDrag keeps the box inside the container', () => {
   assert.equal(position.centerXFraction, 0.1);
   assert.equal(position.bottomYFraction, 1);
 });
+
+test('a non-finite fraction is replaced by the default fraction, each field independently', () => {
+  const size = { ...box, ...container };
+  const defaults = DEFAULT_OVERLAY_POSITION;
+  for (const bad of [NaN, Infinity, -Infinity, undefined, null, 'x']) {
+    assert.deepEqual(clampOverlayPosition({ centerXFraction: bad, bottomYFraction: 0.5 }, size), {
+      centerXFraction: defaults.centerXFraction,
+      bottomYFraction: 0.5,
+    });
+    assert.deepEqual(clampOverlayPosition({ centerXFraction: 0.3, bottomYFraction: bad }, size), {
+      centerXFraction: 0.3,
+      bottomYFraction: defaults.bottomYFraction,
+    });
+  }
+});
+
+test('a missing field or a non-object position gives the default for the missing part', () => {
+  const size = { ...box, ...container };
+  assert.deepEqual(clampOverlayPosition({}, size), DEFAULT_OVERLAY_POSITION);
+  assert.deepEqual(clampOverlayPosition({ centerXFraction: 0.3 }, size), {
+    centerXFraction: 0.3,
+    bottomYFraction: DEFAULT_OVERLAY_POSITION.bottomYFraction,
+  });
+  for (const bad of [null, undefined, 'x', 5]) {
+    assert.deepEqual(clampOverlayPosition(bad, size), DEFAULT_OVERLAY_POSITION);
+  }
+});

@@ -46,11 +46,15 @@ function fractionsFromPixels(centerX, bottomY, { boxWidth, boxHeight, containerW
  */
 export function clampOverlayPosition(position, sizes) {
   const { containerWidth, containerHeight } = sizes;
-  return fractionsFromPixels(
-    position.centerXFraction * containerWidth,
-    position.bottomYFraction * containerHeight,
-    sizes,
-  );
+  // A stored position may be corrupt: each non-finite field falls back to its default.
+  const source = position !== null && typeof position === 'object' ? position : {};
+  const centerXFraction = Number.isFinite(source.centerXFraction)
+    ? source.centerXFraction
+    : DEFAULT_OVERLAY_POSITION.centerXFraction;
+  const bottomYFraction = Number.isFinite(source.bottomYFraction)
+    ? source.bottomYFraction
+    : DEFAULT_OVERLAY_POSITION.bottomYFraction;
+  return fractionsFromPixels(centerXFraction * containerWidth, bottomYFraction * containerHeight, sizes);
 }
 
 /**

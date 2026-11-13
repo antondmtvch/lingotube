@@ -7,6 +7,8 @@
   position: absolute;
   /* Above the video, below the player's settings menu (.ytp-popup uses 71). */
   z-index: 60;
+  /* max-content keeps the width independent of `left`; otherwise the available space caps it. */
+  width: max-content;
   max-width: 80%;
   box-sizing: border-box;
   padding: 6px 12px;
