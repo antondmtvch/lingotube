@@ -6,6 +6,7 @@ from dependency_injector import providers
 
 from lingotube import cli
 from lingotube.auth.base import EXPORT_HINT, LOGIN_HINT
+from lingotube.auth.login_browser import PROFILE_BUSY_HINT
 from lingotube.auth.login_store import SavedLogin
 from lingotube.commands import AppContext
 from lingotube.config import LoginPaths, Settings
@@ -169,7 +170,7 @@ def test_login_profile_busy_is_exit_1_with_close_hint(tmp_path):
         tmp_path,
         flow_error=ProfileBusyError(
             message="Профиль входа lingotube сейчас открыт.",
-            hint="Закройте окно входа lingotube и повторите.",
+            hint=PROFILE_BUSY_HINT,
         ),
     )
     code, out, err = h.run("login")

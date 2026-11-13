@@ -3,6 +3,7 @@ import os
 import socket
 import sys
 from pathlib import Path
+from typing import get_args
 
 import pytest
 
@@ -93,17 +94,29 @@ def test_command_line_has_no_automation_or_address_flags():
 def test_command_line_headless_and_offscreen_flags():
     headless = browser_command_line(Path("c"), Path("p"), "headless", "u")
     offscreen = browser_command_line(Path("c"), Path("p"), "offscreen", "u")
-    window = browser_command_line(Path("c"), Path("p"), "window", "u")
     assert "--headless" in headless
     assert "--window-position=-32000,-32000" in offscreen
     assert "--window-size=1024,768" in offscreen
-    assert "--headless" not in window
-    assert "--window-position=-32000,-32000" not in window
+    assert "--headless" not in offscreen
+    assert "--window-position=-32000,-32000" not in headless
+
+
+def test_no_visible_window_launch_mode_with_debugging_port_exists():
+    assert set(get_args(login_browser.LaunchMode)) == {"headless", "offscreen"}
+    with pytest.raises(KeyError):
+        browser_command_line(Path("c"), Path("p"), "window", "u")
+
+
+def test_profile_busy_hint_mentions_lingering_background_process():
+    assert PROFILE_BUSY_HINT == (
+        "Закройте окно входа lingotube (или завершите его фоновый процесс браузера) "
+        "и повторите."
+    )
 
 
 def test_profile_path_with_spaces_and_cyrillic_is_one_argument():
     profile = Path(r"C:\Users\Антон Иванов\AppData\Local\lingotube\login-profile")
-    args = browser_command_line(Path("chrome.exe"), profile, "window", "about:blank")
+    args = browser_command_line(Path("chrome.exe"), profile, "headless", "about:blank")
     assert f"--user-data-dir={profile}" in args
 
 
@@ -194,7 +207,7 @@ async def test_launch_reads_devtools_port_file(tmp_path):
     browser = await launch_login_browser(
         executable=Path("chrome"),
         profile_dir=tmp_path,
-        mode="window",
+        mode="headless",
         start_url="https://x/",
         spawn=spawn,
     )
@@ -219,7 +232,7 @@ async def test_launch_ignores_stale_port_file(tmp_path):
     browser = await launch_login_browser(
         executable=Path("chrome"),
         profile_dir=tmp_path,
-        mode="window",
+        mode="headless",
         start_url="u",
         spawn=spawn,
     )
@@ -239,7 +252,7 @@ async def test_launch_raises_profile_busy_when_busy_before_launch(
         await launch_login_browser(
             executable=Path("chrome"),
             profile_dir=tmp_path,
-            mode="window",
+            mode="headless",
             start_url="u",
             spawn=spawn,
         )
@@ -262,7 +275,7 @@ async def test_launch_raises_profile_busy_when_process_exits_and_profile_locked(
         await launch_login_browser(
             executable=Path("chrome"),
             profile_dir=tmp_path,
-            mode="window",
+            mode="headless",
             start_url="u",
             spawn=spawn,
         )
@@ -276,7 +289,7 @@ async def test_launch_raises_auth_error_when_process_exits_without_lock(tmp_path
         await launch_login_browser(
             executable=Path("chrome"),
             profile_dir=tmp_path,
-            mode="window",
+            mode="headless",
             start_url="u",
             spawn=spawn,
         )
@@ -293,7 +306,7 @@ async def test_launch_timeout_kills_own_process(tmp_path):
         await launch_login_browser(
             executable=Path("chrome"),
             profile_dir=tmp_path,
-            mode="window",
+            mode="headless",
             start_url="u",
             spawn=spawn,
             port_file_timeout=0.3,
@@ -349,7 +362,7 @@ async def test_launch_maps_spawn_os_error_to_auth_error_without_exception_text(
         await launch_login_browser(
             executable=Path("chrome"),
             profile_dir=tmp_path,
-            mode="window",
+            mode="headless",
             start_url="u",
             spawn=spawn,
         )

@@ -18,9 +18,12 @@ from lingotube.auth.devtools import DevToolsConnection, DevToolsError, close_bro
 from lingotube.errors import AuthError, ProfileBusyError
 
 PROFILE_BUSY_MESSAGE = "Профиль входа lingotube сейчас открыт."
-PROFILE_BUSY_HINT = "Закройте окно входа lingotube и повторите."
+PROFILE_BUSY_HINT = (
+    "Закройте окно входа lingotube (или завершите его фоновый процесс браузера) "
+    "и повторите."
+)
 LOGIN_BROWSERS = ("chrome", "edge")
-LaunchMode = Literal["window", "headless", "offscreen"]
+LaunchMode = Literal["headless", "offscreen"]
 
 BROWSER_CLOSE_WAIT = 10.0
 BROWSER_TERMINATE_WAIT = 5.0
@@ -41,7 +44,6 @@ _LINUX_COMMANDS = {
     "edge": ("microsoft-edge", "microsoft-edge-stable"),
 }
 _MODE_FLAGS: dict[str, list[str]] = {
-    "window": [],
     "headless": ["--headless"],
     "offscreen": ["--window-position=-32000,-32000", "--window-size=1024,768"],
 }
