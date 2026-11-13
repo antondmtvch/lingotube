@@ -13,7 +13,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-from platformdirs import user_cache_path, user_config_path
+from platformdirs import user_cache_path, user_config_path, user_data_path
 
 from lingotube.errors import ValidationError
 
@@ -53,6 +53,24 @@ def default_paths() -> tuple[Path, Path]:
         appauthor=False,
     )
     return config / "settings.toml", cache
+
+
+@dataclass(frozen=True)
+class LoginPaths:
+    profile_dir: Path
+    cookies_file: Path
+
+
+def default_login_paths() -> LoginPaths:
+    """Browser profile dir and saved-cookies file of `lingotube login`. Creates nothing."""
+    data = user_data_path(
+        appname=APP_NAME,
+        appauthor=False,
+    )
+    return LoginPaths(
+        profile_dir=data / "login-profile",
+        cookies_file=data / "login-cookies.json",
+    )
 
 
 _TOP_TYPES = {
@@ -312,6 +330,17 @@ def _remember(
     if data.get("cookies_file") == value:
         return  # unchanged: keep the user's file (comments, formatting) as is
     data["cookies_file"] = value
+    _write_settings_atomically(
+        settings_path=settings_path,
+        data=data,
+    )
+
+
+def _write_settings_atomically(
+    settings_path: Path,
+    data: dict,
+) -> None:
+    """Dump ``data`` as TOML via a temp file in the same dir, then replace."""
     text = _dump_toml(data=data)
     settings_path.parent.mkdir(
         parents=True,
@@ -347,5 +376,37 @@ async def remember_cookies_file(
     await asyncio.to_thread(
         _remember,
         path,
+        settings_path,
+    )
+
+
+_REMEMBERED_COOKIE_SOURCE_KEYS = ("cookies_file", "browser")
+
+
+def _forget(settings_path: Path) -> list[str]:
+    try:
+        data = tomllib.loads(settings_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return []
+    except (OSError, tomllib.TOMLDecodeError, UnicodeDecodeError) as e:
+        raise ValidationError(
+            message=f"Cannot update settings file {settings_path}: {e}"
+        ) from e
+    removed = [key for key in _REMEMBERED_COOKIE_SOURCE_KEYS if key in data]
+    if not removed:
+        return []  # keep the user's file (comments, formatting) as is
+    for key in removed:
+        del data[key]
+    _write_settings_atomically(
+        settings_path=settings_path,
+        data=data,
+    )
+    return removed
+
+
+async def forget_remembered_cookie_sources(settings_path: Path) -> list[str]:
+    """Remove remembered ``cookies_file`` and ``browser``; return removed key names."""
+    return await asyncio.to_thread(
+        _forget,
         settings_path,
     )

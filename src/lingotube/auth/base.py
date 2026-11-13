@@ -12,6 +12,10 @@ EXPORT_HINT = (
     "Затем запустите с --cookies-file <путь> (путь запомнится)."
 )
 
+LOGIN_HINT = (
+    "Выполните lingotube login: откроется окно Chrome или Edge, войдите в YouTube."
+)
+
 _ALLOWED_ROOTS = ("youtube.com", "google.com")
 
 
