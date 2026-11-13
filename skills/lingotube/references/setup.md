@@ -99,4 +99,5 @@ Read the `lingotube doctor --json` result (`result.checks`, each with `name`, `o
 
 If a lingotube command ends with exit code 4 after setup has worked once, the cookies have
 expired. Redo only step 3 (and step 4 to confirm); everything else is already in place. If the
-person signed in with `lingotube login`, run `lingotube login` again first.
+person signed in with `lingotube login`, first repeat the step-3 consent: show the
+command `lingotube login`, say what it does, and run it only after the person says "yes".

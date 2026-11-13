@@ -383,7 +383,7 @@ async def remember_cookies_file(
 _REMEMBERED_COOKIE_SOURCE_KEYS = ("cookies_file", "browser")
 
 
-def _forget(settings_path: Path) -> list[str]:
+def _forget_remembered_cookie_sources_blocking(settings_path: Path) -> list[str]:
     try:
         data = tomllib.loads(settings_path.read_text(encoding="utf-8"))
     except FileNotFoundError:
@@ -407,6 +407,6 @@ def _forget(settings_path: Path) -> list[str]:
 async def forget_remembered_cookie_sources(settings_path: Path) -> list[str]:
     """Remove remembered ``cookies_file`` and ``browser``; return removed key names."""
     return await asyncio.to_thread(
-        _forget,
+        _forget_remembered_cookie_sources_blocking,
         settings_path,
     )

@@ -6,7 +6,7 @@ import pytest
 
 from lingotube.auth.base import LOGIN_HINT
 from lingotube.auth.devtools import BrowserCookie, DevToolsConnectionClosed
-from lingotube.auth.login_browser import PROFILE_BUSY_HINT
+from lingotube.auth.login_browser import PROFILE_BUSY_HINT, PROFILE_BUSY_MESSAGE
 from lingotube.auth.login_flow import (
     LOGIN_PAGE_URL,
     REFRESH_PAGE_URL,
@@ -130,6 +130,16 @@ def test_youtube_cookies_only_filters_domains():
     assert result == {"A": "1", "C": "3"}
 
 
+def test_youtube_cookies_win_over_google_cookies_with_the_same_name():
+    google_first = [
+        cookie("SIDCC", "google", "google.com"),
+        cookie("SIDCC", "youtube", ".youtube.com"),
+    ]
+    youtube_first = list(reversed(google_first))
+    assert youtube_cookies_only(google_first) == {"SIDCC": "youtube"}
+    assert youtube_cookies_only(youtube_first) == {"SIDCC": "youtube"}
+
+
 async def test_sign_in_clears_cookies_before_opening_login_page(paths, store):
     harness = Harness(FakeConnection([SIGNED_IN]))
     messages: list[str] = []
@@ -207,6 +217,106 @@ async def test_sign_in_cancelled_shuts_down_browser(paths, store):
     assert harness.running.shut_down_calls >= 1
 
 
+async def test_sign_in_second_cancel_still_shuts_down(paths, store):
+    polling = asyncio.Event()
+    in_shutdown = asyncio.Event()
+
+    async def block_forever():
+        polling.set()
+        await asyncio.Event().wait()
+
+    harness = Harness(FakeConnection([[]], on_cookies=block_forever))
+    completed: list[bool] = []
+
+    async def slow_shut_down(connection) -> None:
+        in_shutdown.set()
+        await asyncio.sleep(0.05)
+        completed.append(True)
+
+    harness.running.shut_down = slow_shut_down
+    task = asyncio.create_task(sign_in(harness, paths, store))
+    await polling.wait()
+    task.cancel()
+    await in_shutdown.wait()
+    task.cancel()  # second Ctrl+C while the inner shut_down is running
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert completed
+
+
+@pytest.mark.parametrize("closing_command", ["Target.getTargets", "Storage.getCookies"])
+async def test_sign_in_connection_closed_while_polling_is_window_closed(
+    paths, store, closing_command
+):
+    class ClosingConnection(FakeConnection):
+        async def send_command(self, method, params=None):
+            if method == closing_command:
+                raise DevToolsConnectionClosed("closed")
+            return await super().send_command(method, params)
+
+    harness = Harness(ClosingConnection([[]]))
+    with pytest.raises(AuthError) as caught:
+        await sign_in(harness, paths, store)
+    assert "закрыто" in caught.value.message
+    assert harness.running.shut_down_calls >= 1
+    assert not paths.cookies_file.exists()
+
+
+class TabsConnection(FakeConnection):
+    """Tracks open tabs: starts with one blank tab, like the real login browser."""
+
+    def __init__(self, cookie_polls, close_login_tab_after_polls: int) -> None:
+        super().__init__(cookie_polls)
+        self.tabs = {"blank": "about:blank"}
+        self._close_after = close_login_tab_after_polls
+        self._polls = 0
+
+    async def send_command(self, method, params=None):
+        if method == "Target.createTarget":
+            self.tabs["login"] = params["url"]
+            self.commands.append(method)
+            return {"targetId": "login"}
+        if method == "Target.closeTarget":
+            self.tabs.pop(params["targetId"], None)
+            self.commands.append(method)
+            return {"success": True}
+        if method == "Target.getTargets":
+            self.commands.append(method)
+            self._polls += 1
+            if self._polls > self._close_after:
+                self.tabs.pop("login", None)
+            return {
+                "targetInfos": [
+                    {"type": "page", "targetId": tab_id, "url": url}
+                    for tab_id, url in self.tabs.items()
+                ]
+            }
+        return await super().send_command(method, params)
+
+
+async def test_closing_the_login_tab_is_window_closed_even_with_blank_tab(paths, store):
+    connection = TabsConnection([[]], close_login_tab_after_polls=2)
+    harness = Harness(connection)
+    with pytest.raises(AuthError) as caught:
+        await sign_in(harness, paths, store)
+    assert "закрыто" in caught.value.message
+    assert harness.clock.now < 60.0
+    assert "blank" not in connection.tabs
+
+
+async def test_sign_in_store_write_failure_is_auth_error_with_fixed_text(paths, store):
+    harness = Harness(FakeConnection([SIGNED_IN]))
+
+    async def failing_write(saved):
+        raise OSError("disk LEAKME-path")
+
+    store.write = failing_write
+    with pytest.raises(AuthError) as caught:
+        await sign_in(harness, paths, store)
+    assert caught.value.message == "Не удалось сохранить вход lingotube."
+    assert "LEAKME" not in (caught.value.hint or "")
+
+
 async def refresh(harness: Harness, paths, store, find=lambda browser: Path("edge")):
     return await refresh_cookies_from_login_profile(
         paths=paths,
@@ -245,6 +355,29 @@ async def test_refresh_without_rotation_still_saves_and_reports(paths, store):
     assert (await store.read()).cookies["SAPISID"] == "LEAKME-s"
 
 
+async def test_refresh_waits_at_least_one_poll_before_deciding(paths, store):
+    await store.write(SavedLogin(browser="chrome", cookies={"SAPISID": "old"}))
+    cookies = [cookie("SAPISID", "LEAKME-s"), cookie(ROTATING_COOKIE, "EARLY")]
+    harness = Harness(FakeConnection([cookies]))
+    await refresh(harness, paths, store)
+    assert harness.connection.commands.count("Storage.getCookies") >= 2
+    assert harness.clock.now >= 1.0
+
+
+async def test_refresh_store_write_failure_is_auth_error(paths, store):
+    await store.write(SavedLogin(browser="chrome", cookies={}))
+    cookies = [cookie("SAPISID", "LEAKME-s"), cookie(ROTATING_COOKIE, "NEW")]
+    harness = Harness(FakeConnection([cookies]))
+
+    async def failing_write(saved):
+        raise OSError("disk LEAKME-path")
+
+    store.write = failing_write
+    with pytest.raises(AuthError) as caught:
+        await refresh(harness, paths, store)
+    assert caught.value.message == "Не удалось сохранить вход lingotube."
+
+
 async def test_refresh_busy_profile_is_auth_error_with_close_window_hint(
     paths, store, monkeypatch
 ):
@@ -255,6 +388,7 @@ async def test_refresh_busy_profile_is_auth_error_with_close_window_hint(
     harness = Harness(FakeConnection([[]]))
     with pytest.raises(AuthError) as caught:
         await refresh(harness, paths, store)
+    assert caught.value.message == PROFILE_BUSY_MESSAGE
     assert caught.value.hint == PROFILE_BUSY_HINT
     assert harness.launch_args == ()
 

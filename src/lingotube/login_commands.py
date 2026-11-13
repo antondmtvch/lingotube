@@ -9,21 +9,30 @@ import shutil
 from lingotube.auth.login_browser import (
     LOGIN_BROWSERS,
     PROFILE_BUSY_HINT,
+    PROFILE_BUSY_MESSAGE,
     is_login_profile_in_use,
 )
-from lingotube.config import forget_remembered_cookie_sources
-from lingotube.errors import AuthError, ProfileBusyError, UsageError
+from lingotube.config import ENV_COOKIES_FILE, forget_remembered_cookie_sources
+from lingotube.errors import (
+    AuthError,
+    LingotubeError,
+    ProfileBusyError,
+    UsageError,
+)
 
-COOKIES_FILE_ENV = "LINGOTUBE_COOKIES_FILE"
+SETTINGS_CLEANUP_FAILED_WARNING = (
+    "Вход выполнен, но не удалось обновить файл настроек: "
+    "проверьте settings.toml и уберите cookies_file и browser вручную."
+)
 ENV_OVERRIDES_LOGIN_WARNING = (
-    f"Переменная {COOKIES_FILE_ENV} задана и важнее входа lingotube; "
+    f"Переменная {ENV_COOKIES_FILE} задана и важнее входа lingotube; "
     "уберите её, чтобы использовать вход."
 )
 
 
 def _profile_busy_error() -> ProfileBusyError:
     return ProfileBusyError(
-        message="Профиль входа lingotube сейчас открыт.",
+        message=PROFILE_BUSY_MESSAGE,
         hint=PROFILE_BUSY_HINT,
     )
 
@@ -36,7 +45,26 @@ def _remove_profile_directory(profile_dir) -> bool:
         shutil.rmtree(profile_dir)
     except PermissionError:
         raise _profile_busy_error() from None
+    except OSError:
+        raise _removal_failed_error() from None
     return True
+
+
+def _removal_failed_error() -> LingotubeError:
+    # No exception text: it may contain paths.
+    return LingotubeError(
+        message="Не удалось удалить данные входа lingotube.",
+        hint="Закройте программы, использующие эти файлы, и повторите lingotube logout.",
+    )
+
+
+async def _delete_saved_cookies(store) -> bool:
+    try:
+        return await store.delete()
+    except PermissionError:
+        raise _profile_busy_error() from None
+    except OSError:
+        raise _removal_failed_error() from None
 
 
 def register(
@@ -102,15 +130,17 @@ def register(
                 notify=container.warn(),
             )
             forgotten: list[str] = []
+            warnings: tuple[str, ...] = ()
             if ctx.settings_path is not None:
-                forgotten = await forget_remembered_cookie_sources(
-                    settings_path=ctx.settings_path
-                )
-            warnings = (
-                (ENV_OVERRIDES_LOGIN_WARNING,)
-                if container.env().get(COOKIES_FILE_ENV)
-                else ()
-            )
+                try:
+                    forgotten = await forget_remembered_cookie_sources(
+                        settings_path=ctx.settings_path
+                    )
+                except LingotubeError:
+                    # The sign-in itself succeeded; only the settings cleanup failed.
+                    warnings += (SETTINGS_CLEANUP_FAILED_WARNING,)
+            if container.env().get(ENV_COOKIES_FILE):
+                warnings += (ENV_OVERRIDES_LOGIN_WARNING,)
             text = f"Вход выполнен ({browser_name}). Cookies сохранены: {paths.cookies_file}."
             if forgotten:
                 text += f"\nИз настроек убраны: {', '.join(forgotten)}."
@@ -147,7 +177,7 @@ def register(
             paths = container.login_paths()
             if await asyncio.to_thread(is_login_profile_in_use, paths.profile_dir):
                 raise _profile_busy_error()
-            cookies_removed = await container.login_store().delete()
+            cookies_removed = await _delete_saved_cookies(container.login_store())
             profile_removed = await asyncio.to_thread(
                 _remove_profile_directory,
                 paths.profile_dir,

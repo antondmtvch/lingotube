@@ -168,7 +168,7 @@ def test_login_profile_busy_is_exit_1_with_close_hint(tmp_path):
     h = LoginHarness(
         tmp_path,
         flow_error=ProfileBusyError(
-            message="Профиль входа lingotube уже открыт.",
+            message="Профиль входа lingotube сейчас открыт.",
             hint="Закройте окно входа lingotube и повторите.",
         ),
     )
@@ -219,6 +219,63 @@ def test_logout_permission_error_while_removing_is_exit_1(tmp_path, monkeypatch)
     monkeypatch.setattr("lingotube.login_commands.shutil.rmtree", locked)
     code, out, err = h.run("logout")
     assert code == 1
+
+
+def test_logout_other_os_error_while_removing_profile_is_fixed_text_exit_1(
+    tmp_path, monkeypatch
+):
+    h = LoginHarness(tmp_path)
+    h.paths.profile_dir.mkdir()
+
+    def broken(path):
+        raise OSError("LEAKME-path")
+
+    monkeypatch.setattr("lingotube.login_commands.shutil.rmtree", broken)
+    code, out, err = h.run("logout")
+    assert code == 1
+    assert "LEAKME" not in err
+    assert "Не удалось удалить" in err
+    assert "Внутренняя ошибка" not in err
+
+
+def test_logout_permission_error_on_cookies_file_is_profile_busy(tmp_path, monkeypatch):
+    h = LoginHarness(tmp_path)
+    h.paths.cookies_file.write_text("{}", encoding="utf-8")
+
+    def locked(self, *args, **kwargs):
+        raise PermissionError("LEAKME-path")
+
+    monkeypatch.setattr("pathlib.Path.unlink", locked)
+    code, out, err = h.run("logout")
+    assert code == 1
+    assert "Закройте окно входа" in err
+    assert "LEAKME" not in err
+
+
+def test_logout_other_os_error_on_cookies_file_is_fixed_text(tmp_path, monkeypatch):
+    h = LoginHarness(tmp_path)
+    h.paths.cookies_file.write_text("{}", encoding="utf-8")
+
+    def broken(self, *args, **kwargs):
+        raise OSError("LEAKME-path")
+
+    monkeypatch.setattr("pathlib.Path.unlink", broken)
+    code, out, err = h.run("logout")
+    assert code == 1
+    assert "Не удалось удалить" in err
+    assert "LEAKME" not in err
+
+
+def test_login_settings_cleanup_failure_is_a_warning_not_an_error(tmp_path):
+    h = LoginHarness(tmp_path)
+    h.settings_path.write_text("this is = = not toml\n", encoding="utf-8")
+    code, out, err = h.run("login", "--json")
+    assert code == 0, err
+    result = json.loads(out)["result"]
+    assert result["forgotten_settings"] == []
+    assert h.paths.cookies_file.is_file()
+    assert any("настроек" in warning for warning in json.loads(out)["warnings"])
+    assert LEAK not in out + err
 
 
 def test_export_hint_starts_with_login():

@@ -17,6 +17,7 @@ from typing import Literal
 from lingotube.auth.devtools import DevToolsConnection, DevToolsError, close_browser
 from lingotube.errors import AuthError, ProfileBusyError
 
+PROFILE_BUSY_MESSAGE = "Профиль входа lingotube сейчас открыт."
 PROFILE_BUSY_HINT = "Закройте окно входа lingotube и повторите."
 LOGIN_BROWSERS = ("chrome", "edge")
 LaunchMode = Literal["window", "headless", "offscreen"]
@@ -195,9 +196,7 @@ def _read_websocket_url(port_file: Path) -> str | None:
 
 
 def _profile_busy_error() -> ProfileBusyError:
-    return ProfileBusyError(
-        message="Профиль входа lingotube уже открыт.", hint=PROFILE_BUSY_HINT
-    )
+    return ProfileBusyError(message=PROFILE_BUSY_MESSAGE, hint=PROFILE_BUSY_HINT)
 
 
 async def launch_login_browser(
