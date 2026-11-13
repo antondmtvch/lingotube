@@ -50,42 +50,6 @@ function isPlayerCaptionRequestForVideo(resourceUrl, videoId) {
 }
 
 /**
- * Counts, without exposing any value, why a player caption request may not match.
- * Returns only booleans and numbers: never a URL, a query value or a video id.
- * @param {Element|null} playerElement
- * @param {string} expectedVideoId
- * @param {Array<{name: string}>} resourceEntries
- * @returns {Record<string, number|boolean>}
- */
-export function captureDiagnostics(playerElement, expectedVideoId, resourceEntries = performance.getEntriesByType('resource')) {
-  let timedtextEntriesSeen = 0;
-  let timedtextWithPot = 0;
-  let timedtextWithMatchingVideo = 0;
-  let timedtextWithAnyV = 0;
-  for (const entry of resourceEntries) {
-    if (!String(entry.name).includes('/api/timedtext')) continue;
-    timedtextEntriesSeen += 1;
-    try {
-      const { searchParams } = new URL(entry.name, YOUTUBE_ORIGIN);
-      if (searchParams.has('pot')) timedtextWithPot += 1;
-      if (searchParams.has('v')) timedtextWithAnyV += 1;
-      if (searchParams.get('v') === expectedVideoId) timedtextWithMatchingVideo += 1;
-    } catch {
-      // An unparsable address only counts as seen.
-    }
-  }
-  return {
-    expectedVideoIdLength: expectedVideoId.length,
-    timedtextEntriesSeen,
-    timedtextWithPot,
-    timedtextWithMatchingVideo,
-    timedtextWithAnyV,
-    playerHasGetPlayerResponse: typeof playerElement?.getPlayerResponse === 'function',
-    subtitlesButtonFound: Boolean(playerElement?.querySelector?.('.ytp-subtitles-button')),
-  };
-}
-
-/**
  * Presses the subtitles button the way a real click does: a pointer and mouse
  * sequence dispatched on the button. A bare `.click()` does not toggle the
  * player's button, so it is only a last resort when the state did not change.
@@ -121,27 +85,21 @@ export async function activateSubtitleButton(button, sleep) {
  * Finds the player's caption request in the resource log, provoking one with
  * the subtitles button if there is none. Native captions are hidden by CSS
  * meanwhile, and the button is returned to its original state.
+ * Two captures must never run at once on the same button: use createSerialCaptionCapture.
  * @param {object} options
- * @param {Document} options.document only used to count subtitles buttons for diagnostics
  * @param {Element} options.playerElement the visible player; its own subtitles button is the one clicked
  * @param {typeof PerformanceObserver} options.performanceObserverClass
  * @param {(ms: number) => Promise<void>} options.sleep
  * @param {string} options.expectedVideoId only requests for this video count
  * @param {number} [options.timeoutMs]
- * @param {() => void} [options.onButtonForced] called when the button had to be used
- * @param {(observation: Record<string, number|boolean>) => void} [options.onButtonObserved]
- *   receives only booleans and numbers about the button, never a value or a URL
  * @returns {Promise<string|null>}
  */
 export async function capturePlayerCaptionRequestUrl({
-  document,
   playerElement,
   performanceObserverClass,
   sleep,
   expectedVideoId,
   timeoutMs = 6000,
-  onButtonForced = () => {},
-  onButtonObserved = () => {},
 }) {
   let capturedUrl = null;
   const observer = new performanceObserverClass((list) => {
@@ -160,29 +118,14 @@ export async function capturePlayerCaptionRequestUrl({
   const player = playerElement;
   const button = playerElement?.querySelector('.ytp-subtitles-button');
   const wasOn = button?.getAttribute('aria-pressed') === 'true';
-  const buttonObservation = {
-    subtitleButtonCountInPlayer: playerElement?.querySelectorAll?.('.ytp-subtitles-button').length ?? 0,
-    subtitleButtonCountInDocument: document?.querySelectorAll?.('.ytp-subtitles-button').length ?? 0,
-    subtitleButtonPressedBefore: wasOn,
-  };
   let buttonUsed = false;
   try {
     await waitForRequest(GRACE_PERIOD_MS);
     if (!capturedUrl && button) {
       buttonUsed = true;
-      onButtonForced();
       player?.classList.add(PLAYER_CLASS_HIDING_NATIVE_CAPTIONS);
-      const firstActivation = await activateSubtitleButton(button, sleep);
-      buttonObservation.subtitleButtonPressedAfterFirstClick = firstActivation.pressedAfterSequence;
-      let lastActivation = firstActivation;
-      let activationFallbackUsed = firstActivation.fallbackUsed;
-      if (wasOn) {
-        lastActivation = await activateSubtitleButton(button, sleep);
-        activationFallbackUsed ||= lastActivation.fallbackUsed;
-      }
-      buttonObservation.subtitleButtonPressedAfterActivation = lastActivation.pressedAfterActivation;
-      buttonObservation.activationFallbackUsed = activationFallbackUsed;
-      onButtonObserved(buttonObservation);
+      await activateSubtitleButton(button, sleep);
+      if (wasOn) await activateSubtitleButton(button, sleep);
       await waitForRequest(timeoutMs);
     }
   } finally {
@@ -195,4 +138,21 @@ export async function capturePlayerCaptionRequestUrl({
     }
   }
   return capturedUrl;
+}
+
+/**
+ * Wraps a capture so that calls run one after another, each starting only after the previous
+ * one has restored the button (its `finally` finished). A capture of a video the user already
+ * left still runs to the end; only its result is ignored by the caller.
+ * @param {(options: object) => Promise<string|null>} [capture]
+ * @returns {(options: object) => Promise<string|null>}
+ */
+export function createSerialCaptionCapture(capture = capturePlayerCaptionRequestUrl) {
+  let previousCapture = Promise.resolve();
+  return (options) => {
+    const result = previousCapture.then(() => capture(options));
+    // The chain only orders the captures; each caller still sees its own result or error.
+    previousCapture = result.catch(() => {});
+    return result;
+  };
 }

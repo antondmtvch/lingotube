@@ -119,8 +119,37 @@ export class SettingsStore {
    * @returns {Promise<Settings>} the settings as stored
    */
   async save(changes) {
-    const merged = normalizeSettings({ ...(await this.load()), ...changes });
+    return this.update(() => changes);
+  }
+
+  /**
+   * Loads the stored settings, merges the changes computed from them, and stores the result.
+   * @param {(stored: Settings) => Partial<Settings>} computeChanges
+   * @returns {Promise<Settings>} the settings as stored
+   */
+  async update(computeChanges) {
+    const stored = await this.load();
+    const merged = normalizeSettings({ ...stored, ...computeChanges(stored) });
     await this.extensionStorage.set({ [SETTINGS_STORAGE_KEY]: merged });
     return merged;
   }
+}
+
+/**
+ * Saves setting changes from the page one after another. Only the changed fields are written,
+ * merged into the settings loaded from storage right before the write, so a change made in
+ * another tab (or values stored while this page used the defaults) is never overwritten.
+ * A change may be a function of the freshly loaded settings (for lists such as the remembered
+ * languages). Never rejects: a failed save resolves null and the next one still runs.
+ * @param {SettingsStore} settingsStore
+ * @returns {(changes: Partial<Settings>|((stored: Settings) => Partial<Settings>)) => Promise<Settings|null>}
+ */
+export function createSettingsSaver(settingsStore) {
+  let previousSave = Promise.resolve();
+  return (changes) => {
+    const computeChanges = typeof changes === 'function' ? changes : () => changes;
+    const result = previousSave.then(() => settingsStore.update(computeChanges)).catch(() => null);
+    previousSave = result;
+    return result;
+  };
 }

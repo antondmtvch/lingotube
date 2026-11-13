@@ -1023,42 +1023,6 @@ function isPlayerCaptionRequestForVideo(resourceUrl, videoId) {
 }
 
 /**
- * Counts, without exposing any value, why a player caption request may not match.
- * Returns only booleans and numbers: never a URL, a query value or a video id.
- * @param {Element|null} playerElement
- * @param {string} expectedVideoId
- * @param {Array<{name: string}>} resourceEntries
- * @returns {Record<string, number|boolean>}
- */
-function captureDiagnostics(playerElement, expectedVideoId, resourceEntries = performance.getEntriesByType('resource')) {
-  let timedtextEntriesSeen = 0;
-  let timedtextWithPot = 0;
-  let timedtextWithMatchingVideo = 0;
-  let timedtextWithAnyV = 0;
-  for (const entry of resourceEntries) {
-    if (!String(entry.name).includes('/api/timedtext')) continue;
-    timedtextEntriesSeen += 1;
-    try {
-      const { searchParams } = new URL(entry.name, YOUTUBE_ORIGIN);
-      if (searchParams.has('pot')) timedtextWithPot += 1;
-      if (searchParams.has('v')) timedtextWithAnyV += 1;
-      if (searchParams.get('v') === expectedVideoId) timedtextWithMatchingVideo += 1;
-    } catch {
-      // An unparsable address only counts as seen.
-    }
-  }
-  return {
-    expectedVideoIdLength: expectedVideoId.length,
-    timedtextEntriesSeen,
-    timedtextWithPot,
-    timedtextWithMatchingVideo,
-    timedtextWithAnyV,
-    playerHasGetPlayerResponse: typeof playerElement?.getPlayerResponse === 'function',
-    subtitlesButtonFound: Boolean(playerElement?.querySelector?.('.ytp-subtitles-button')),
-  };
-}
-
-/**
  * Presses the subtitles button the way a real click does: a pointer and mouse
  * sequence dispatched on the button. A bare `.click()` does not toggle the
  * player's button, so it is only a last resort when the state did not change.
@@ -1094,27 +1058,21 @@ async function activateSubtitleButton(button, sleep) {
  * Finds the player's caption request in the resource log, provoking one with
  * the subtitles button if there is none. Native captions are hidden by CSS
  * meanwhile, and the button is returned to its original state.
+ * Two captures must never run at once on the same button: use createSerialCaptionCapture.
  * @param {object} options
- * @param {Document} options.document only used to count subtitles buttons for diagnostics
  * @param {Element} options.playerElement the visible player; its own subtitles button is the one clicked
  * @param {typeof PerformanceObserver} options.performanceObserverClass
  * @param {(ms: number) => Promise<void>} options.sleep
  * @param {string} options.expectedVideoId only requests for this video count
  * @param {number} [options.timeoutMs]
- * @param {() => void} [options.onButtonForced] called when the button had to be used
- * @param {(observation: Record<string, number|boolean>) => void} [options.onButtonObserved]
- *   receives only booleans and numbers about the button, never a value or a URL
  * @returns {Promise<string|null>}
  */
 async function capturePlayerCaptionRequestUrl({
-  document,
   playerElement,
   performanceObserverClass,
   sleep,
   expectedVideoId,
   timeoutMs = 6000,
-  onButtonForced = () => {},
-  onButtonObserved = () => {},
 }) {
   let capturedUrl = null;
   const observer = new performanceObserverClass((list) => {
@@ -1133,29 +1091,14 @@ async function capturePlayerCaptionRequestUrl({
   const player = playerElement;
   const button = playerElement?.querySelector('.ytp-subtitles-button');
   const wasOn = button?.getAttribute('aria-pressed') === 'true';
-  const buttonObservation = {
-    subtitleButtonCountInPlayer: playerElement?.querySelectorAll?.('.ytp-subtitles-button').length ?? 0,
-    subtitleButtonCountInDocument: document?.querySelectorAll?.('.ytp-subtitles-button').length ?? 0,
-    subtitleButtonPressedBefore: wasOn,
-  };
   let buttonUsed = false;
   try {
     await waitForRequest(GRACE_PERIOD_MS);
     if (!capturedUrl && button) {
       buttonUsed = true;
-      onButtonForced();
       player?.classList.add(PLAYER_CLASS_HIDING_NATIVE_CAPTIONS);
-      const firstActivation = await activateSubtitleButton(button, sleep);
-      buttonObservation.subtitleButtonPressedAfterFirstClick = firstActivation.pressedAfterSequence;
-      let lastActivation = firstActivation;
-      let activationFallbackUsed = firstActivation.fallbackUsed;
-      if (wasOn) {
-        lastActivation = await activateSubtitleButton(button, sleep);
-        activationFallbackUsed ||= lastActivation.fallbackUsed;
-      }
-      buttonObservation.subtitleButtonPressedAfterActivation = lastActivation.pressedAfterActivation;
-      buttonObservation.activationFallbackUsed = activationFallbackUsed;
-      onButtonObserved(buttonObservation);
+      await activateSubtitleButton(button, sleep);
+      if (wasOn) await activateSubtitleButton(button, sleep);
       await waitForRequest(timeoutMs);
     }
   } finally {
@@ -1169,7 +1112,24 @@ async function capturePlayerCaptionRequestUrl({
   }
   return capturedUrl;
 }
-return Object.freeze({ mergePlayerRequestParameters: mergePlayerRequestParameters, isPlayerCaptionRequest: isPlayerCaptionRequest, captureDiagnostics: captureDiagnostics, activateSubtitleButton: activateSubtitleButton, capturePlayerCaptionRequestUrl: capturePlayerCaptionRequestUrl });
+
+/**
+ * Wraps a capture so that calls run one after another, each starting only after the previous
+ * one has restored the button (its `finally` finished). A capture of a video the user already
+ * left still runs to the end; only its result is ignored by the caller.
+ * @param {(options: object) => Promise<string|null>} [capture]
+ * @returns {(options: object) => Promise<string|null>}
+ */
+function createSerialCaptionCapture(capture = capturePlayerCaptionRequestUrl) {
+  let previousCapture = Promise.resolve();
+  return (options) => {
+    const result = previousCapture.then(() => capture(options));
+    // The chain only orders the captures; each caller still sees its own result or error.
+    previousCapture = result.catch(() => {});
+    return result;
+  };
+}
+return Object.freeze({ mergePlayerRequestParameters: mergePlayerRequestParameters, isPlayerCaptionRequest: isPlayerCaptionRequest, activateSubtitleButton: activateSubtitleButton, capturePlayerCaptionRequestUrl: capturePlayerCaptionRequestUrl, createSerialCaptionCapture: createSerialCaptionCapture });
 })();
 
 // Module: src/shared/language_choices.js
@@ -1330,7 +1290,23 @@ function placeButtonNextToSubtitlesButton({ rightControls, subtitlesButton, butt
   }
   rightControls.insertBefore(button, rightControls.firstChild);
 }
-return Object.freeze({ TEXT_SCALE_STEP: TEXT_SCALE_STEP, MIN_TEXT_SCALE: MIN_TEXT_SCALE, MAX_TEXT_SCALE: MAX_TEXT_SCALE, languageFromTypedText: languageFromTypedText, menuValueForLanguage: menuValueForLanguage, customNamesForMenu: customNamesForMenu, steppedTextScale: steppedTextScale, selectValueAfterClose: selectValueAfterClose, placeButtonNextToSubtitlesButton: placeButtonNextToSubtitlesButton });
+
+const MAX_REMEMBERED_TYPED_LANGUAGES = 5;
+
+/**
+ * The remembered typed language names after choosing `language`: a typed language goes first,
+ * replacing a case-insensitive duplicate, and the list keeps five; a listed language changes nothing.
+ * @param {string[]} customLanguageNames
+ * @param {import('./language_choices.js').TargetLanguage} language
+ * @returns {string[]}
+ */
+function rememberTypedLanguage(customLanguageNames, language) {
+  if (language.code !== null) return [...customLanguageNames];
+  const identity = language.name.toLowerCase();
+  const others = customLanguageNames.filter((name) => name.toLowerCase() !== identity);
+  return [language.name, ...others].slice(0, MAX_REMEMBERED_TYPED_LANGUAGES);
+}
+return Object.freeze({ TEXT_SCALE_STEP: TEXT_SCALE_STEP, MIN_TEXT_SCALE: MIN_TEXT_SCALE, MAX_TEXT_SCALE: MAX_TEXT_SCALE, languageFromTypedText: languageFromTypedText, menuValueForLanguage: menuValueForLanguage, customNamesForMenu: customNamesForMenu, steppedTextScale: steppedTextScale, selectValueAfterClose: selectValueAfterClose, placeButtonNextToSubtitlesButton: placeButtonNextToSubtitlesButton, rememberTypedLanguage: rememberTypedLanguage });
 })();
 
 // Module: src/page/player_controls.js
@@ -1717,12 +1693,41 @@ class SettingsStore {
    * @returns {Promise<Settings>} the settings as stored
    */
   async save(changes) {
-    const merged = normalizeSettings({ ...(await this.load()), ...changes });
+    return this.update(() => changes);
+  }
+
+  /**
+   * Loads the stored settings, merges the changes computed from them, and stores the result.
+   * @param {(stored: Settings) => Partial<Settings>} computeChanges
+   * @returns {Promise<Settings>} the settings as stored
+   */
+  async update(computeChanges) {
+    const stored = await this.load();
+    const merged = normalizeSettings({ ...stored, ...computeChanges(stored) });
     await this.extensionStorage.set({ [SETTINGS_STORAGE_KEY]: merged });
     return merged;
   }
 }
-return Object.freeze({ DEFAULT_SETTINGS: DEFAULT_SETTINGS, loadSettingsWithRetries: loadSettingsWithRetries, SettingsStore: SettingsStore });
+
+/**
+ * Saves setting changes from the page one after another. Only the changed fields are written,
+ * merged into the settings loaded from storage right before the write, so a change made in
+ * another tab (or values stored while this page used the defaults) is never overwritten.
+ * A change may be a function of the freshly loaded settings (for lists such as the remembered
+ * languages). Never rejects: a failed save resolves null and the next one still runs.
+ * @param {SettingsStore} settingsStore
+ * @returns {(changes: Partial<Settings>|((stored: Settings) => Partial<Settings>)) => Promise<Settings|null>}
+ */
+function createSettingsSaver(settingsStore) {
+  let previousSave = Promise.resolve();
+  return (changes) => {
+    const computeChanges = typeof changes === 'function' ? changes : () => changes;
+    const result = previousSave.then(() => settingsStore.update(computeChanges)).catch(() => null);
+    previousSave = result;
+    return result;
+  };
+}
+return Object.freeze({ DEFAULT_SETTINGS: DEFAULT_SETTINGS, loadSettingsWithRetries: loadSettingsWithRetries, SettingsStore: SettingsStore, createSettingsSaver: createSettingsSaver });
 })();
 
 // Module: src/shared/sentence_cues.js
@@ -2349,6 +2354,7 @@ class SubtitleSession {
     this.#render(positionMs);
     if (this.#pump.stopReason !== null) return;
     // On pause the reserve is topped up once; after that no request is sent until playback moves on.
+    // Deliberate second guard: chooseNextBatch already sends nothing once the reserve is met.
     if (this.#isPaused() && this.#track.translatedAheadMs(positionMs) >= this.#schedule.reserveAheadMs) return;
     this.#pump.tick().catch(() => {});
   }
@@ -2415,6 +2421,7 @@ class SubtitleSession {
   #resumeWhenRateLimitPassed() {
     if (this.#pump.stopReason !== 'rate-limited') return;
     if (this.#rateLimitedUntilMs !== null && this.#now() >= this.#rateLimitedUntilMs) {
+      // By design the auto-resume also re-sends cues that failed earlier, as the manual retry does.
       this.retry();
       return;
     }
@@ -2801,9 +2808,9 @@ const { ChatRequestGate } = bundledModule3Exports;
 const { ChatTranslator } = bundledModule6Exports;
 const { createExtensionStorage } = bundledModule8Exports;
 const { OverlayView } = bundledModule10Exports;
-const { capturePlayerCaptionRequestUrl } = bundledModule11Exports;
+const { createSerialCaptionCapture } = bundledModule11Exports;
 const { PlayerControls } = bundledModule14Exports;
-const { SettingsStore, loadSettingsWithRetries } = bundledModule15Exports;
+const { SettingsStore, createSettingsSaver, loadSettingsWithRetries } = bundledModule15Exports;
 const { SubtitleSession } = bundledModule22Exports;
 const { TranslationCache } = bundledModule23Exports;
 const { CaptionsUnavailableError, fetchCaptionWords } = bundledModule25Exports;
@@ -2811,6 +2818,7 @@ const { watchYouTubePage } = bundledModule27Exports;
 const { findPlayerElement, readCaptionTracks, readVideoDetails } = bundledModule28Exports;
 const { captionSourceKey } = bundledModule17Exports;
 const { chooseCaptionTrack } = bundledModule29Exports;
+const { rememberTypedLanguage } = bundledModule13Exports;
 const { DEFAULT_CUE_RULES, buildCues } = bundledModule16Exports;
 // Entry of the page bundle (MAIN world): builds every component once per page and wires them.
 // Tokens, chat commands and the authorization header never leave this world and are never
@@ -2819,7 +2827,6 @@ const { DEFAULT_CUE_RULES, buildCues } = bundledModule16Exports;
 
 const PLAYER_POLL_INTERVAL_MS = 250;
 const PLAYER_WAIT_LIMIT_MS = 15000;
-const MAX_REMEMBERED_TYPED_LANGUAGES = 5;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -2877,11 +2884,10 @@ async function waitForPlayerOfVideo({ document, videoId, isStillWanted }) {
  * Cues of the playing video from its YouTube caption track: the player's own caption request is
  * captured once (slow: grace period plus timeout), then the chosen track is fetched as json3.
  */
-async function loadYouTubeCues({ window, document, playerElement, videoId }) {
+async function loadYouTubeCues({ window, playerElement, videoId, captureSerially }) {
   const track = chooseCaptionTrack(readCaptionTracks(playerElement));
   if (!track) throw new CaptionsUnavailableError('The video has no usable caption track');
-  const playerRequestUrl = await capturePlayerCaptionRequestUrl({
-    document,
+  const playerRequestUrl = await captureSerially({
     playerElement,
     expectedVideoId: videoId,
     performanceObserverClass: window.PerformanceObserver,
@@ -2900,9 +2906,12 @@ function startLingotubePage({ window, document }) {
   const translationCache = new TranslationCache(extensionStorage);
   const chatRequestGate = createChatRequestGate({ window, document });
   const settingsLoading = loadSettingsWithRetries(settingsStore, { sleep });
+  const saveSettingsChange = createSettingsSaver(settingsStore);
+  // One capture at a time on the page: a stale capture of the previous video must finish
+  // restoring the subtitles button before the next capture reads its state.
+  const captureSerially = createSerialCaptionCapture();
 
   let settings = null;
-  let settingsSaveQueue = Promise.resolve();
   let currentVideoId = null;
   let isAdPlaying = false;
   let navigationCount = 0;
@@ -2921,17 +2930,21 @@ function startLingotubePage({ window, document }) {
     playerControls?.setRetryButtonVisible(canRetry);
   }
 
-  function changeSettings(changes) {
+  /**
+   * Applies changes to the page at once and stores only the changed fields.
+   * @param {object} changes the new values, applied to the in-memory settings
+   * @param {(stored: object) => object} [computeStoredChanges] what to store, computed from the
+   *   freshly loaded stored settings; by default `changes` itself
+   */
+  function changeSettings(changes, computeStoredChanges = () => changes) {
     settings = { ...settings, ...changes };
     playerControls?.applySettings(settings);
-    // The whole snapshot is saved, one save after another, so quick changes never undo each other.
-    const snapshot = settings;
-    settingsSaveQueue = settingsSaveQueue.then(() => settingsStore.save(snapshot)).catch(() => {});
+    saveSettingsChange(computeStoredChanges);
   }
 
   function loadCuesOfVideo(videoId, playerElement) {
     if (cuesLoadOfVideo?.videoId === videoId) return cuesLoadOfVideo.promise;
-    const load = { videoId, promise: loadYouTubeCues({ window, document, playerElement, videoId }) };
+    const load = { videoId, promise: loadYouTubeCues({ window, playerElement, videoId, captureSerially }) };
     cuesLoadOfVideo = load;
     load.promise.catch(() => {
       if (cuesLoadOfVideo === load) cuesLoadOfVideo = null;
@@ -3019,14 +3032,12 @@ function startLingotubePage({ window, document }) {
       },
       onLanguageChanged: (language) => {
         if (language.code === settings.language.code && language.name === settings.language.name) return;
-        // A typed language is remembered newest first, without case-insensitive duplicates.
-        const customLanguageNames = language.code === null
-          ? [
-            language.name,
-            ...settings.customLanguageNames.filter((name) => name.toLowerCase() !== language.name.toLowerCase()),
-          ].slice(0, MAX_REMEMBERED_TYPED_LANGUAGES)
-          : settings.customLanguageNames;
-        changeSettings({ language, customLanguageNames });
+        // The stored list is rebuilt from the stored names, not this page's copy, so names
+        // remembered by another tab are kept.
+        changeSettings(
+          { language, customLanguageNames: rememberTypedLanguage(settings.customLanguageNames, language) },
+          (stored) => ({ language, customLanguageNames: rememberTypedLanguage(stored.customLanguageNames, language) }),
+        );
         if (settings.enabled) startSubtitles().catch(reportUnexpectedError);
       },
       onTextScaleChanged: (scale) => {

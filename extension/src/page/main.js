@@ -7,9 +7,9 @@ import { ChatRequestGate } from './chat_request_gate.js';
 import { ChatTranslator } from './chat_translator.js';
 import { createExtensionStorage } from './extension_storage.js';
 import { OverlayView } from './overlay_view.js';
-import { capturePlayerCaptionRequestUrl } from './player_caption_request.js';
+import { createSerialCaptionCapture } from './player_caption_request.js';
 import { PlayerControls } from './player_controls.js';
-import { SettingsStore, loadSettingsWithRetries } from './settings_store.js';
+import { SettingsStore, createSettingsSaver, loadSettingsWithRetries } from './settings_store.js';
 import { SubtitleSession } from './subtitle_session.js';
 import { TranslationCache } from './translation_cache.js';
 import { CaptionsUnavailableError, fetchCaptionWords } from './youtube_captions_source.js';
@@ -17,11 +17,11 @@ import { watchYouTubePage } from './youtube_page_watcher.js';
 import { findPlayerElement, readCaptionTracks, readVideoDetails } from './youtube_player.js';
 import { captionSourceKey } from '../shared/cache_key.js';
 import { chooseCaptionTrack } from '../shared/caption_track_choice.js';
+import { rememberTypedLanguage } from '../shared/player_panel_logic.js';
 import { DEFAULT_CUE_RULES, buildCues } from '../shared/sentence_cues.js';
 
 const PLAYER_POLL_INTERVAL_MS = 250;
 const PLAYER_WAIT_LIMIT_MS = 15000;
-const MAX_REMEMBERED_TYPED_LANGUAGES = 5;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -79,11 +79,10 @@ async function waitForPlayerOfVideo({ document, videoId, isStillWanted }) {
  * Cues of the playing video from its YouTube caption track: the player's own caption request is
  * captured once (slow: grace period plus timeout), then the chosen track is fetched as json3.
  */
-async function loadYouTubeCues({ window, document, playerElement, videoId }) {
+async function loadYouTubeCues({ window, playerElement, videoId, captureSerially }) {
   const track = chooseCaptionTrack(readCaptionTracks(playerElement));
   if (!track) throw new CaptionsUnavailableError('The video has no usable caption track');
-  const playerRequestUrl = await capturePlayerCaptionRequestUrl({
-    document,
+  const playerRequestUrl = await captureSerially({
     playerElement,
     expectedVideoId: videoId,
     performanceObserverClass: window.PerformanceObserver,
@@ -102,9 +101,12 @@ function startLingotubePage({ window, document }) {
   const translationCache = new TranslationCache(extensionStorage);
   const chatRequestGate = createChatRequestGate({ window, document });
   const settingsLoading = loadSettingsWithRetries(settingsStore, { sleep });
+  const saveSettingsChange = createSettingsSaver(settingsStore);
+  // One capture at a time on the page: a stale capture of the previous video must finish
+  // restoring the subtitles button before the next capture reads its state.
+  const captureSerially = createSerialCaptionCapture();
 
   let settings = null;
-  let settingsSaveQueue = Promise.resolve();
   let currentVideoId = null;
   let isAdPlaying = false;
   let navigationCount = 0;
@@ -123,17 +125,21 @@ function startLingotubePage({ window, document }) {
     playerControls?.setRetryButtonVisible(canRetry);
   }
 
-  function changeSettings(changes) {
+  /**
+   * Applies changes to the page at once and stores only the changed fields.
+   * @param {object} changes the new values, applied to the in-memory settings
+   * @param {(stored: object) => object} [computeStoredChanges] what to store, computed from the
+   *   freshly loaded stored settings; by default `changes` itself
+   */
+  function changeSettings(changes, computeStoredChanges = () => changes) {
     settings = { ...settings, ...changes };
     playerControls?.applySettings(settings);
-    // The whole snapshot is saved, one save after another, so quick changes never undo each other.
-    const snapshot = settings;
-    settingsSaveQueue = settingsSaveQueue.then(() => settingsStore.save(snapshot)).catch(() => {});
+    saveSettingsChange(computeStoredChanges);
   }
 
   function loadCuesOfVideo(videoId, playerElement) {
     if (cuesLoadOfVideo?.videoId === videoId) return cuesLoadOfVideo.promise;
-    const load = { videoId, promise: loadYouTubeCues({ window, document, playerElement, videoId }) };
+    const load = { videoId, promise: loadYouTubeCues({ window, playerElement, videoId, captureSerially }) };
     cuesLoadOfVideo = load;
     load.promise.catch(() => {
       if (cuesLoadOfVideo === load) cuesLoadOfVideo = null;
@@ -221,14 +227,12 @@ function startLingotubePage({ window, document }) {
       },
       onLanguageChanged: (language) => {
         if (language.code === settings.language.code && language.name === settings.language.name) return;
-        // A typed language is remembered newest first, without case-insensitive duplicates.
-        const customLanguageNames = language.code === null
-          ? [
-            language.name,
-            ...settings.customLanguageNames.filter((name) => name.toLowerCase() !== language.name.toLowerCase()),
-          ].slice(0, MAX_REMEMBERED_TYPED_LANGUAGES)
-          : settings.customLanguageNames;
-        changeSettings({ language, customLanguageNames });
+        // The stored list is rebuilt from the stored names, not this page's copy, so names
+        // remembered by another tab are kept.
+        changeSettings(
+          { language, customLanguageNames: rememberTypedLanguage(settings.customLanguageNames, language) },
+          (stored) => ({ language, customLanguageNames: rememberTypedLanguage(stored.customLanguageNames, language) }),
+        );
         if (settings.enabled) startSubtitles().catch(reportUnexpectedError);
       },
       onTextScaleChanged: (scale) => {

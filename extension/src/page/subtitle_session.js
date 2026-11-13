@@ -192,6 +192,7 @@ export class SubtitleSession {
     this.#render(positionMs);
     if (this.#pump.stopReason !== null) return;
     // On pause the reserve is topped up once; after that no request is sent until playback moves on.
+    // Deliberate second guard: chooseNextBatch already sends nothing once the reserve is met.
     if (this.#isPaused() && this.#track.translatedAheadMs(positionMs) >= this.#schedule.reserveAheadMs) return;
     this.#pump.tick().catch(() => {});
   }
@@ -258,6 +259,7 @@ export class SubtitleSession {
   #resumeWhenRateLimitPassed() {
     if (this.#pump.stopReason !== 'rate-limited') return;
     if (this.#rateLimitedUntilMs !== null && this.#now() >= this.#rateLimitedUntilMs) {
+      // By design the auto-resume also re-sends cues that failed earlier, as the manual retry does.
       this.retry();
       return;
     }

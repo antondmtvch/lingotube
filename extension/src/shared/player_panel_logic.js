@@ -70,3 +70,19 @@ export function placeButtonNextToSubtitlesButton({ rightControls, subtitlesButto
   }
   rightControls.insertBefore(button, rightControls.firstChild);
 }
+
+const MAX_REMEMBERED_TYPED_LANGUAGES = 5;
+
+/**
+ * The remembered typed language names after choosing `language`: a typed language goes first,
+ * replacing a case-insensitive duplicate, and the list keeps five; a listed language changes nothing.
+ * @param {string[]} customLanguageNames
+ * @param {import('./language_choices.js').TargetLanguage} language
+ * @returns {string[]}
+ */
+export function rememberTypedLanguage(customLanguageNames, language) {
+  if (language.code !== null) return [...customLanguageNames];
+  const identity = language.name.toLowerCase();
+  const others = customLanguageNames.filter((name) => name.toLowerCase() !== identity);
+  return [language.name, ...others].slice(0, MAX_REMEMBERED_TYPED_LANGUAGES);
+}

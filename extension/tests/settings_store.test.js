@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_SETTINGS, SettingsStore, loadSettingsWithRetries } from '../src/page/settings_store.js';
+import { DEFAULT_SETTINGS, SettingsStore, createSettingsSaver, loadSettingsWithRetries } from '../src/page/settings_store.js';
 
 /** In-memory stand-in for the extension storage client. */
 function fakeStorage(initial = {}) {
@@ -124,4 +124,54 @@ test('settings retry: a store that keeps rejecting gives fresh defaults after th
   assert.equal(store.calls, 3);
   assert.deepEqual(settings, DEFAULT_SETTINGS);
   assert.ok(!Object.isFrozen(settings) && !Object.isFrozen(settings.language));
+});
+
+// --- Saving changes from the page (Task 12 fix): only the changed fields, merged into fresh stored values. ---
+
+test('settings saver: saving {overlayPosition} keeps an enabled and a language changed in between', async () => {
+  const storage = fakeStorage();
+  const saveSettingsChange = createSettingsSaver(new SettingsStore(storage));
+  await saveSettingsChange({ enabled: true });
+  // Another tab changes the language after this page loaded its settings.
+  storage.data.set('settings', { ...storage.data.get('settings'), language: { code: 'en', name: 'English' } });
+  await saveSettingsChange({ overlayPosition: { centerXFraction: 0.3, bottomYFraction: 0.7 } });
+  const stored = await new SettingsStore(storage).load();
+  assert.equal(stored.enabled, true);
+  assert.deepEqual(stored.language, { code: 'en', name: 'English' });
+  assert.deepEqual(stored.overlayPosition, { centerXFraction: 0.3, bottomYFraction: 0.7 });
+});
+
+test('settings saver: a change computed from the stored settings sees the fresh stored values', async () => {
+  const storage = fakeStorage({ settings: { customLanguageNames: ['Klingon'] } });
+  const saveSettingsChange = createSettingsSaver(new SettingsStore(storage));
+  const seen = [];
+  await saveSettingsChange((stored) => {
+    seen.push(stored.customLanguageNames);
+    return { customLanguageNames: ['Elvish', ...stored.customLanguageNames] };
+  });
+  assert.deepEqual(seen, [['Klingon']]);
+  assert.deepEqual((await new SettingsStore(storage).load()).customLanguageNames, ['Elvish', 'Klingon']);
+});
+
+test('settings saver: quick successive changes run one after another and a failure does not stop the queue', async () => {
+  const storage = fakeStorage();
+  let failNextSet = true;
+  const originalSet = storage.set;
+  storage.set = async (items) => {
+    if (failNextSet) {
+      failNextSet = false;
+      throw new Error('extension storage did not answer');
+    }
+    return originalSet(items);
+  };
+  const saveSettingsChange = createSettingsSaver(new SettingsStore(storage));
+  const results = await Promise.all([
+    saveSettingsChange({ textScale: 1.2 }),
+    saveSettingsChange({ enabled: true }),
+    saveSettingsChange({ textScale: 1.4 }),
+  ]);
+  assert.equal(results[0], null);
+  const stored = await new SettingsStore(storage).load();
+  assert.equal(stored.enabled, true);
+  assert.equal(stored.textScale, 1.4);
 });

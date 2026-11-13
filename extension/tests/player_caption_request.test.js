@@ -4,7 +4,7 @@ import {
   mergePlayerRequestParameters,
   isPlayerCaptionRequest,
   capturePlayerCaptionRequestUrl,
-  captureDiagnostics,
+  createSerialCaptionCapture,
   activateSubtitleButton,
 } from '../src/page/player_caption_request.js';
 
@@ -163,43 +163,33 @@ test('capture takes a buffered pot entry of the expected video', async () => {
 test('capture clicks the button inside the player, not the first one in the document', async () => {
   const env = createFakeEnvironment({});
   const wrongButton = { clicks: 0, getAttribute: () => 'false', click() { this.clicks += 1; } };
-  const observations = [];
   const url = await capturePlayerCaptionRequestUrl({
     ...env,
     document: { querySelector: () => wrongButton, querySelectorAll: () => [wrongButton, env.button] },
-    onButtonObserved: (observation) => observations.push(observation),
   });
   assert.match(url, /pot=NEW/);
   assert.equal(wrongButton.clicks, 0);
   assert.deepEqual(env.clicks, [true, false]);
-  assert.equal(observations.length, 1);
-  assert.equal(observations[0].subtitleButtonPressedBefore, false);
-  assert.equal(observations[0].subtitleButtonPressedAfterFirstClick, true);
-  assert.equal(observations[0].subtitleButtonCountInDocument, 2);
-  for (const value of Object.values(observations[0])) {
-    assert.ok(typeof value === 'number' || typeof value === 'boolean');
-  }
 });
 
 test('capture turns on an event-only button with the full pointer sequence before waiting for the request', async () => {
   const env = createFakeEnvironment({});
   const eventOnlyButton = createEventOnlyButton({ toggleOn: 'click' });
   const player = { ...env.playerElement, querySelector: () => eventOnlyButton };
-  const pressedWhenRequestAwaited = [];
-  const observations = [];
+  const pressedDuringSleeps = [];
   await capturePlayerCaptionRequestUrl({
     ...env,
     playerElement: player,
     timeoutMs: 200,
-    onButtonObserved: (observation) => {
-      observations.push(observation);
-      pressedWhenRequestAwaited.push(eventOnlyButton.getAttribute('aria-pressed'));
+    sleep: async (ms) => {
+      pressedDuringSleeps.push(eventOnlyButton.getAttribute('aria-pressed'));
+      await env.sleep(ms);
     },
   });
   assert.deepEqual(eventOnlyButton.receivedTypes.slice(0, 4), ['pointerdown', 'mousedown', 'mouseup', 'click']);
-  assert.deepEqual(pressedWhenRequestAwaited, ['true']);
-  assert.equal(observations[0].subtitleButtonPressedAfterActivation, true);
-  assert.equal(observations[0].activationFallbackUsed, false);
+  // The settle pause and the polls for the request all happen while the button is pressed.
+  assert.ok(pressedDuringSleeps.filter((pressed) => pressed === 'true').length >= 3, String(pressedDuringSleeps));
+  assert.equal(eventOnlyButton.state, false);
   assert.equal(eventOnlyButton.methodClicks, 0);
 });
 
@@ -212,26 +202,40 @@ test('the sequence, not only click, is dispatched: a mousedown-only button turns
   assert.equal(eventOnlyButton.methodClicks, 0);
 });
 
-test('captureDiagnostics counts timedtext entries and returns only booleans and numbers', () => {
-  const entries = [
-    { name: 'https://www.youtube.com/api/timedtext?v=abc&pot=P' },
-    { name: 'https://www.youtube.com/api/timedtext?v=other&pot=P' },
-    { name: 'https://www.youtube.com/api/timedtext?v=abc' },
-    { name: 'https://www.youtube.com/api/timedtext?lang=en' },
-    { name: 'https://www.youtube.com/watch?v=abc&pot=P' },
-  ];
-  const player = { getPlayerResponse: () => ({}), querySelector: (selector) => (selector === '.ytp-subtitles-button' ? {} : null) };
-  const diagnostics = captureDiagnostics(player, 'abc', entries);
-  assert.deepEqual(diagnostics, {
-    expectedVideoIdLength: 3,
-    timedtextEntriesSeen: 4,
-    timedtextWithPot: 2,
-    timedtextWithMatchingVideo: 2,
-    timedtextWithAnyV: 3,
-    playerHasGetPlayerResponse: true,
-    subtitlesButtonFound: true,
+test('serial captures: the second starts only after the first has restored the button', async () => {
+  const env = createFakeEnvironment({ subtitlesOn: true, requestOnClick: false });
+  const steps = [];
+  const captureSerially = createSerialCaptionCapture(async (options) => {
+    steps.push(`start ${options.expectedVideoId} pressed=${env.button.state}`);
+    try {
+      return await capturePlayerCaptionRequestUrl(options);
+    } finally {
+      steps.push(`end ${options.expectedVideoId} pressed=${env.button.state} hidden=${env.classes.size > 0}`);
+    }
   });
-  for (const value of Object.values(diagnostics)) {
-    assert.ok(typeof value === 'number' || typeof value === 'boolean');
-  }
+  const results = await Promise.all([
+    captureSerially({ ...env, expectedVideoId: 'old', timeoutMs: 200 }),
+    captureSerially({ ...env, expectedVideoId: 'new', timeoutMs: 200 }),
+  ]);
+  assert.deepEqual(results, [null, null]);
+  assert.deepEqual(steps, [
+    'start old pressed=true',
+    'end old pressed=true hidden=false',
+    'start new pressed=true',
+    'end new pressed=true hidden=false',
+  ]);
+  assert.equal(env.button.state, true);
+});
+
+test('serial captures: a failed capture does not block the next one', async () => {
+  let calls = 0;
+  const captureSerially = createSerialCaptionCapture(async () => {
+    calls += 1;
+    if (calls === 1) throw new Error('capture failed');
+    return 'url';
+  });
+  const first = captureSerially({});
+  const second = captureSerially({});
+  await assert.rejects(first);
+  assert.equal(await second, 'url');
 });

@@ -5,6 +5,7 @@ import {
   languageFromTypedText,
   menuValueForLanguage,
   placeButtonNextToSubtitlesButton,
+  rememberTypedLanguage,
   selectValueAfterClose,
   steppedTextScale,
 } from '../src/shared/player_panel_logic.js';
@@ -89,4 +90,13 @@ test('confirming a typed name equal to the current custom language leaves the se
   const typed = languageFromTypedText('  Esperanto ');
   assert.equal(selectValueAfterClose(current), menuValueForLanguage(typed));
   assert.equal(selectValueAfterClose(current), 'custom:Esperanto');
+});
+
+test('a typed language is remembered newest first, without case-insensitive duplicates, at most five', () => {
+  assert.deepEqual(rememberTypedLanguage(['Klingon', 'Elvish'], { code: null, name: 'elvish' }), ['elvish', 'Klingon']);
+  assert.deepEqual(
+    rememberTypedLanguage(['a', 'b', 'c', 'd', 'e'], { code: null, name: 'f' }),
+    ['f', 'a', 'b', 'c', 'd'],
+  );
+  assert.deepEqual(rememberTypedLanguage(['Klingon'], { code: 'de', name: 'German' }), ['Klingon']);
 });
