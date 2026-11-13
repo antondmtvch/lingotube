@@ -1,6 +1,7 @@
 // Classic content script (ISOLATED world). A classic content script cannot
 // import extension modules, so the storage host is plain code here and then
-// the page module is injected into the MAIN world through a module script tag.
+// the page code is injected into the MAIN world as one classic script tag: src/page/bundle.js,
+// generated from src/page/main.js by scripts/build-page-bundle.mjs.
 
 // --- Duplicated from src/shared/storage_messages.js (canonical copy). ---
 // tests/loader_parity.test.js fails if this block drifts from that module.
@@ -50,9 +51,9 @@ function startStorageHost({ window, storageArea }) {
 try {
   startStorageHost({ window, storageArea: chrome.storage.local });
 
+  // A classic script: Chrome refuses to load an extension module script from the page.
   const pageScript = document.createElement('script');
-  pageScript.type = 'module';
-  pageScript.src = chrome.runtime.getURL('src/page/main.js');
+  pageScript.src = chrome.runtime.getURL('src/page/bundle.js');
   document.documentElement.appendChild(pageScript);
 } catch {
   console.error('lingotube: page module did not start');
