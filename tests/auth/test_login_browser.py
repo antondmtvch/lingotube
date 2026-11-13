@@ -335,3 +335,22 @@ async def test_shut_down_is_safe_twice_and_after_exit():
     await browser.shut_down(None)
     await browser.shut_down(None)
     assert process.calls == []
+
+
+async def test_launch_maps_spawn_os_error_to_auth_error_without_exception_text(
+    tmp_path,
+):
+    async def spawn(*args, **kwargs):
+        raise FileNotFoundError("LEAKME-secret-path")
+
+    with pytest.raises(AuthError) as info:
+        await launch_login_browser(
+            executable=Path("chrome"),
+            profile_dir=tmp_path,
+            mode="window",
+            start_url="u",
+            spawn=spawn,
+        )
+    assert info.value.message == "Браузер не запустился."
+    assert "LEAKME" not in info.value.message + (info.value.hint or "")
+    assert info.value.__cause__ is None

@@ -213,16 +213,22 @@ async def launch_login_browser(
     """Start the browser in the login profile and wait for its DevTools endpoint."""
     if is_login_profile_in_use(profile_dir):
         raise _profile_busy_error()
-    profile_dir.mkdir(parents=True, exist_ok=True)
     port_file = profile_dir / _DEVTOOLS_PORT_FILE_NAME
-    port_file.unlink(missing_ok=True)
-
-    process = await spawn(
-        *browser_command_line(executable, profile_dir, mode, start_url),
-        stdin=asyncio.subprocess.DEVNULL,
-        stdout=asyncio.subprocess.DEVNULL,
-        stderr=asyncio.subprocess.DEVNULL,
-    )
+    try:
+        profile_dir.mkdir(parents=True, exist_ok=True)
+        port_file.unlink(missing_ok=True)
+        process = await spawn(
+            *browser_command_line(executable, profile_dir, mode, start_url),
+            stdin=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+    except OSError:
+        # No exception text: it may contain paths; the message is fixed.
+        raise AuthError(
+            message="Браузер не запустился.",
+            hint="Проверьте установку Chrome или Edge и повторите `lingotube login`.",
+        ) from None
     try:
         async with asyncio.timeout(port_file_timeout):
             while True:
