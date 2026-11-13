@@ -80,6 +80,46 @@ def test_cookie_secrecy_rule():
     assert "never read" in skill_text("SKILL.md").lower()
 
 
+def test_setup_exists_and_linked():
+    assert (SKILL_DIR / "references" / "setup.md").is_file()
+    assert "references/setup.md" in skill_text("SKILL.md")
+
+
+def test_setup_install_commands_verbatim():
+    t = skill_text("references/setup.md")
+    assert (
+        'powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"'
+        in t
+    )
+    assert "curl -LsSf https://astral.sh/uv/install.sh | sh" in t
+    assert "uv tool install git+https://github.com/antondmtvch/lingotube" in t
+
+
+def test_setup_steps_in_order():
+    t = skill_text("references/setup.md")
+    headings = (
+        "## 0. Consent",
+        "## 1. uv",
+        "## 2. lingotube",
+        "## 3. Cookies",
+        "## 4. Doctor",
+    )
+    idx = [t.index(h) for h in headings]
+    assert idx == sorted(idx)
+
+
+def test_setup_reentry_on_exit_4():
+    t = skill_text("references/setup.md")
+    assert "exit code 4" in t
+    assert "only step 3" in t
+
+
+def test_setup_chat_unavailable_stops():
+    t = skill_text("references/setup.md").lower()
+    assert "unavailable" in t
+    assert "stop" in t
+
+
 def test_readme_install_commands():
     t = (ROOT / "README.md").read_text(encoding="utf-8")
     assert "npx skills add antondmtvch/lingotube" in t
