@@ -11,11 +11,8 @@ from lingotube.auth.devtools import (
     BrowserCookie,
     DevToolsConnectionClosed,
     DevToolsError,
-    clear_all_cookies,
     close_browser,
     connect_to_browser_devtools,
-    count_open_pages,
-    open_page,
     read_all_cookies,
 )
 
@@ -121,32 +118,6 @@ async def test_close_browser_tolerates_connection_drop(cdp_server):
     url = await cdp_server(handler)
     async with connect_to_browser_devtools(url) as connection:
         await close_browser(connection)
-
-
-async def test_count_open_pages_counts_only_pages(cdp_server):
-    infos = [{"type": "page"}, {"type": "page"}, {"type": "service_worker"}]
-    url = await cdp_server(replying({"targetInfos": infos}))
-    async with connect_to_browser_devtools(url) as connection:
-        assert await count_open_pages(connection) == 2
-
-
-async def test_open_page_and_clear_all_cookies_send_expected_commands(cdp_server):
-    received: list[dict] = []
-
-    async def handler(websocket: ServerConnection) -> None:
-        async for raw in websocket:
-            message = json.loads(raw)
-            received.append(message)
-            await websocket.send(json.dumps({"id": message["id"], "result": {}}))
-
-    url = await cdp_server(handler)
-    async with connect_to_browser_devtools(url) as connection:
-        await open_page(connection, "https://example.test/")
-        await clear_all_cookies(connection)
-    assert [(m["method"], m.get("params")) for m in received] == [
-        ("Target.createTarget", {"url": "https://example.test/"}),
-        ("Storage.clearCookies", None),
-    ]
 
 
 async def test_os_error_from_caller_body_propagates_unchanged(cdp_server):

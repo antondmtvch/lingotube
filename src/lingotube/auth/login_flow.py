@@ -12,13 +12,8 @@ from pathlib import Path
 from lingotube.auth.base import LOGIN_HINT, is_allowed_domain
 from lingotube.auth.devtools import (
     BrowserCookie,
-    DevToolsConnectionClosed,
     DevToolsError,
-    clear_all_cookies,
-    close_blank_pages_except,
     connect_to_browser_devtools,
-    count_open_pages,
-    open_page,
     read_all_cookies,
 )
 from lingotube.auth.login_browser import (
@@ -28,6 +23,7 @@ from lingotube.auth.login_browser import (
     find_browser_executable,
     is_login_profile_in_use,
     launch_login_browser,
+    launch_sign_in_window,
 )
 from lingotube.auth.login_store import LoginCookieStore, SavedLogin
 from lingotube.config import LoginPaths
@@ -39,14 +35,12 @@ LOGIN_PAGE_URL = (
 )
 REFRESH_PAGE_URL = "https://www.youtube.com/"
 LOGIN_WAIT_SECONDS = 600.0
-LOGIN_POLL_SECONDS = 2.0
-LOGIN_INFO_GRACE_SECONDS = 15.0
+WINDOW_POLL_SECONDS = 1.0
 REFRESH_WAIT_SECONDS = 15.0
 REFRESH_POLL_SECONDS = 1.0
 ROTATING_COOKIE = "__Secure-1PSIDTS"
 
 _SAPISID_COOKIE_NAMES = ("SAPISID", "__Secure-3PAPISID")
-_LOGIN_INFO_COOKIE = "LOGIN_INFO"
 
 
 def youtube_cookies_only(cookies: Iterable[BrowserCookie]) -> dict[str, str]:
@@ -70,13 +64,6 @@ def _has_sapisid(cookies: Iterable[BrowserCookie]) -> bool:
 def _is_youtube_domain(domain: str) -> bool:
     bare = domain.lower().lstrip(".")
     return bare == "youtube.com" or bare.endswith(".youtube.com")
-
-
-def _has_login_info(cookies: Iterable[BrowserCookie]) -> bool:
-    return any(
-        cookie.name == _LOGIN_INFO_COOKIE and _is_youtube_domain(cookie.domain)
-        for cookie in cookies
-    )
 
 
 def _login_window_closed_error() -> AuthError:
@@ -107,65 +94,84 @@ async def sign_in_with_login_browser(
     paths: LoginPaths,
     store: LoginCookieStore,
     notify: Callable[[str], None],
+    launch_window=launch_sign_in_window,
     launch=launch_login_browser,
     connect=connect_to_browser_devtools,
     sleep=asyncio.sleep,
     clock=time.monotonic,
 ) -> SavedLogin:
-    """Open a login window, wait for the person to sign in, save the cookies."""
-    running = await launch(executable, paths.profile_dir, "window", "about:blank")
-    connection = None
+    """Open a sign-in window without a debugging port, wait until the person closes
+    it, then read the cookies of the login profile in a headless launch."""
+    window = await launch_window(executable, paths.profile_dir, LOGIN_PAGE_URL)
     try:
-        async with connect(running.websocket_url) as connection:
-            try:
-                await clear_all_cookies(connection)
-                login_target_id = await open_page(connection, LOGIN_PAGE_URL)
-                # The start tab is blank; if it stayed, closing only the login tab
-                # would not look like a closed window.
-                await close_blank_pages_except(connection, login_target_id)
-                notify("Откройте окно браузера и войдите в YouTube; жду до 10 минут.")
-                cookies = await _wait_for_sign_in(
-                    connection=connection, sleep=sleep, clock=clock
-                )
-            finally:
-                await running.shut_down(connection)
-        saved = SavedLogin(browser=browser, cookies=youtube_cookies_only(cookies))
-        await _save_login(store, saved)
-        return saved
-    except DevToolsConnectionClosed:
-        raise _login_window_closed_error() from None
+        notify(
+            "Войдите в YouTube в открывшемся окне и закройте окно браузера; "
+            "жду до 10 минут."
+        )
+        await wait_for_sign_in_window_to_close(window=window, sleep=sleep, clock=clock)
+    finally:
+        # Ctrl+C or a timeout: close our own window; no-op once it has exited.
+        await window.close()
+    try:
+        cookies = await read_cookies_from_login_profile(
+            executable=executable,
+            profile_dir=paths.profile_dir,
+            mode="headless",
+            start_url="about:blank",
+            read_from_connection=read_all_cookies,
+            launch=launch,
+            connect=connect,
+        )
     except DevToolsError:
         raise AuthError(
-            message="Не удалось связаться с окном входа.",
+            message="Не удалось прочитать вход из профиля lingotube.",
             hint="Повторите lingotube login.",
         ) from None
-    finally:
-        # Load-bearing: a second Ctrl+C aborts the inner shut_down above; this one
-        # completes the close (shut_down is a no-op once the process has exited).
-        await running.shut_down(connection)
+    if not _has_sapisid(cookies):
+        raise _login_window_closed_error()
+    saved = SavedLogin(browser=browser, cookies=youtube_cookies_only(cookies))
+    await _save_login(store, saved)
+    return saved
 
 
-async def _wait_for_sign_in(connection, sleep, clock) -> list[BrowserCookie]:
+async def wait_for_sign_in_window_to_close(window, sleep, clock) -> None:
+    """Poll our own window process until it exits; AuthError after LOGIN_WAIT_SECONDS."""
     deadline = clock() + LOGIN_WAIT_SECONDS
-    sapisid_seen_at: float | None = None
-    while True:
-        if await count_open_pages(connection) == 0:
-            raise _login_window_closed_error()
-        cookies = await read_all_cookies(connection)
-        if _has_sapisid(cookies):
-            if sapisid_seen_at is None:
-                sapisid_seen_at = clock()
-            if (
-                _has_login_info(cookies)
-                or clock() - sapisid_seen_at >= LOGIN_INFO_GRACE_SECONDS
-            ):
-                return cookies
+    while not window.has_exited:
         if clock() >= deadline:
             raise AuthError(
                 message="За 10 минут вход в YouTube не выполнен.",
                 hint="Повторите lingotube login.",
             )
-        await sleep(LOGIN_POLL_SECONDS)
+        await sleep(WINDOW_POLL_SECONDS)
+
+
+async def read_cookies_from_login_profile(
+    executable: Path,
+    profile_dir: Path,
+    mode: LaunchMode,
+    start_url: str,
+    read_from_connection,
+    launch=launch_login_browser,
+    connect=connect_to_browser_devtools,
+) -> list[BrowserCookie]:
+    """Start the login profile with a debugging port, read cookies, shut it down.
+
+    `read_from_connection` is an async callable taking the DevTools connection and
+    returning the cookies. The browser started here never outlives this call.
+    """
+    running = await launch(executable, profile_dir, mode, start_url)
+    connection = None
+    try:
+        async with connect(running.websocket_url) as connection:
+            try:
+                return await read_from_connection(connection)
+            finally:
+                await running.shut_down(connection)
+    finally:
+        # Load-bearing: a second Ctrl+C aborts the inner shut_down above; this one
+        # completes the close (shut_down is a no-op once the process has exited).
+        await running.shut_down(connection)
 
 
 @dataclass(frozen=True)
@@ -193,43 +199,41 @@ async def refresh_cookies_from_login_profile(
         )
     if is_login_profile_in_use(paths.profile_dir):
         raise _profile_busy_auth_error()
+    previous_value = saved.cookies.get(ROTATING_COOKIE)
+
+    async def wait_for_rotation(connection) -> list[BrowserCookie]:
+        return await _wait_for_rotated_cookie(
+            connection=connection,
+            previous_value=previous_value,
+            sleep=sleep,
+            clock=clock,
+        )
+
     try:
-        running = await launch(executable, paths.profile_dir, mode, REFRESH_PAGE_URL)
+        cookies = await read_cookies_from_login_profile(
+            executable=executable,
+            profile_dir=paths.profile_dir,
+            mode=mode,
+            start_url=REFRESH_PAGE_URL,
+            read_from_connection=wait_for_rotation,
+            launch=launch,
+            connect=connect,
+        )
     except ProfileBusyError:
         raise _profile_busy_auth_error() from None
-    connection = None
-    try:
-        async with connect(running.websocket_url) as connection:
-            try:
-                cookies = await _wait_for_rotated_cookie(
-                    connection=connection,
-                    previous_value=saved.cookies.get(ROTATING_COOKIE),
-                    sleep=sleep,
-                    clock=clock,
-                )
-            finally:
-                await running.shut_down(connection)
-        if not _has_sapisid(cookies):
-            raise AuthError(
-                message="Вход в профиле lingotube больше не действует.",
-                hint=LOGIN_HINT,
-            )
-        refreshed = SavedLogin(
-            browser=saved.browser, cookies=youtube_cookies_only(cookies)
-        )
-        await _save_login(store, refreshed)
-        new_rotating_value = refreshed.cookies.get(ROTATING_COOKIE)
-        rotated = (
-            new_rotating_value is not None
-            and new_rotating_value != saved.cookies.get(ROTATING_COOKIE)
-        )
-        return RefreshResult(saved=refreshed, rotated=rotated)
     except DevToolsError:
         raise AuthError(
             message="Не удалось обновить вход в профиле lingotube.", hint=LOGIN_HINT
         ) from None
-    finally:
-        await running.shut_down(connection)
+    if not _has_sapisid(cookies):
+        raise AuthError(
+            message="Вход в профиле lingotube больше не действует.", hint=LOGIN_HINT
+        )
+    refreshed = SavedLogin(browser=saved.browser, cookies=youtube_cookies_only(cookies))
+    await _save_login(store, refreshed)
+    new_rotating_value = refreshed.cookies.get(ROTATING_COOKIE)
+    rotated = new_rotating_value is not None and new_rotating_value != previous_value
+    return RefreshResult(saved=refreshed, rotated=rotated)
 
 
 async def _wait_for_rotated_cookie(

@@ -105,36 +105,6 @@ async def read_all_cookies(connection: DevToolsConnection) -> list[BrowserCookie
     ]
 
 
-async def clear_all_cookies(connection: DevToolsConnection) -> None:
-    await connection.send_command("Storage.clearCookies")
-
-
-async def open_page(connection: DevToolsConnection, url: str) -> str | None:
-    """Open `url` in a new tab; return the new target id when the browser reports it."""
-    result = await connection.send_command("Target.createTarget", {"url": url})
-    return result.get("targetId")
-
-
-async def close_blank_pages_except(
-    connection: DevToolsConnection, kept_target_id: str | None
-) -> None:
-    """Close every about:blank tab except `kept_target_id` (the browser's start tab)."""
-    result = await connection.send_command("Target.getTargets")
-    for target in result.get("targetInfos", []):
-        is_blank_page = (
-            target.get("type") == "page" and target.get("url") == "about:blank"
-        )
-        if is_blank_page and target.get("targetId") != kept_target_id:
-            await connection.send_command(
-                "Target.closeTarget", {"targetId": target["targetId"]}
-            )
-
-
-async def count_open_pages(connection: DevToolsConnection) -> int:
-    result = await connection.send_command("Target.getTargets")
-    return sum(1 for t in result.get("targetInfos", []) if t.get("type") == "page")
-
-
 async def close_browser(connection: DevToolsConnection) -> None:
     try:
         await connection.send_command("Browser.close")

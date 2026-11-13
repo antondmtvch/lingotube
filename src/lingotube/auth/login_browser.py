@@ -108,6 +108,24 @@ def browser_command_line(
     ]
 
 
+def sign_in_window_command_line(
+    executable: Path, profile_dir: Path, login_url: str
+) -> list[str]:
+    """Argument list (no shell) for the sign-in window.
+
+    No `--remote-debugging-*` and no automation flags: a browser with a debugging
+    port has navigator.webdriver set, and Google then refuses the sign-in.
+    """
+    return [
+        str(executable),
+        f"--user-data-dir={profile_dir}",
+        "--no-first-run",
+        "--no-default-browser-check",
+        "--disable-background-mode",
+        login_url,
+    ]
+
+
 def is_login_profile_in_use(profile_dir: Path, platform: str = sys.platform) -> bool:
     """True when a live browser holds the lock of the login profile."""
     if platform == "win32":
@@ -255,3 +273,58 @@ async def launch_login_browser(
         message="Браузер не запустился.",
         hint="Проверьте установку Chrome или Edge и повторите `lingotube login`.",
     )
+
+
+class SignInWindow:
+    """A visible browser process started by lingotube for the person to sign in."""
+
+    def __init__(self, process: asyncio.subprocess.Process) -> None:
+        self._process = process
+
+    @property
+    def has_exited(self) -> bool:
+        return self._process.returncode is not None
+
+    async def close(self) -> None:
+        """Terminate, then kill, our own process; no-op once it has exited."""
+        await RunningLoginBrowser(websocket_url="", process=self._process).shut_down(
+            None
+        )
+
+
+async def launch_sign_in_window(
+    executable: Path,
+    profile_dir: Path,
+    login_url: str,
+    spawn: Callable[
+        ..., Awaitable[asyncio.subprocess.Process]
+    ] = asyncio.create_subprocess_exec,
+) -> SignInWindow:
+    """Wipe the login profile, then open the sign-in window without a debugging port."""
+    if is_login_profile_in_use(profile_dir):
+        raise _profile_busy_error()
+    try:
+        if profile_dir.exists():
+            shutil.rmtree(profile_dir)
+        profile_dir.mkdir(parents=True, exist_ok=True)
+    except PermissionError:
+        # No exception text: it may contain paths.
+        raise _profile_busy_error() from None
+    except OSError:
+        raise AuthError(
+            message="Не удалось подготовить профиль входа lingotube.",
+            hint="Проверьте права на папку профиля и повторите `lingotube login`.",
+        ) from None
+    try:
+        process = await spawn(
+            *sign_in_window_command_line(executable, profile_dir, login_url),
+            stdin=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+    except OSError:
+        raise AuthError(
+            message="Браузер не запустился.",
+            hint="Проверьте установку Chrome или Edge и повторите `lingotube login`.",
+        ) from None
+    return SignInWindow(process)

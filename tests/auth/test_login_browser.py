@@ -16,6 +16,8 @@ from lingotube.auth.login_browser import (
     find_first_installed_browser,
     is_login_profile_in_use,
     launch_login_browser,
+    launch_sign_in_window,
+    sign_in_window_command_line,
 )
 from lingotube.errors import AuthError, ProfileBusyError
 
@@ -80,7 +82,7 @@ def test_first_installed_prefers_chrome_then_edge():
 
 
 def test_command_line_has_no_automation_or_address_flags():
-    args = browser_command_line(Path("chrome"), Path("p"), "window", "https://x/")
+    args = browser_command_line(Path("chrome"), Path("p"), "headless", "https://x/")
     assert not any(
         a.startswith(("--enable-automation", "--remote-debugging-address"))
         for a in args
@@ -354,3 +356,105 @@ async def test_launch_maps_spawn_os_error_to_auth_error_without_exception_text(
     assert info.value.message == "Браузер не запустился."
     assert "LEAKME" not in info.value.message + (info.value.hint or "")
     assert info.value.__cause__ is None
+
+
+LOGIN_URL = "https://accounts.google.com/ServiceLogin?service=youtube"
+
+
+def test_sign_in_window_command_line_has_no_debugging_or_automation_flags():
+    args = sign_in_window_command_line(Path("chrome"), Path("p"), LOGIN_URL)
+    assert not any(
+        a.startswith(("--remote-debugging", "--enable-automation")) for a in args
+    )
+    assert "--disable-background-mode" in args
+    assert "--no-first-run" in args
+    assert "--no-default-browser-check" in args
+    assert "--user-data-dir=p" in args
+    assert args[0] == "chrome" and args[-1] == LOGIN_URL
+
+
+def test_sign_in_window_profile_with_spaces_and_cyrillic_is_one_argument():
+    profile = Path(r"C:\Users\Антон Иванов\AppData\Local\lingotube\login-profile")
+    args = sign_in_window_command_line(Path("chrome.exe"), profile, LOGIN_URL)
+    assert f"--user-data-dir={profile}" in args
+
+
+async def test_sign_in_window_deletes_profile_before_launch(tmp_path):
+    profile = tmp_path / "login-profile"
+    (profile / "Default").mkdir(parents=True)
+    (profile / "Default" / "Cookies").write_text("old account")
+    seen = {}
+
+    async def spawn(*args, **kwargs):
+        seen["old_present"] = (profile / "Default" / "Cookies").exists()
+        seen["args"] = args
+        return FakeProcess()
+
+    window = await launch_sign_in_window(
+        executable=Path("chrome"),
+        profile_dir=profile,
+        login_url=LOGIN_URL,
+        spawn=spawn,
+    )
+    assert seen["old_present"] is False
+    assert not any(a.startswith("--remote-debugging") for a in seen["args"])
+    assert not window.has_exited
+
+
+async def test_sign_in_window_profile_locked_during_delete_is_profile_busy(
+    tmp_path, monkeypatch
+):
+    def refuse(path, *args, **kwargs):
+        raise PermissionError("LEAKME-path")
+
+    monkeypatch.setattr(login_browser.shutil, "rmtree", refuse)
+    (tmp_path / "p").mkdir()
+
+    async def spawn(*args, **kwargs):
+        raise AssertionError("must not spawn")
+
+    with pytest.raises(ProfileBusyError) as info:
+        await launch_sign_in_window(
+            executable=Path("chrome"),
+            profile_dir=tmp_path / "p",
+            login_url=LOGIN_URL,
+            spawn=spawn,
+        )
+    assert "LEAKME" not in str(info.value)
+    assert info.value.hint == PROFILE_BUSY_HINT
+
+
+async def test_sign_in_window_busy_profile_is_checked_before_delete(
+    tmp_path, monkeypatch
+):
+    (tmp_path / "keep").write_text("x")
+    monkeypatch.setattr(login_browser, "is_login_profile_in_use", lambda *a, **k: True)
+
+    async def spawn(*args, **kwargs):
+        raise AssertionError("must not spawn")
+
+    with pytest.raises(ProfileBusyError):
+        await launch_sign_in_window(
+            executable=Path("chrome"),
+            profile_dir=tmp_path,
+            login_url=LOGIN_URL,
+            spawn=spawn,
+        )
+    assert (tmp_path / "keep").exists()
+
+
+async def test_sign_in_window_close_terminates_only_own_process(tmp_path):
+    process = FakeProcess()
+
+    async def spawn(*args, **kwargs):
+        return process
+
+    window = await launch_sign_in_window(
+        executable=Path("chrome"),
+        profile_dir=tmp_path / "p",
+        login_url=LOGIN_URL,
+        spawn=spawn,
+    )
+    await window.close()
+    assert process.calls == ["terminate"]
+    assert window.has_exited
