@@ -102,10 +102,7 @@ def test_degenerate_interval_kept():
 
 
 def test_continuation_line_joins_previous():
-    assert (
-        parse_answer(text="(0:02-0:04) Первая\nпродолжение\n(0:05-0:06) Вторая")[0].text
-        == "Первая продолжение"
-    )
+    assert parse_answer(text="(0:02-0:04) Первая\nпродолжение\n(0:05-0:06) Вторая")[0].text == "Первая продолжение"
 
 
 def test_preamble_and_outro_dropped():

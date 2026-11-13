@@ -146,9 +146,7 @@ def panel_response(answer: str) -> dict:
 
 
 def prompt_of(request: httpx.Request) -> str:
-    return json.loads(s=request.content)["formData"]["inputComposerFormData"][
-        "userInputText"
-    ]
+    return json.loads(s=request.content)["formData"]["inputComposerFormData"]["userInputText"]
 
 
 # --- YouTube scenarios ---
@@ -387,9 +385,7 @@ class Leak:
 
     def browser_loader(self, browser: str) -> dict[str, str]:
         self.loaded_browsers.append(browser)
-        if self.scenario == "browser_ok" or (
-            self.scenario == "ok" and browser == "firefox"
-        ):
+        if self.scenario == "browser_ok" or (self.scenario == "ok" and browser == "firefox"):
             return {"SAPISID": SAPISID, "SID": SID}
         raise OSError(f"cannot decrypt {SID} in C:/profiles/{SAPISID}/Cookies")
 
@@ -409,9 +405,7 @@ class Leak:
             err=err,
         )
         # never touch a real browser profile in tests
-        container.browser_loader.override(
-            provider=providers.Object(self.browser_loader)
-        )
+        container.browser_loader.override(provider=providers.Object(self.browser_loader))
         return AppContext(
             container=container,
             out=out,
@@ -532,10 +526,7 @@ def test_subs_never_leaks(
         assert youtube_saw_cookies(router=router)  # the secrets really were in play
     if scenario.startswith("tr_"):
         model_calls = [c for c in router.calls if c.request.url.host == "model.test"]
-        assert (
-            model_calls
-            and model_calls[0].request.headers["authorization"] == f"Bearer {KEY}"
-        )
+        assert model_calls and model_calls[0].request.headers["authorization"] == f"Bearer {KEY}"
     expected = {"ok": 0, "tr_ok": 0, "browser_ok": 0, "incomplete": 5}.get(scenario)
     if expected is not None:
         assert code == expected, err
@@ -806,9 +797,7 @@ def test_doctor_never_leaks(
     assert leak.loaded_browsers
     if scenario not in ("no_cookies", "browser_fails"):
         assert youtube_saw_cookies(router=router)
-    assert not any(
-        c.request.url.path.endswith("get_panel") for c in router.calls
-    )  # open() only, never ask
+    assert not any(c.request.url.path.endswith("get_panel") for c in router.calls)  # open() only, never ask
     expected = {
         "ok": 0,
         "browser_ok": 0,

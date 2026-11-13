@@ -6,6 +6,7 @@ runs the async body under `asyncio.run`, turns errors into exit codes and messag
 """
 
 import asyncio
+import contextlib
 import inspect
 import json
 import math
@@ -34,7 +35,7 @@ INTERRUPTED = 130
 
 @dataclass
 class AppContext:
-    container: "Container"
+    container: Container
     out: TextIO
     err: TextIO
     cwd: Path  # where default output files go and relative paths resolve
@@ -80,9 +81,7 @@ class Outcome:
     result: Any
     text: str | None = None  # what goes to `out` without --json
     warnings: tuple[str, ...] = ()
-    error: LingotubeError | None = (
-        None  # a result delivered with a problem (e.g. incomplete)
-    )
+    error: LingotubeError | None = None  # a result delivered with a problem (e.g. incomplete)
 
 
 Body = Callable[[AppContext, str | None], Awaitable[Outcome]]
@@ -265,15 +264,12 @@ async def _configure(
         )
     )
     if (
-        common.cookies_file is not None
-        and cookies_file is not None
-        and ctx.settings_path is not None
-    ):
-        if await asyncio.to_thread(cookies_file.is_file):
-            await remember_cookies_file(
-                path=cookies_file,
-                settings_path=ctx.settings_path,
-            )
+        common.cookies_file is not None and cookies_file is not None and ctx.settings_path is not None
+    ) and await asyncio.to_thread(cookies_file.is_file):
+        await remember_cookies_file(
+            path=cookies_file,
+            settings_path=ctx.settings_path,
+        )
 
 
 def report(
@@ -292,11 +288,7 @@ def report(
             "ok": error is None,
             "result": result,
             "warnings": list(warnings),
-            "error": (
-                None
-                if error is None
-                else {"code": error.code, "message": error.message, "hint": error.hint}
-            ),
+            "error": (None if error is None else {"code": error.code, "message": error.message, "hint": error.hint}),
         }
         out.write(
             json.dumps(
@@ -340,11 +332,7 @@ def require_format(
     settings: Settings | None = None,
     default: str = "srt",
 ) -> str:
-    value = (
-        fmt
-        if fmt is not None
-        else (settings.format if settings is not None else default)
-    )
+    value = fmt if fmt is not None else (settings.format if settings is not None else default)
     if value not in FORMATS:
         raise UsageError(
             message=f"Неизвестный формат: {value}.",
@@ -382,10 +370,8 @@ def _write_utf8(
             dst=path,
         )
     except BaseException:
-        try:
+        with contextlib.suppress(OSError):
             os.unlink(path=tmp)
-        except OSError:
-            pass
         raise
 
 

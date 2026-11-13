@@ -4,6 +4,7 @@ Holds only results (transcripts, summaries); never account data or secrets.
 """
 
 import asyncio
+import contextlib
 import hashlib
 import json
 import os
@@ -146,10 +147,8 @@ class Cache:
                 dst=path,
             )
         finally:
-            try:
+            with contextlib.suppress(FileNotFoundError):
                 os.unlink(path=tmp)
-            except FileNotFoundError:
-                pass
 
 
 async def put_best_effort(

@@ -44,9 +44,7 @@ def replying(result: dict) -> Handler:
 async def test_send_command_returns_result_and_skips_events(cdp_server):
     async def handler(websocket: ServerConnection) -> None:
         await websocket.recv()
-        await websocket.send(
-            json.dumps({"method": "Target.targetCreated", "params": {}})
-        )
+        await websocket.send(json.dumps({"method": "Target.targetCreated", "params": {}}))
         await websocket.send(json.dumps({"id": 99, "result": {"other": True}}))
         await websocket.send(json.dumps({"id": 1, "result": {"ok": True}}))
 

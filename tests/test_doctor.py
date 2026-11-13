@@ -161,9 +161,7 @@ async def test_all_sources_fail_is_exit_4_with_export_hint():
 async def test_signed_in_but_chat_unavailable_is_exit_3():
     checks = await run_doctor(
         sources={"файл cookies": GoodSource()},
-        make_ask=ask_factory(
-            outcome=ChatUnavailableError(message="Чат недоступен для этого видео.")
-        ),
+        make_ask=ask_factory(outcome=ChatUnavailableError(message="Чат недоступен для этого видео.")),
         test_video_id="abcdefghijk",
     )
     assert by_name(
@@ -338,12 +336,7 @@ def test_doctor_command_success_prints_table(tmp_path):
     )
     code, out, err = h.run()
     assert code == 0, err
-    assert (
-        "файл cookies" in out
-        and "браузер chrome" in out
-        and LOGIN in out
-        and CHAT in out
-    )
+    assert "файл cookies" in out and "браузер chrome" in out and LOGIN in out and CHAT in out
     assert h.opened == [DEFAULT_TEST_VIDEO]
     assert SECRET_SAPISID not in out + err and SECRET_SID not in out + err
 
@@ -580,9 +573,7 @@ async def test_failed_browsers_are_not_critical_when_a_source_works():
         error=None,
     )
     assert "ошибка" not in text
-    chrome_row = next(
-        line for line in text.splitlines() if line.startswith("браузер chrome")
-    )
+    chrome_row = next(line for line in text.splitlines() if line.startswith("браузер chrome"))
     assert chrome_row.split()[2:5] == ["не", "прочитан", "В"]
     assert "Подсказки" not in text and "cookies.txt" not in text
     assert doctor_exit_code(checks=checks) == 0
@@ -746,9 +737,7 @@ async def test_doctor_never_refreshes_the_login_profile(tmp_path, monkeypatch):
     async def refresh_is_forbidden(self):
         raise AssertionError("doctor must not start the login browser")
 
-    monkeypatch.setattr(
-        LoginProfileCookieSource, "refresh_from_profile", refresh_is_forbidden
-    )
+    monkeypatch.setattr(LoginProfileCookieSource, "refresh_from_profile", refresh_is_forbidden)
     container = build_container(
         settings=Settings(),
         env={},

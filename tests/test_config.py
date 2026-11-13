@@ -129,10 +129,7 @@ def test_api_key_never_in_settings_repr():
             env=env,
         )
     ) + repr(s)
-    assert not any(
-        "key" in f and f != "api_key_env"
-        for f in TranslatorSettings.__dataclass_fields__
-    )
+    assert not any("key" in f and f != "api_key_env" for f in TranslatorSettings.__dataclass_fields__)
 
 
 async def test_remember_cookies_file_creates_and_preserves(tmp_path):
@@ -307,10 +304,7 @@ def test_empty_env_values_are_unset(tmp_path):
 async def test_remember_same_value_does_not_rewrite_file(tmp_path):
     sp = tmp_path / "settings.toml"
     cookies = tmp_path / "c.txt"
-    original = (
-        '# my comment\nlang = "ru"\n'
-        f"cookies_file = {json.dumps(obj=str(cookies.resolve()))}\n"
-    )
+    original = f'# my comment\nlang = "ru"\ncookies_file = {json.dumps(obj=str(cookies.resolve()))}\n'
     sp.write_bytes(original.encode("utf-8"))
     await remember_cookies_file(
         path=cookies,
@@ -346,9 +340,7 @@ async def test_forget_without_keys_leaves_file_untouched(tmp_path):
 
 
 async def test_forget_missing_file_returns_empty(tmp_path):
-    removed = await forget_remembered_cookie_sources(
-        settings_path=tmp_path / "settings.toml"
-    )
+    removed = await forget_remembered_cookie_sources(settings_path=tmp_path / "settings.toml")
     assert removed == []
 
 

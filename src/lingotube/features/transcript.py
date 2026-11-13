@@ -52,9 +52,7 @@ class TranscriptResult:
 class _Part:
     lines: tuple[ParsedLine, ...]
     truncated: bool
-    exhausted: bool = (
-        False  # the chat had nothing more to add: never re-asked on later runs
-    )
+    exhausted: bool = False  # the chat had nothing more to add: never re-asked on later runs
     gaps_checked: bool = False  # inner silences were already asked for once
 
 
@@ -204,11 +202,7 @@ class TranscriptFeature:
                 prompt_version=PROMPT_VERSION,
                 part=f"{start}-{end}",
             )
-            prior = (
-                _load_part(data=await self._cache.get(key=part_key))
-                if use_cache
-                else None
-            )
+            prior = _load_part(data=await self._cache.get(key=part_key)) if use_cache else None
             if (
                 prior is None
                 or (prior.truncated and not prior.exhausted)
@@ -352,12 +346,7 @@ class TranscriptFeature:
                 )
                 if x.start >= resume_at
             ]
-            if (
-                more
-                and more[0].start == resume_at
-                and lines
-                and lines[-1].start == resume_at
-            ):
+            if more and more[0].start == resume_at and lines and lines[-1].start == resume_at:
                 lines.pop()  # the line at the cut may be incomplete: the continuation re-delivers it
             lines.extend(more)
             if not more or max(x.start for x in more) <= resume_at:
@@ -369,9 +358,7 @@ class TranscriptFeature:
             range_end=end,
         )
         if not is_last:
-            lines = [
-                x for x in lines if x.start < end
-            ]  # overshoot belongs to the next range
+            lines = [x for x in lines if x.start < end]  # overshoot belongs to the next range
         if not truncated:
             lines = await self._fill_gaps(
                 session=session,
@@ -464,10 +451,7 @@ def _completeness_warnings(
     completeness: Completeness,
     duration: float,
 ) -> list[str]:
-    warnings = [
-        f"пропуск {format_time(seconds=a)}–{format_time(seconds=b)}"
-        for a, b in completeness.gaps
-    ]
+    warnings = [f"пропуск {format_time(seconds=a)}–{format_time(seconds=b)}" for a, b in completeness.gaps]
     if not completeness.complete:
         total = format_time(
             seconds=duration,
@@ -475,8 +459,7 @@ def _completeness_warnings(
         )
         warnings.insert(
             0,
-            f"транскрипция неполная: обрывается на {format_time(seconds=completeness.last_end)} "
-            f"из {total}",
+            f"транскрипция неполная: обрывается на {format_time(seconds=completeness.last_end)} из {total}",
         )
     return warnings
 

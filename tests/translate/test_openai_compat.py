@@ -49,9 +49,7 @@ def user_lines(request: httpx.Request) -> list[list[str]]:
 
 
 def echo_upper(request: httpx.Request) -> httpx.Response:
-    return completion(
-        content="\n".join(f"{n}\t{t.upper()}" for n, t in user_lines(request=request))
-    )
+    return completion(content="\n".join(f"{n}\t{t.upper()}" for n, t in user_lines(request=request)))
 
 
 def make(
@@ -81,9 +79,7 @@ async def test_translates_in_batches_keeping_ids_and_times():
             target_language="ru",
         )
     assert route.call_count == 3
-    assert [(c.id, c.start, c.end) for c in out] == [
-        (c.id, c.start, c.end) for c in source
-    ]
+    assert [(c.id, c.start, c.end) for c in out] == [(c.id, c.start, c.end) for c in source]
     assert [c.text for c in out] == [c.text.upper() for c in source]
     req = route.calls[0].request
     assert req.headers["Authorization"] == f"Bearer {KEY}"
@@ -102,9 +98,7 @@ async def test_timecodes_not_sent_to_model():
         )
     raw = route.calls[0].request.content.decode()
     assert "start" not in raw and "0.5" not in raw
-    assert (
-        json.loads(s=raw)["messages"][1]["content"] == "1\tline 1\n2\tline 2\n3\tline 3"
-    )
+    assert json.loads(s=raw)["messages"][1]["content"] == "1\tline 1\n2\tline 2\n3\tline 3"
 
 
 @respx.mock
@@ -133,9 +127,7 @@ async def test_count_mismatch_retries_batch_once_then_fails():
 
 @respx.mock
 async def test_mismatch_then_ok_succeeds():
-    route = respx.post(url=URL).mock(
-        side_effect=[completion(content="1\tonly"), echo_upper]
-    )
+    route = respx.post(url=URL).mock(side_effect=[completion(content="1\tonly"), echo_upper])
     async with httpx.AsyncClient() as client:
         out = await make(client=client).translate(
             cues=cues(n=2),
@@ -285,9 +277,7 @@ async def test_tab_and_line_separator_inside_text_preserved():
 
 @respx.mock
 async def test_extra_number_is_still_mismatch():
-    route = respx.post(url=URL).mock(
-        return_value=completion(content="1\ta\n2\tb\n3\tc")
-    )
+    route = respx.post(url=URL).mock(return_value=completion(content="1\ta\n2\tb\n3\tc"))
     async with httpx.AsyncClient() as client:
         with pytest.raises(expected_exception=ValidationError):
             await make(client=client).translate(
@@ -299,9 +289,7 @@ async def test_extra_number_is_still_mismatch():
 
 @respx.mock
 async def test_redirect_is_refused():
-    target = respx.get(url="https://evil.example.test/x").mock(
-        return_value=httpx.Response(status_code=200)
-    )
+    target = respx.get(url="https://evil.example.test/x").mock(return_value=httpx.Response(status_code=200))
     respx.post(url=URL).mock(
         return_value=httpx.Response(
             status_code=302,
@@ -347,9 +335,7 @@ async def test_line_without_number_is_appended_to_previous_item():
 
 @respx.mock
 async def test_trailing_prose_after_last_item_is_dropped():
-    respx.post(url=URL).mock(
-        return_value=completion(content="1\tA\n2\tC\nHope this helps!")
-    )
+    respx.post(url=URL).mock(return_value=completion(content="1\tA\n2\tC\nHope this helps!"))
     async with httpx.AsyncClient() as client:
         out = await make(client=client).translate(
             cues=cues(n=2),

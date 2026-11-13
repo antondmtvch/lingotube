@@ -283,9 +283,7 @@ async def test_rerequest_without_progress_stops_and_part_is_not_reasked(tmp_path
     # первый дозапрос без продвижения — дальше не спрашиваем
     assert len(client.prompts) == 2
     assert not result.completeness.complete
-    assert not any(
-        "оборван" in w for w in result.warnings
-    )  # обрыв описан проверкой полноты
+    assert not any("оборван" in w for w in result.warnings)  # обрыв описан проверкой полноты
     assert any("неполная" in w for w in result.warnings)
     second = FakeAskClient(
         info=info(duration=300),
@@ -408,11 +406,7 @@ async def test_empty_continuation_stops_rerequests(tmp_path):
 
 async def test_parts_cached_and_resume_after_failure(tmp_path):
     def failing(prompt: str) -> str | Exception:
-        return (
-            NetworkError(message="сеть упала")
-            if requested(prompt=prompt)[0] == 300
-            else full(prompt=prompt)
-        )
+        return NetworkError(message="сеть упала") if requested(prompt=prompt)[0] == 300 else full(prompt=prompt)
 
     first = FakeAskClient(
         info=info(duration=900),
@@ -558,11 +552,7 @@ async def test_use_cache_false_ignores_cache(tmp_path):
 
 async def test_cancelled_run_leaves_cache_readable(tmp_path):
     def cancelling(prompt: str) -> str | BaseException:
-        return (
-            asyncio.CancelledError()
-            if requested(prompt=prompt)[0] == 300
-            else full(prompt=prompt)
-        )
+        return asyncio.CancelledError() if requested(prompt=prompt)[0] == 300 else full(prompt=prompt)
 
     first = FakeAskClient(
         info=info(duration=900),
@@ -752,9 +742,7 @@ async def test_gaps_reported_as_warnings(tmp_path):
     ).run(video_id=VID)
     assert result.completeness.complete
     assert result.completeness.gaps
-    assert any(
-        w.startswith("пропуск 4:5") and w.endswith("8:20") for w in result.warnings
-    )
+    assert any(w.startswith("пропуск 4:5") and w.endswith("8:20") for w in result.warnings)
 
 
 async def test_ends_fixed_and_ids_sequential(tmp_path):

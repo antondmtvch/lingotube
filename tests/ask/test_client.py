@@ -128,13 +128,8 @@ async def test_open_and_ask_happy_path(
     sent = json.loads(s=panel.calls.last.request.content)
     assert sent["continuation"] == "FAKE_CONTINUATION_1"
     assert sent["context"]["clickTracking"]["clickTrackingParams"] == "FAKE_CTP_1"
-    assert (
-        sent["formData"]["inputComposerFormData"]["userInputText"] == "дай транскрипцию"
-    )
-    assert (
-        sent["formData"]["inputComposerFormData"]["clientMessageId"]
-        == "youchat-1700000000000"
-    )
+    assert sent["formData"]["inputComposerFormData"]["userInputText"] == "дай транскрипцию"
+    assert sent["formData"]["inputComposerFormData"]["clientMessageId"] == "youchat-1700000000000"
     req = panel.calls.last.request
     assert req.headers["Authorization"] == sapisidhash(
         sapisid=SAPISID,
@@ -197,10 +192,7 @@ async def test_command_reused_when_answer_has_none(
     ).open(video_id=VIDEO)
     await session.ask(prompt="a")
     await session.ask(prompt="b")
-    assert all(
-        json.loads(s=c.request.content)["continuation"] == "FAKE_CONTINUATION_1"
-        for c in panel.calls
-    )
+    assert all(json.loads(s=c.request.content)["continuation"] == "FAKE_CONTINUATION_1" for c in panel.calls)
 
 
 async def test_empty_initial_get_panel_fallback(
@@ -432,9 +424,7 @@ async def test_retry_succeeds_second_time(
     ftime,
 ):
     route_page(mock=mock)
-    mock.post(url=PANEL).mock(
-        side_effect=[httpx.Response(status_code=500), answer_response()]
-    )
+    mock.post(url=PANEL).mock(side_effect=[httpx.Response(status_code=500), answer_response()])
     session = await make_client(
         http=http,
         ftime=ftime,
@@ -510,6 +500,7 @@ async def test_pacer_spaces_every_request(
         for a, b in zip(
             starts,
             starts[1:],
+            strict=False,
         )
     )
 
@@ -703,9 +694,7 @@ async def test_non_transport_http_error_has_no_chained_cause(
     ftime,
 ):
     route_page(mock=mock)
-    mock.post(url=PANEL).mock(
-        side_effect=httpx.TooManyRedirects(message=f"loop {SAPISID}")
-    )
+    mock.post(url=PANEL).mock(side_effect=httpx.TooManyRedirects(message=f"loop {SAPISID}"))
     session = await make_client(
         http=http,
         ftime=ftime,

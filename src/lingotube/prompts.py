@@ -6,9 +6,7 @@ from typing import Literal
 
 PROMPT_VERSION = "1"
 
-PromptName = Literal[
-    "transcript", "transcript_translated", "summary", "translate_batch"
-]
+PromptName = Literal["transcript", "transcript_translated", "summary", "translate_batch"]
 
 _PLACEHOLDER = re.compile(pattern=r"\{(\w+)\}")
 
@@ -26,11 +24,7 @@ def load_prompt(
 
     Синхронная: читает ресурс пакета (не пользовательский ввод-вывод).
     """
-    path = (
-        resources.files(anchor="lingotube")
-        / "prompts"
-        / f"{name}.v{PROMPT_VERSION}.txt"
-    )
+    path = resources.files(anchor="lingotube") / "prompts" / f"{name}.v{PROMPT_VERSION}.txt"
     template = path.read_text(encoding="utf-8")
     return _PLACEHOLDER.sub(
         repl=lambda m: variables[m.group(1)],

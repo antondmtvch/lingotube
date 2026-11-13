@@ -4,6 +4,7 @@
 new module with `register(app, get_context)` plus one line there.
 """
 
+import contextlib
 import io
 import os
 import re
@@ -307,15 +308,13 @@ def _report_safely(
     code: int,
 ) -> int:
     """Reports an error; if the streams themselves fail, only the exit code remains."""
-    try:
+    with contextlib.suppress(Exception):
         report(
             out=out,
             err=err,
             json_mode=json_mode,
             error=error,
         )
-    except Exception:
-        pass
     return code
 
 
