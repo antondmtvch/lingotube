@@ -29,7 +29,6 @@ CHAT_HINT = (
     "аккаунтам 13+ и, по имеющимся данным, не брендовым аккаунтам. Если дело в видео — "
     "проверьте на другом: lingotube doctor --video <ссылка>."
 )
-COOKIES_FILE_HINT = "Надёжный путь — файл cookies.txt. " + EXPORT_HINT
 NETWORK_HINT = "Проверьте подключение к интернету и повторите позже."
 
 
@@ -287,7 +286,7 @@ def doctor_error(checks: list[Check]) -> LingotubeError | None:
         )
     return AuthError(
         message="Ни один источник cookies не дал входа в YouTube.",
-        hint=COOKIES_FILE_HINT,
+        hint=EXPORT_HINT,
     )
 
 

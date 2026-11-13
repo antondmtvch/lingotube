@@ -751,3 +751,17 @@ async def test_doctor_login_profile_works_marks_others_non_critical():
     assert not by_name(checks=checks, name="файл cookies").critical
     assert not by_name(checks=checks, name="браузер chrome").critical
     assert doctor_exit_code(checks=checks) == 0
+
+
+async def test_final_error_hint_starts_with_login_hint():
+    from lingotube.doctor import doctor_error
+
+    checks = await run_doctor(
+        sources={"файл cookies": BadSource(), "профиль входа": BadSource()},
+        make_ask=ask_factory(),
+        test_video_id="abcdefghijk",
+    )
+    error = doctor_error(checks=checks)
+    assert isinstance(error, AuthError)
+    assert (error.hint or "").startswith(LOGIN_HINT)
+    assert "--cookies-file" in (error.hint or "")
