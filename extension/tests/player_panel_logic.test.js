@@ -83,3 +83,10 @@ test('without a subtitles button the new button goes first among the right contr
   placeButtonNextToSubtitlesButton({ rightControls, subtitlesButton: null, button });
   assert.deepEqual(rightControls.inserted, [{ node: button, reference: rightControls.firstChild }]);
 });
+
+test('confirming a typed name equal to the current custom language leaves the select on that language', () => {
+  const current = { code: null, name: 'Esperanto' };
+  const typed = languageFromTypedText('  Esperanto ');
+  assert.equal(selectValueAfterClose(current), menuValueForLanguage(typed));
+  assert.equal(selectValueAfterClose(current), 'custom:Esperanto');
+});

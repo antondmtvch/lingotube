@@ -241,7 +241,8 @@ export class PlayerControls {
       this.#renderLanguageMenu();
       return;
     }
-    this.#otherLanguageRow.hidden = true;
+    // The typed name may equal the current language, so no settings change would re-render the select.
+    this.#renderLanguageMenu();
     this.#callbacks.onLanguageChanged(language);
   }
 
