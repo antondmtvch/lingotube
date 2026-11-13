@@ -25,11 +25,13 @@ class LoginHarness:
         env=None,
         installed: tuple[str, Path] | None = ("chrome", EXECUTABLE),
         flow_error: Exception | None = None,
+        has_settings_path: bool = True,
     ) -> None:
         self.tmp = tmp_path
         self.env = env or {}
         self.installed = installed
         self.flow_error = flow_error
+        self.has_settings_path = has_settings_path
         self.settings_path = tmp_path / "settings.toml"
         self.paths = LoginPaths(
             profile_dir=tmp_path / "login-profile",
@@ -79,7 +81,7 @@ class LoginHarness:
             out=out,
             err=err,
             cwd=self.tmp,
-            settings_path=self.settings_path,
+            settings_path=self.settings_path if self.has_settings_path else None,
         )
 
     def run(self, *argv: str) -> tuple[int, str, str]:
@@ -113,6 +115,7 @@ def test_login_json_envelope(tmp_path):
         "cookies_path",
         "forgotten_settings",
     }
+    assert envelope["result"]["browser"] == "chrome"
     assert envelope["result"]["cookies_count"] == 2
     assert envelope["result"]["cookies_path"] == str(h.paths.cookies_file)
     assert LEAK not in out + err
@@ -140,6 +143,59 @@ def test_login_warns_when_env_cookies_file_is_set(tmp_path):
     code, out, err = h.run("login")
     assert code == 0, err
     assert "LINGOTUBE_COOKIES_FILE" in err and "важнее входа" in err
+
+
+def test_login_without_settings_file_path_skips_settings_cleanup(tmp_path):
+    h = LoginHarness(tmp_path, has_settings_path=False)
+    code, out, err = h.run("login", "--json")
+    assert code == 0, err
+    envelope = json.loads(out)
+    assert envelope["result"]["forgotten_settings"] == []
+    assert envelope["warnings"] == []
+
+
+def test_login_empty_env_cookies_file_does_not_warn(tmp_path):
+    h = LoginHarness(tmp_path, env={"LINGOTUBE_COOKIES_FILE": ""})
+    code, out, err = h.run("login")
+    assert code == 0, err
+    assert "LINGOTUBE_COOKIES_FILE" not in err
+
+
+def test_login_settings_write_os_error_is_a_warning_not_an_error(tmp_path, monkeypatch):
+    h = LoginHarness(tmp_path)
+
+    async def read_only_settings(settings_path):
+        raise PermissionError("LEAKME-path")
+
+    monkeypatch.setattr(
+        "lingotube.login_commands.forget_remembered_cookie_sources",
+        read_only_settings,
+    )
+    code, out, err = h.run("login", "--json")
+    assert code == 0, err
+    assert any("настроек" in warning for warning in json.loads(out)["warnings"])
+    assert LEAK not in out + err
+    assert h.paths.cookies_file.is_file()
+
+
+def test_login_busy_profile_is_checked_before_the_flow_starts(tmp_path, monkeypatch):
+    h = LoginHarness(tmp_path)
+    monkeypatch.setattr(
+        "lingotube.login_commands.is_login_profile_in_use",
+        lambda profile_dir: True,
+    )
+    code, out, err = h.run("login")
+    assert code == 1
+    assert "Закройте окно входа" in err
+    assert h.flow_calls == []
+
+
+def test_login_explicit_browser_that_is_not_installed_is_exit_4(tmp_path):
+    h = LoginHarness(tmp_path, installed=("chrome", EXECUTABLE))
+    code, out, err = h.run("login", "--browser", "edge")
+    assert code == 4
+    assert "Не найден Chrome или Edge." in err
+    assert h.flow_calls == []
 
 
 def test_login_unknown_browser_is_usage_error(tmp_path):

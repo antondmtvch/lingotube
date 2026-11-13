@@ -8,6 +8,7 @@ from dependency_injector import providers
 from lingotube import cli
 from lingotube.auth.base import LOGIN_HINT, Credentials
 from lingotube.auth.browser import BROWSERS
+from lingotube.auth.login_source import LoginProfileCookieSource
 from lingotube.auth.login_store import LoginCookieStore, SavedLogin
 from lingotube.commands import AppContext
 from lingotube.config import LoginPaths, Settings
@@ -735,6 +736,35 @@ async def test_doctor_lists_login_profile_row_after_file(tmp_path):
     sources = container.doctor_sources()
     assert list(sources)[:2] == ["файл cookies", "профиль входа"]
     assert (await sources["профиль входа"].load()).sapisid() == SECRET_SAPISID
+
+
+async def test_doctor_never_refreshes_the_login_profile(tmp_path, monkeypatch):
+    await LoginCookieStore(cookies_file=tmp_path / "login-cookies.json").write(
+        saved=SavedLogin(browser="chrome", cookies={"SAPISID": SECRET_SAPISID})
+    )
+
+    async def refresh_is_forbidden(self):
+        raise AssertionError("doctor must not start the login browser")
+
+    monkeypatch.setattr(
+        LoginProfileCookieSource, "refresh_from_profile", refresh_is_forbidden
+    )
+    container = build_container(
+        settings=Settings(),
+        env={},
+        cache_dir=tmp_path / "c",
+        login_paths=LoginPaths(
+            profile_dir=tmp_path / "login-profile",
+            cookies_file=tmp_path / "login-cookies.json",
+        ),
+        err=io.StringIO(),
+    )
+    checks = await run_doctor(
+        sources={"профиль входа": container.doctor_sources()["профиль входа"]},
+        make_ask=ask_factory(),
+        test_video_id="abcdefghijk",
+    )
+    assert by_name(checks=checks, name="профиль входа").ok
 
 
 async def test_doctor_login_profile_works_marks_others_non_critical():

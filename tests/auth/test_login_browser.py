@@ -136,6 +136,29 @@ def test_profile_not_in_use_when_singleton_lock_points_to_other_host(tmp_path):
     assert not is_login_profile_in_use(tmp_path, platform="linux")
 
 
+def test_lock_outside_the_login_profile_does_not_make_it_busy(tmp_path):
+    # The person's own browser (another profile) holds its lock elsewhere.
+    (tmp_path / "lockfile").write_text("")
+    profile = tmp_path / "login-profile"
+    profile.mkdir()
+    assert not is_login_profile_in_use(profile, platform="win32")
+    assert (tmp_path / "lockfile").exists()
+
+
+async def test_launch_starts_while_another_profile_is_locked(tmp_path):
+    (tmp_path / "lockfile").write_text("")
+    profile = tmp_path / "login-profile"
+    profile.mkdir()
+    browser = await launch_login_browser(
+        executable=Path("chrome"),
+        profile_dir=profile,
+        mode="headless",
+        start_url="u",
+        spawn=spawn_writing_port_file(profile, FakeProcess()),
+    )
+    assert browser.websocket_url.endswith("/devtools/browser/abc")
+
+
 def test_windows_removable_lockfile_is_stale(tmp_path):
     (tmp_path / "lockfile").write_text("")
     assert not is_login_profile_in_use(tmp_path, platform="win32")
@@ -263,12 +286,13 @@ async def test_launch_raises_profile_busy_when_busy_before_launch(
 async def test_launch_raises_profile_busy_when_process_exits_and_profile_locked(
     tmp_path, monkeypatch
 ):
-    answers = iter([False, True])
+    spawned = []
     monkeypatch.setattr(
-        login_browser, "is_login_profile_in_use", lambda *a, **k: next(answers)
-    )
+        login_browser, "is_login_profile_in_use", lambda *a, **k: bool(spawned)
+    )  # free before the launch, locked once our process has started and exited
 
     async def spawn(*args, **kwargs):
+        spawned.append(True)
         return FakeProcess(returncode=0)
 
     with pytest.raises(ProfileBusyError):
@@ -302,7 +326,7 @@ async def test_launch_timeout_kills_own_process(tmp_path):
     async def spawn(*args, **kwargs):
         return process
 
-    with pytest.raises(AuthError):
+    with pytest.raises(AuthError) as info:
         await launch_login_browser(
             executable=Path("chrome"),
             profile_dir=tmp_path,
@@ -311,7 +335,34 @@ async def test_launch_timeout_kills_own_process(tmp_path):
             spawn=spawn,
             port_file_timeout=0.3,
         )
+    assert info.value.message == "Браузер не ответил вовремя."
     assert "terminate" in process.calls
+
+
+async def test_launch_cancelled_while_waiting_terminates_own_process(tmp_path):
+    process = FakeProcess()
+    spawned = asyncio.Event()
+
+    async def spawn(*args, **kwargs):
+        spawned.set()
+        return process
+
+    task = asyncio.create_task(
+        launch_login_browser(
+            executable=Path("chrome"),
+            profile_dir=tmp_path,
+            mode="headless",
+            start_url="u",
+            spawn=spawn,
+        )
+    )
+    await spawned.wait()
+    await asyncio.sleep(0.05)  # let the launch reach its port-file polling loop
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert process.calls == ["terminate"]
+    assert process.returncode is not None
 
 
 async def test_shut_down_closes_browser_via_devtools():
@@ -342,6 +393,12 @@ async def test_shut_down_terminates_after_close_timeout():
     )
     await browser.shut_down(connection)
     assert process.calls == ["terminate", "kill"]
+
+
+async def test_shut_down_spawned_process_terminates_without_devtools():
+    process = FakeProcess()
+    await login_browser.shut_down_spawned_process(process)
+    assert process.calls == ["terminate"]
 
 
 async def test_shut_down_is_safe_twice_and_after_exit():

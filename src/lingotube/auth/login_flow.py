@@ -5,13 +5,15 @@ Cookie values stay in memory and are never put into exception messages.
 
 import asyncio
 import time
-from collections.abc import Callable, Iterable
+from collections.abc import Awaitable, Callable, Iterable
+from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from pathlib import Path
 
 from lingotube.auth.base import LOGIN_HINT, is_allowed_domain
 from lingotube.auth.devtools import (
     BrowserCookie,
+    DevToolsConnection,
     DevToolsError,
     connect_to_browser_devtools,
     read_all_cookies,
@@ -20,6 +22,8 @@ from lingotube.auth.login_browser import (
     PROFILE_BUSY_HINT,
     PROFILE_BUSY_MESSAGE,
     LaunchMode,
+    RunningLoginBrowser,
+    SignInWindow,
     find_browser_executable,
     is_login_profile_in_use,
     launch_login_browser,
@@ -28,6 +32,15 @@ from lingotube.auth.login_browser import (
 from lingotube.auth.login_store import LoginCookieStore, SavedLogin
 from lingotube.config import LoginPaths
 from lingotube.errors import AuthError, ProfileBusyError
+
+type LaunchSignInWindow = Callable[[Path, Path, str], Awaitable[SignInWindow]]
+type LaunchLoginBrowser = Callable[
+    [Path, Path, LaunchMode, str], Awaitable[RunningLoginBrowser]
+]
+type ConnectToBrowser = Callable[[str], AbstractAsyncContextManager[DevToolsConnection]]
+type Sleep = Callable[[float], Awaitable[None]]
+type Clock = Callable[[], float]
+type ReadFromConnection = Callable[[DevToolsConnection], Awaitable[list[BrowserCookie]]]
 
 LOGIN_PAGE_URL = (
     "https://accounts.google.com/ServiceLogin"
@@ -94,11 +107,11 @@ async def sign_in_with_login_browser(
     paths: LoginPaths,
     store: LoginCookieStore,
     notify: Callable[[str], None],
-    launch_window=launch_sign_in_window,
-    launch=launch_login_browser,
-    connect=connect_to_browser_devtools,
-    sleep=asyncio.sleep,
-    clock=time.monotonic,
+    launch_window: LaunchSignInWindow = launch_sign_in_window,
+    launch: LaunchLoginBrowser = launch_login_browser,
+    connect: ConnectToBrowser = connect_to_browser_devtools,
+    sleep: Sleep = asyncio.sleep,
+    clock: Clock = time.monotonic,
 ) -> SavedLogin:
     """Open a sign-in window without a debugging port, wait until the person closes
     it, then read the cookies of the login profile in a headless launch."""
@@ -134,7 +147,9 @@ async def sign_in_with_login_browser(
     return saved
 
 
-async def wait_for_sign_in_window_to_close(window, sleep, clock) -> None:
+async def wait_for_sign_in_window_to_close(
+    window: SignInWindow, sleep: Sleep, clock: Clock
+) -> None:
     """Poll our own window process until it exits; AuthError after LOGIN_WAIT_SECONDS."""
     deadline = clock() + LOGIN_WAIT_SECONDS
     while not window.has_exited:
@@ -151,9 +166,9 @@ async def read_cookies_from_login_profile(
     profile_dir: Path,
     mode: LaunchMode,
     start_url: str,
-    read_from_connection,
-    launch=launch_login_browser,
-    connect=connect_to_browser_devtools,
+    read_from_connection: ReadFromConnection,
+    launch: LaunchLoginBrowser = launch_login_browser,
+    connect: ConnectToBrowser = connect_to_browser_devtools,
 ) -> list[BrowserCookie]:
     """Start the login profile with a debugging port, read cookies, shut it down.
 
@@ -161,7 +176,7 @@ async def read_cookies_from_login_profile(
     returning the cookies. The browser started here never outlives this call.
     """
     running = await launch(executable, profile_dir, mode, start_url)
-    connection = None
+    connection: DevToolsConnection | None = None
     try:
         async with connect(running.websocket_url) as connection:
             try:
@@ -184,11 +199,11 @@ async def refresh_cookies_from_login_profile(
     paths: LoginPaths,
     store: LoginCookieStore,
     mode: LaunchMode = "headless",
-    find_executable=find_browser_executable,
-    launch=launch_login_browser,
-    connect=connect_to_browser_devtools,
-    sleep=asyncio.sleep,
-    clock=time.monotonic,
+    find_executable: Callable[[str], Path | None] = find_browser_executable,
+    launch: LaunchLoginBrowser = launch_login_browser,
+    connect: ConnectToBrowser = connect_to_browser_devtools,
+    sleep: Sleep = asyncio.sleep,
+    clock: Clock = time.monotonic,
 ) -> RefreshResult:
     """Start the login profile briefly so the browser rotates cookies, then save them."""
     saved = await store.read()
@@ -201,7 +216,7 @@ async def refresh_cookies_from_login_profile(
         raise _profile_busy_auth_error()
     previous_value = saved.cookies.get(ROTATING_COOKIE)
 
-    async def wait_for_rotation(connection) -> list[BrowserCookie]:
+    async def wait_for_rotation(connection: DevToolsConnection) -> list[BrowserCookie]:
         return await _wait_for_rotated_cookie(
             connection=connection,
             previous_value=previous_value,
@@ -237,7 +252,10 @@ async def refresh_cookies_from_login_profile(
 
 
 async def _wait_for_rotated_cookie(
-    connection, previous_value: str | None, sleep, clock
+    connection: DevToolsConnection,
+    previous_value: str | None,
+    sleep: Sleep,
+    clock: Clock,
 ) -> list[BrowserCookie]:
     """Poll until the rotating cookie changes or the wait runs out; return the last read."""
     deadline = clock() + REFRESH_WAIT_SECONDS

@@ -3,6 +3,7 @@ import stat
 
 import pytest
 
+from lingotube.auth import login_store
 from lingotube.auth.base import LOGIN_HINT
 from lingotube.auth.login_store import LoginCookieStore, SavedLogin
 from lingotube.errors import AuthError
@@ -34,6 +35,8 @@ async def test_written_file_is_owner_only(tmp_path):
         '{"version": 1, "browser": "chrome", "cookies": ["LEAKME"]}',
         '{"version": 2, "browser": "chrome", "cookies": {}}',
         '{"version": 1, "browser": "firefox", "cookies": {"a": "LEAKME"}}',
+        '{"version": true, "browser": "chrome", "cookies": {"a": "LEAKME"}}',
+        "[" * 100_000,
     ],
 )
 async def test_corrupted_file_is_auth_error_without_content(tmp_path, content):
@@ -43,6 +46,29 @@ async def test_corrupted_file_is_auth_error_without_content(tmp_path, content):
         await LoginCookieStore(cookies_file=path).read()
     assert "LEAKME" not in caught.value.message + (caught.value.hint or "")
     assert caught.value.hint == LOGIN_HINT
+
+
+async def test_failed_write_leaves_no_temporary_file(tmp_path, monkeypatch):
+    path = tmp_path / "login-cookies.json"
+
+    def failing_replace(src, dst):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(login_store.os, "replace", failing_replace)
+    with pytest.raises(OSError):
+        await LoginCookieStore(cookies_file=path).write(
+            saved=SavedLogin(browser="chrome", cookies={"a": "b"})
+        )
+    assert list(tmp_path.iterdir()) == []
+
+
+async def test_write_replaces_existing_file_without_leftovers(tmp_path):
+    path = tmp_path / "login-cookies.json"
+    store = LoginCookieStore(cookies_file=path)
+    await store.write(saved=SavedLogin(browser="chrome", cookies={"a": "old"}))
+    await store.write(saved=SavedLogin(browser="edge", cookies={"a": "new"}))
+    assert await store.read() == SavedLogin(browser="edge", cookies={"a": "new"})
+    assert list(tmp_path.iterdir()) == [path]
 
 
 async def test_missing_file_is_auth_error(tmp_path):

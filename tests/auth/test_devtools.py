@@ -83,15 +83,35 @@ async def test_command_timeout_raises_devtools_error(cdp_server):
 
     url = await cdp_server(handler)
     async with connect_to_browser_devtools(url, timeout=0.2) as connection:
-        with pytest.raises(DevToolsError):
+        with pytest.raises(DevToolsError) as error:
             await connection.send_command("Browser.getVersion")
+    assert str(error.value) == "DevTools command Browser.getVersion timed out"
 
 
-def test_non_loopback_url_is_rejected():
+async def test_non_object_reply_raises_devtools_error(cdp_server):
+    async def handler(websocket: ServerConnection) -> None:
+        await websocket.recv()
+        await websocket.send(json.dumps(["LEAKME"]))
+
+    url = await cdp_server(handler)
+    async with connect_to_browser_devtools(url) as connection:
+        with pytest.raises(DevToolsError) as error:
+            await connection.send_command("Browser.getVersion")
+    assert "LEAKME" not in str(error.value)
+    assert "malformed reply" in str(error.value)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "ws://example.com:9222/devtools/browser/x",
+        "wss://127.0.0.1:9222/devtools/browser/x",
+        "ws://localhost:9222/devtools/browser/x",
+    ],
+)
+def test_non_loopback_url_is_rejected(url):
     async def connect() -> None:
-        async with connect_to_browser_devtools(
-            "ws://example.com:9222/devtools/browser/x"
-        ):
+        async with connect_to_browser_devtools(url):
             pass
 
     with pytest.raises(ValueError):
@@ -104,6 +124,22 @@ async def test_read_all_cookies_maps_fields(cdp_server):
     async with connect_to_browser_devtools(url) as connection:
         cookies = await read_all_cookies(connection)
     assert cookies == [BrowserCookie(name="SAPISID", value="v", domain=".youtube.com")]
+
+
+@pytest.mark.parametrize(
+    "cookie",
+    [
+        {"value": "LEAKME", "domain": ".youtube.com"},
+        {"name": "SAPISID", "domain": ".youtube.com"},
+        {"name": "SAPISID", "value": "LEAKME"},
+    ],
+)
+async def test_cookie_missing_a_field_raises_devtools_error(cdp_server, cookie):
+    url = await cdp_server(replying({"cookies": [cookie]}))
+    async with connect_to_browser_devtools(url) as connection:
+        with pytest.raises(DevToolsError) as error:
+            await read_all_cookies(connection)
+    assert "LEAKME" not in str(error.value)
 
 
 def test_browser_cookie_repr_hides_value():

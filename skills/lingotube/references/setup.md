@@ -58,7 +58,7 @@ lingotube signs in to YouTube with the person's browser cookies. Run
   `lingotube login` in their own terminal and tell you when it is done. Then run
   `lingotube doctor --json`. You only run the command: do not open, close or touch the browser
   window yourself.
-  - Exit code 1 with a message that the login profile is open (`профиль входа ... открыт`):
+  - Exit code 1 with a message that the login profile is open (`Профиль входа lingotube сейчас открыт.`):
     ask the person to close the lingotube login window (or end its lingering background browser process) and retry.
   - If `lingotube login` fails (for example, no Chrome or Edge is found) or the person prefers
     not to use it, fall back to the `cookies.txt` export below.
