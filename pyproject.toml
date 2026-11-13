@@ -9,6 +9,7 @@ dependencies = [
     "typer",
     "platformdirs",
     "browser-cookie3",
+    "websockets>=17.4",
 ]
 
 [project.scripts]
