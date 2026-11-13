@@ -6,7 +6,8 @@ import {
 import {
   customNamesForMenu,
   languageFromTypedText,
-  menuValueForLanguage,
+  placeButtonNextToSubtitlesButton,
+  selectValueAfterClose,
   steppedTextScale,
 } from '../shared/player_panel_logic.js';
 
@@ -99,6 +100,9 @@ export class PlayerControls {
     this.#buttonElement.setAttribute('aria-label', 'lingotube');
     this.#buttonElement.setAttribute('aria-haspopup', 'dialog');
     this.#buttonElement.addEventListener('click', () => this.#setOpen(!this.#isOpen));
+    this.#buttonElement.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && this.#isOpen) this.#setOpen(false);
+    });
   }
 
   #buildPanel() {
@@ -194,7 +198,7 @@ export class PlayerControls {
     const rightControls = this.#playerElement.querySelector('.ytp-right-controls');
     if (!rightControls) return false;
     const subtitlesButton = rightControls.querySelector('.ytp-subtitles-button');
-    rightControls.insertBefore(this.#buttonElement, subtitlesButton ?? rightControls.firstChild);
+    placeButtonNextToSubtitlesButton({ rightControls, subtitlesButton, button: this.#buttonElement });
     return true;
   }
 
@@ -208,7 +212,7 @@ export class PlayerControls {
       option.textContent = item.label;
       this.#languageSelect.append(option);
     }
-    this.#languageSelect.value = menuValueForLanguage(language);
+    this.#languageSelect.value = selectValueAfterClose(language);
     this.#otherLanguageRow.hidden = true;
   }
 
@@ -225,7 +229,8 @@ export class PlayerControls {
       this.#renderLanguageMenu();
       return;
     }
-    this.#otherLanguageRow.hidden = true;
+    // The language may equal the current one, so no settings change would re-render the select.
+    this.#renderLanguageMenu();
     this.#callbacks.onLanguageChanged(language);
   };
 
@@ -247,6 +252,8 @@ export class PlayerControls {
 
   #setOpen(isOpen) {
     this.#isOpen = isOpen;
+    // Closing abandons an open "other language" input: the select must show the language in use.
+    if (!isOpen) this.#renderLanguageMenu();
     this.#panelElement.hidden = !isOpen;
     this.#buttonElement.setAttribute('aria-expanded', String(isOpen));
   }

@@ -47,3 +47,26 @@ export function steppedTextScale(currentScale, direction) {
   const stepped = Math.round((currentScale + direction * TEXT_SCALE_STEP) * 100) / 100;
   return Math.min(MAX_TEXT_SCALE, Math.max(MIN_TEXT_SCALE, stepped));
 }
+
+/**
+ * The dropdown value to show once the "other language" input is abandoned or confirmed:
+ * always the value of the language that is actually in use, never the "other" item.
+ * @param {import('./language_choices.js').TargetLanguage} currentLanguage
+ * @returns {string}
+ */
+export function selectValueAfterClose(currentLanguage) {
+  return menuValueForLanguage(currentLanguage);
+}
+
+/**
+ * Puts the button right before the subtitles button, in whatever element holds it
+ * (it may be nested inside a wrapper); without that button, first among the right controls.
+ * @param {{rightControls: object, subtitlesButton: object|null, button: object}} elements
+ */
+export function placeButtonNextToSubtitlesButton({ rightControls, subtitlesButton, button }) {
+  if (subtitlesButton && subtitlesButton.parentNode) {
+    subtitlesButton.parentNode.insertBefore(button, subtitlesButton);
+    return;
+  }
+  rightControls.insertBefore(button, rightControls.firstChild);
+}
