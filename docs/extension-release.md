@@ -25,26 +25,26 @@
 1. Поднимите `version` в `extension/manifest.json`. AMO не принимает повторно уже загруженный номер версии.
 2. Если менялись исходники страницы, пересоберите бандл и закоммитьте его: `node scripts/build-page-bundle.mjs`. Скрипт упаковки откажется работать с устаревшим `extension/src/page/bundle.js`.
 3. Запустите тесты: `node --test extension/tests/`.
-4. Соберите архивы (версия `<версия>` берётся из манифеста; файлы появятся в `dist/`):
+4. Соберите архивы (версия `<version>` берётся из манифеста; файлы появятся в `dist/`):
 
    ```sh
    node scripts/package-extension.mjs chromium
    node scripts/package-extension.mjs source
    ```
 
-   Первая команда пишет `dist/lingotube-<версия>-chromium.zip`, вторая (`git archive HEAD`, поэтому всё должно быть закоммичено) пишет `dist/lingotube-<версия>-source.zip`.
+   Первая команда пишет `dist/lingotube-<version>-chromium.zip`, вторая (`git archive HEAD`, поэтому всё должно быть закоммичено) пишет `dist/lingotube-<version>-source.zip`.
 5. Подпишите расширение для Firefox:
 
    ```sh
-   npx web-ext@10.8.0 sign --source-dir extension --channel unlisted --artifacts-dir dist --ignore-files "tests/**" "package.json" --upload-source-code dist/lingotube-<версия>-source.zip
+   npx web-ext@10.8.0 sign --source-dir extension --channel unlisted --artifacts-dir dist --ignore-files "tests/**" "package.json" --upload-source-code dist/lingotube-<version>-source.zip
    ```
 
    В `dist/` появится подписанный `.xpi`.
-6. Переименуйте его в `dist/lingotube-<версия>-firefox.xpi`.
+6. Переименуйте его в `dist/lingotube-<version>-firefox.xpi`.
 7. Создайте релиз:
 
    ```sh
-   gh release create extension-v<версия> dist/lingotube-<версия>-chromium.zip dist/lingotube-<версия>-firefox.xpi --title "Расширение lingotube <версия>" --notes "Что изменилось..."
+   gh release create extension-v<version> dist/lingotube-<version>-chromium.zip dist/lingotube-<version>-firefox.xpi --title "Расширение lingotube <version>" --notes "Что изменилось..."
    ```
 
 ## Проверка вручную
