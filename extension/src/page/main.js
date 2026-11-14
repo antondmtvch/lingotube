@@ -211,6 +211,7 @@ function startLingotubePage({ window, document }) {
       containerElement: playerElement,
       position: settings.overlayPosition,
       textScale: settings.textScale,
+      appearance: settings,
       texts,
       isRightToLeft: rtl,
       onPositionChanged: (position) => changeSettings({ overlayPosition: position }),
@@ -260,7 +261,8 @@ function startLingotubePage({ window, document }) {
       texts,
       isRightToLeft: rtl,
       onEnabledChanged: (isEnabled) => {
-        changeSettings({ enabled: isEnabled });
+        // Enabling once is what ends the first-run hint.
+        changeSettings(isEnabled ? { enabled: true, hintSeen: true } : { enabled: false });
         if (isEnabled) startSubtitles().catch(reportUnexpectedError);
         else stopSubtitles();
       },
@@ -279,6 +281,15 @@ function startLingotubePage({ window, document }) {
         activeSubtitles?.overlayView.setTextScale(scale);
       },
       onWaitForSubtitlesChanged: (isEnabled) => changeSettings({ waitForSubtitles: isEnabled }),
+      onAppearanceChanged: (change) => {
+        changeSettings(change);
+        activeSubtitles?.overlayView.applyAppearance(settings);
+      },
+      onResetPosition: () => {
+        changeSettings({ overlayPosition: null });
+        activeSubtitles?.overlayView.resetPosition();
+      },
+      onHintDismissed: () => changeSettings({ hintSeen: true }),
       onRetryRequested: () => {
         chatRequestGate.clearCooldown();
         activeSubtitles?.session.retry();
