@@ -7,7 +7,7 @@
 
 [English](../../README.md) · [Русский](README.ru.md) · [简体中文](README.zh-Hans.md) · [繁體中文](README.zh-Hant.md) · [हिन्दी](README.hi.md) · **Español** · [Français](README.fr.md) · [العربية](README.ar.md) · [বাংলা](README.bn.md) · [Português](README.pt.md) · [ไทย](README.th.md) · [日本語](README.ja.md) · [Tiếng Việt](README.vi.md) · [Deutsch](README.de.md)
 
-Herramienta de línea de comandos que obtiene los subtítulos, la transcripción y el resumen de un vídeo de YouTube.
+lingotube obtiene los subtítulos, la transcripción y el resumen de un vídeo de YouTube. El proyecto tiene tres partes: una herramienta de línea de comandos, un skill para agentes de IA y una extensión del navegador (en desarrollo) que muestra subtítulos traducidos sobre el reproductor.
 El texto procede del chat integrado de YouTube («Preguntar», Gemini) en la página del vídeo.
 Todas las solicitudes se hacen en nombre de tu cuenta de YouTube.
 
@@ -22,7 +22,35 @@ Todas las solicitudes se hacen en nombre de tu cuenta de YouTube.
 > Las preguntas y respuestas quedan en el historial de chat de tu cuenta. El chat no está disponible
 > en Rusia ni en la mayor parte de la UE, ni bajo algunos vídeos.
 
-## Funciones
+**Contenido**
+
+- [Qué incluye](#qué-incluye)
+- [Herramienta de línea de comandos (CLI)](#herramienta-de-línea-de-comandos-cli)
+  - [Funciones](#funciones)
+  - [Instalación](#instalación)
+  - [Inicio rápido](#inicio-rápido)
+  - [Comandos](#comandos)
+  - [Cookies e inicio de sesión](#cookies-e-inicio-de-sesión)
+  - [Modos de traducción](#modos-de-traducción)
+  - [Códigos de salida](#códigos-de-salida)
+- [Skill para agentes de IA](#skill-para-agentes-de-ia)
+- [Extensión del navegador](#extensión-del-navegador)
+- [Limitaciones](#limitaciones)
+- [Desarrollo](#desarrollo)
+
+## Qué incluye
+
+| Componente | Qué hace |
+|---|---|
+| [Herramienta de línea de comandos (CLI)](#herramienta-de-línea-de-comandos-cli) | El comando `lingotube`: obtiene los subtítulos, la transcripción y el resumen de un vídeo como archivos o JSON. |
+| [Skill para agentes de IA](#skill-para-agentes-de-ia) | Permite que un agente de IA (Claude Code, Codex, Cursor y otros) resuma un vídeo, haga una transcripción o subtítulos y encuentre un momento a partir de una descripción. Ejecuta la herramienta de línea de comandos. |
+| [Extensión del navegador](#extensión-del-navegador) | Subtítulos traducidos sobre el reproductor de YouTube, en cualquier idioma. En desarrollo. |
+
+## Herramienta de línea de comandos (CLI)
+
+Todo lo de esta sección trata del comando `lingotube`. El skill y la extensión tienen sus propias secciones más abajo.
+
+### Funciones
 
 - **Subtítulos** en cualquier idioma, en los formatos `srt`, `vtt` y `json`.
 - **Transcripción** en el idioma original con marcas de tiempo.
@@ -32,7 +60,7 @@ Todas las solicitudes se hacen en nombre de tu cuenta de YouTube.
 - **Caché y reanudación**: los vídeos largos se procesan por partes y, tras un fallo, el trabajo continúa donde se detuvo.
 - **Salida legible por máquinas** con `--json` para scripts y agentes de IA.
 
-## Instalación
+### Instalación
 
 Necesitas [uv](https://docs.astral.sh/uv/). uv descarga por sí mismo la versión de Python adecuada.
 
@@ -53,7 +81,7 @@ uv tool upgrade lingotube
 uv tool uninstall lingotube
 ```
 
-## Inicio rápido
+### Inicio rápido
 
 1. Inicia sesión en YouTube. En Chrome o Edge lo más sencillo es:
 
@@ -79,7 +107,7 @@ uv tool uninstall lingotube
    lingotube subs https://www.youtube.com/watch?v=XXXXXXXXXXX --lang es
    ```
 
-## Comandos
+### Comandos
 
 | Comando | Qué hace |
 |---|---|
@@ -109,7 +137,7 @@ Un identificador que empieza por guion se pasa después de `--`:
 lingotube subs --lang es -- -n5MqamatXE
 ```
 
-## Cookies e inicio de sesión
+### Cookies e inicio de sesión
 
 La herramienta toma la primera fuente adecuada en este orden:
 
@@ -128,13 +156,13 @@ Para ellos usa `lingotube login`. Exportar un archivo sigue siendo una vía de r
 
 Si las cookies dejan de funcionar (código de salida `4`), ejecuta `lingotube login` de nuevo o exporta un archivo nuevo.
 
-## Modos de traducción
+### Modos de traducción
 
 | Modo | Cuándo se activa | Quién traduce |
 |---|---|---|
 | **Chat** (por defecto) | no hay nada configurado | el chat de YouTube devuelve enseguida el texto en el idioma pedido |
 | **Modelo propio** | la sección `[translator]` está en la configuración | tu modelo con una API compatible con OpenAI |
-| **Agente** | `transcript` → traducción → `build` | un agente de IA o tú |
+| **Agente** | `transcript` → traducción → `build` | un agente de IA o tú a mano; lingotube solo comprueba la traducción y genera los subtítulos |
 
 La configuración está en `settings.toml`:
 
@@ -168,7 +196,7 @@ lingotube build <enlace> --lang es --from es.json   # comprobación y generació
 > Para mantener la traducción literal, usa el modo «modelo propio» o «agente»: primero obtienen el original
 > y la traducción se comprueba por números de línea. El chat puede parafrasear o fusionar frases.
 
-## Códigos de salida
+### Códigos de salida
 
 | Código | Significado |
 |---|---|
@@ -182,19 +210,10 @@ lingotube build <enlace> --lang es --from es.json   # comprobación y generació
 | `7` | Los datos no superaron la validación. |
 | `130` | Interrumpido por el usuario (Ctrl+C). |
 
-## Limitaciones
-
-- El chat solo funciona para usuarios con sesión iniciada mayores de 13 años, no está disponible en todos los países
-  ni bajo todos los vídeos.
-- Las cuentas de marca no son compatibles: se usa la cuenta principal del navegador.
-- Una hora de vídeo tarda varios minutos: las solicitudes van una a una.
-- Los tiempos de las líneas los fija el chat. En vídeos largos, algunas líneas pueden desfasarse varios
-  segundos; un desfase constante se corrige con la opción `--offset`.
-- No se garantiza que el texto de los vídeos largos sea literal: el chat a veces responde con un texto
-  de significado cercano y la herramienta no lo detecta. Para usos importantes, comprueba el resultado con la grabación.
-- No hay compatibilidad con proxy.
-
 ## Skill para agentes de IA
+
+El skill ejecuta la [herramienta de línea de comandos](#herramienta-de-línea-de-comandos-cli) por el agente, así que instala primero la herramienta y después el skill.
+
 
 El repositorio incluye un skill en el formato abierto Agent Skills. Con él, un agente de IA (Claude Code, Codex,
 Cursor, Gemini CLI y otros) resume vídeos, genera transcripciones y subtítulos, encuentra
@@ -209,8 +228,28 @@ Sin Node.js, copia la carpeta `skills/lingotube/` en la carpeta de skills de tu 
 
 ## Extensión del navegador
 
-La carpeta `extension/` contiene una extensión con subtítulos traducidos sobre el reproductor de YouTube.
-Está en desarrollo y todavía no forma parte de la rama principal.
+Una extensión Manifest V3 para Chrome y Edge que muestra subtítulos traducidos sobre el reproductor de YouTube. Está en desarrollo y todavía no forma parte de la rama principal.
+
+- Un botón del reproductor activa los subtítulos; el panel con el texto se puede arrastrar.
+- Eliges uno de 30 idiomas o escribes el tuyo.
+- Los tiempos y el texto original proceden de los propios subtítulos de YouTube; el chat solo los traduce.
+- Funciona en el navegador donde ya has iniciado sesión en YouTube, por lo que no hay que configurar cookies.
+- No está en ninguna tienda: abre la página de extensiones del navegador, activa el modo de desarrollador, pulsa «Cargar descomprimida» y elige la carpeta `extension/`.
+
+## Limitaciones
+
+Estas limitaciones se aplican a los tres componentes, porque todos dependen del chat de YouTube.
+
+
+- El chat solo funciona para usuarios con sesión iniciada mayores de 13 años, no está disponible en todos los países
+  ni bajo todos los vídeos.
+- Las cuentas de marca no son compatibles: se usa la cuenta principal del navegador.
+- Una hora de vídeo tarda varios minutos: las solicitudes van una a una.
+- Los tiempos de las líneas los fija el chat. En vídeos largos, algunas líneas pueden desfasarse varios
+  segundos; un desfase constante se corrige con la opción `--offset`.
+- No se garantiza que el texto de los vídeos largos sea literal: el chat a veces responde con un texto
+  de significado cercano y la herramienta no lo detecta. Para usos importantes, comprueba el resultado con la grabación.
+- No hay compatibilidad con proxy.
 
 ## Desarrollo
 

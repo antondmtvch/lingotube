@@ -7,7 +7,7 @@
 
 [English](../../README.md) · [Русский](README.ru.md) · [简体中文](README.zh-Hans.md) · [繁體中文](README.zh-Hant.md) · [हिन्दी](README.hi.md) · [Español](README.es.md) · [Français](README.fr.md) · [العربية](README.ar.md) · [বাংলা](README.bn.md) · **Português** · [ไทย](README.th.md) · [日本語](README.ja.md) · [Tiếng Việt](README.vi.md) · [Deutsch](README.de.md)
 
-Ferramenta de linha de comando que obtém as legendas, a transcrição e o resumo de um vídeo do YouTube.
+O lingotube obtém as legendas, a transcrição e o resumo de um vídeo do YouTube. O projeto tem três partes: uma ferramenta de linha de comando, um skill para agentes de IA e uma extensão de navegador (em desenvolvimento) que mostra legendas traduzidas sobre o player.
 O texto vem do chat integrado do YouTube («Perguntar», Gemini) na página do vídeo.
 Todas as solicitações são feitas em nome da sua conta do YouTube.
 
@@ -22,7 +22,35 @@ Todas as solicitações são feitas em nome da sua conta do YouTube.
 > As perguntas e respostas ficam no histórico de chat da sua conta. O chat não está disponível
 > na Rússia nem na maior parte da UE, nem em alguns vídeos.
 
-## Recursos
+**Sumário**
+
+- [O que está incluído](#o-que-está-incluído)
+- [Ferramenta de linha de comando (CLI)](#ferramenta-de-linha-de-comando-cli)
+  - [Recursos](#recursos)
+  - [Instalação](#instalação)
+  - [Início rápido](#início-rápido)
+  - [Comandos](#comandos)
+  - [Cookies e login](#cookies-e-login)
+  - [Modos de tradução](#modos-de-tradução)
+  - [Códigos de saída](#códigos-de-saída)
+- [Skill para agentes de IA](#skill-para-agentes-de-ia)
+- [Extensão de navegador](#extensão-de-navegador)
+- [Limitações](#limitações)
+- [Desenvolvimento](#desenvolvimento)
+
+## O que está incluído
+
+| Componente | O que faz |
+|---|---|
+| [Ferramenta de linha de comando (CLI)](#ferramenta-de-linha-de-comando-cli) | O comando `lingotube`: obtém as legendas, a transcrição e o resumo de um vídeo como arquivos ou JSON. |
+| [Skill para agentes de IA](#skill-para-agentes-de-ia) | Permite que um agente de IA (Claude Code, Codex, Cursor e outros) resuma um vídeo, gere uma transcrição ou legendas e encontre um momento pela descrição. Ele executa a ferramenta de linha de comando. |
+| [Extensão de navegador](#extensão-de-navegador) | Legendas traduzidas sobre o player do YouTube, em qualquer idioma. Em desenvolvimento. |
+
+## Ferramenta de linha de comando (CLI)
+
+Tudo nesta seção trata do comando `lingotube`. O skill e a extensão têm suas próprias seções mais abaixo.
+
+### Recursos
 
 - **Legendas** em qualquer idioma, nos formatos `srt`, `vtt` e `json`.
 - **Transcrição** no idioma original com marcações de tempo.
@@ -32,7 +60,7 @@ Todas as solicitações são feitas em nome da sua conta do YouTube.
 - **Cache e retomada**: vídeos longos são processados em partes e, após uma falha, o trabalho continua de onde parou.
 - **Saída legível por máquina** com `--json` para scripts e agentes de IA.
 
-## Instalação
+### Instalação
 
 Você precisa do [uv](https://docs.astral.sh/uv/). O uv baixa por conta própria a versão certa do Python.
 
@@ -53,7 +81,7 @@ uv tool upgrade lingotube
 uv tool uninstall lingotube
 ```
 
-## Início rápido
+### Início rápido
 
 1. Entre no YouTube. No Chrome ou no Edge, o mais simples é:
 
@@ -79,7 +107,7 @@ uv tool uninstall lingotube
    lingotube subs https://www.youtube.com/watch?v=XXXXXXXXXXX --lang pt
    ```
 
-## Comandos
+### Comandos
 
 | Comando | O que faz |
 |---|---|
@@ -109,7 +137,7 @@ Um ID que começa com hífen deve ser passado depois de `--`:
 lingotube subs --lang pt -- -n5MqamatXE
 ```
 
-## Cookies e login
+### Cookies e login
 
 A ferramenta usa a primeira fonte adequada nesta ordem:
 
@@ -128,13 +156,13 @@ Para eles, use `lingotube login`. Exportar um arquivo continua sendo uma alterna
 
 Se os cookies deixarem de funcionar (código de saída `4`), execute `lingotube login` de novo ou exporte um arquivo novo.
 
-## Modos de tradução
+### Modos de tradução
 
 | Modo | Quando está ativo | Quem traduz |
 |---|---|---|
 | **Chat** (padrão) | nada está configurado | o chat do YouTube devolve o texto já no idioma desejado |
 | **Modelo próprio** | a seção `[translator]` está definida nas configurações | o seu modelo com uma API compatível com OpenAI |
-| **Agente** | `transcript` → tradução → `build` | um agente de IA ou você |
+| **Agente** | `transcript` → tradução → `build` | um agente de IA ou você, manualmente; o lingotube apenas confere a tradução e monta as legendas |
 
 As configurações ficam em `settings.toml`:
 
@@ -168,7 +196,7 @@ lingotube build <link> --lang pt --from pt.json   # verificação e montagem das
 > Para manter a tradução literal, use o modo «modelo próprio» ou «agente»: eles obtêm primeiro
 > o original, e a tradução é conferida pelos números das linhas. O chat pode parafrasear ou juntar frases.
 
-## Códigos de saída
+### Códigos de saída
 
 | Código | Significado |
 |---|---|
@@ -182,19 +210,10 @@ lingotube build <link> --lang pt --from pt.json   # verificação e montagem das
 | `7` | Os dados não passaram na validação. |
 | `130` | Interrompido pelo usuário (Ctrl+C). |
 
-## Limitações
-
-- O chat funciona apenas para usuários logados com mais de 13 anos, não está disponível em todos os países
-  e não existe em todos os vídeos.
-- Contas de marca não são compatíveis: usa-se a conta principal do navegador.
-- Uma hora de vídeo leva vários minutos: as solicitações vão uma a uma.
-- O tempo das linhas é definido pelo chat. Em vídeos longos, algumas linhas podem se desviar alguns
-  segundos; um deslocamento constante é corrigido com a opção `--offset`.
-- O texto de vídeos longos não é garantidamente literal: o chat às vezes responde com um texto
-  de sentido próximo, e a ferramenta não percebe isso. Para usos importantes, confira o resultado com a gravação.
-- Não há suporte a proxy.
-
 ## Skill para agentes de IA
+
+O skill executa a [ferramenta de linha de comando](#ferramenta-de-linha-de-comando-cli) pelo agente, então instale primeiro a ferramenta e depois o skill.
+
 
 O repositório tem um skill no formato aberto Agent Skills. Com ele, um agente de IA (Claude Code, Codex,
 Cursor, Gemini CLI e outros) resume vídeos, gera transcrições e legendas, encontra
@@ -209,8 +228,28 @@ Sem Node.js, copie a pasta `skills/lingotube/` para a pasta de skills do seu age
 
 ## Extensão de navegador
 
-A pasta `extension/` contém uma extensão com legendas traduzidas sobre o player do YouTube.
-Ela está em desenvolvimento e ainda não faz parte do branch principal.
+Uma extensão Manifest V3 para Chrome e Edge que mostra legendas traduzidas sobre o player do YouTube. Ela está em desenvolvimento e ainda não faz parte do branch principal.
+
+- Um botão no player ativa as legendas; o painel com o texto pode ser arrastado.
+- Você escolhe um entre 30 idiomas ou digita o seu.
+- O tempo e o texto original vêm das próprias legendas do YouTube; o chat apenas as traduz.
+- Funciona no navegador em que você já está logado no YouTube, então não é preciso configurar cookies.
+- Ela não está em nenhuma loja: abra a página de extensões do navegador, ative o modo de desenvolvedor, clique em «Carregar sem compactação» e escolha a pasta `extension/`.
+
+## Limitações
+
+Estas limitações valem para os três componentes, porque todos dependem do chat do YouTube.
+
+
+- O chat funciona apenas para usuários logados com mais de 13 anos, não está disponível em todos os países
+  e não existe em todos os vídeos.
+- Contas de marca não são compatíveis: usa-se a conta principal do navegador.
+- Uma hora de vídeo leva vários minutos: as solicitações vão uma a uma.
+- O tempo das linhas é definido pelo chat. Em vídeos longos, algumas linhas podem se desviar alguns
+  segundos; um deslocamento constante é corrigido com a opção `--offset`.
+- O texto de vídeos longos não é garantidamente literal: o chat às vezes responde com um texto
+  de sentido próximo, e a ferramenta não percebe isso. Para usos importantes, confira o resultado com a gravação.
+- Não há suporte a proxy.
 
 ## Desenvolvimento
 
