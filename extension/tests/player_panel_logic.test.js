@@ -1,6 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  TEXT_COLOR_CSS,
+  appearanceVariables,
+  shouldShowHint,
+  steppedBackgroundOpacity,
   customNamesForMenu,
   languageFromTypedText,
   menuValueForLanguage,
@@ -99,4 +103,31 @@ test('a typed language is remembered newest first, without case-insensitive dupl
     ['f', 'a', 'b', 'c', 'd'],
   );
   assert.deepEqual(rememberTypedLanguage(['Klingon'], { code: 'de', name: 'German' }), ['Klingon']);
+});
+
+test('appearance: the three text colour presets map to fixed CSS colours', () => {
+  assert.equal(TEXT_COLOR_CSS.white, '#fff');
+  assert.equal(TEXT_COLOR_CSS.yellow, '#ffd400');
+  assert.equal(TEXT_COLOR_CSS.cyan, '#7fd3ff');
+});
+
+test('appearance: variables carry the colour and the background opacity', () => {
+  assert.deepEqual(appearanceVariables({ textColor: 'yellow', backgroundOpacity: 0.4 }), {
+    '--lingotube-text-color': '#ffd400',
+    '--lingotube-bg-opacity': '0.4',
+  });
+});
+
+test('appearance: background opacity steps by 0.05 and stops at the ends', () => {
+  assert.equal(steppedBackgroundOpacity(0.75, 1), 0.8);
+  assert.equal(steppedBackgroundOpacity(0.75, -1), 0.7);
+  assert.equal(steppedBackgroundOpacity(1, 1), 1);
+  assert.equal(steppedBackgroundOpacity(0, -1), 0);
+  assert.equal(steppedBackgroundOpacity(0.1, -1), 0.05);
+});
+
+test('hint: shown only before the first enable and only when it was not seen', () => {
+  assert.equal(shouldShowHint({ hintSeen: false, enabled: false }), true);
+  assert.equal(shouldShowHint({ hintSeen: true, enabled: false }), false);
+  assert.equal(shouldShowHint({ hintSeen: false, enabled: true }), false);
 });

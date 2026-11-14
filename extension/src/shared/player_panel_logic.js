@@ -86,3 +86,39 @@ export function rememberTypedLanguage(customLanguageNames, language) {
   const others = customLanguageNames.filter((name) => name.toLowerCase() !== identity);
   return [language.name, ...others].slice(0, MAX_REMEMBERED_TYPED_LANGUAGES);
 }
+
+/** CSS colours of the three text presets; the keys are the stored `textColor` values. */
+export const TEXT_COLOR_CSS = Object.freeze({
+  white: '#fff',
+  yellow: '#ffd400',
+  cyan: '#7fd3ff',
+});
+
+const BACKGROUND_OPACITY_STEP_HUNDREDTHS = 5;
+
+/**
+ * CSS custom properties of the overlay box for the appearance settings.
+ * @param {{textColor: 'white'|'yellow'|'cyan', backgroundOpacity: number}} settings
+ */
+export function appearanceVariables({ textColor, backgroundOpacity }) {
+  return {
+    '--lingotube-text-color': TEXT_COLOR_CSS[textColor],
+    '--lingotube-bg-opacity': String(backgroundOpacity),
+  };
+}
+
+/**
+ * One step of the background slider: 0.05 per step, in whole hundredths to avoid float drift.
+ * @param {number} value 0..1
+ * @param {-1|1} direction
+ * @returns {number} 0..1, rounded to two decimals
+ */
+export function steppedBackgroundOpacity(value, direction) {
+  const hundredths = Math.round(value * 100) + direction * BACKGROUND_OPACITY_STEP_HUNDREDTHS;
+  return Math.min(100, Math.max(0, hundredths)) / 100;
+}
+
+/** The first-run hint: shown until the user has enabled lingotube once. */
+export function shouldShowHint({ hintSeen, enabled }) {
+  return !hintSeen && !enabled;
+}
