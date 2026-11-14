@@ -1,326 +1,238 @@
 # lingotube
 
-Консольная утилита: субтитры, транскрипция и краткое содержание видео YouTube.
-Текст берётся из встроенного чата YouTube («Спросить», Gemini) на странице видео.
-Утилита работает от имени вашего аккаунта YouTube.
+![version](https://img.shields.io/badge/version-0.1.0-blue)
+![python](https://img.shields.io/badge/python-%E2%89%A53.14-3776AB?logo=python&logoColor=white)
+![coverage cli](https://img.shields.io/badge/coverage_cli-96%25-brightgreen)
+![coverage extension](https://img.shields.io/badge/coverage_extension-99%25-brightgreen)
 
-> **Прочтите до первого запуска.**
->
-> - Утилита обращается к **внутреннему, недокументированному** запросу чата YouTube.
->   YouTube может изменить его в любой момент без предупреждения, и тогда утилита
->   перестанет работать до обновления.
-> - Каждый запрос идёт **от имени вашего аккаунта**, и вопросы с ответами
->   **остаются в истории чата** этого аккаунта.
-> - Условия использования YouTube **не предусматривают автоматического
->   использования** сервиса. Пользуясь утилитой, вы берёте этот риск на себя.
->   Утилита шлёт запросы по одному, с паузой между ними, но не может гарантировать,
->   что YouTube не ограничит аккаунт.
+**English** · [Русский](docs/readme/README.ru.md) · [简体中文](docs/readme/README.zh-Hans.md) · [繁體中文](docs/readme/README.zh-Hant.md) · [हिन्दी](docs/readme/README.hi.md) · [Español](docs/readme/README.es.md) · [Français](docs/readme/README.fr.md) · [العربية](docs/readme/README.ar.md) · [বাংলা](docs/readme/README.bn.md) · [Português](docs/readme/README.pt.md) · [ไทย](docs/readme/README.th.md) · [日本語](docs/readme/README.ja.md) · [Tiếng Việt](docs/readme/README.vi.md) · [Deutsch](docs/readme/README.de.md)
 
-## Установка
+A command-line tool that gets subtitles, a transcript and a summary of a YouTube video.
+The text comes from YouTube's built-in chat ("Ask", Gemini) on the video page.
+All requests are made on behalf of your YouTube account.
 
-Нужен [uv](https://docs.astral.sh/uv/). Нужную версию Python uv скачает сам.
-Установка выполняется одной командой из папки проекта:
+> [!WARNING]
+> The tool uses an **internal, undocumented** YouTube chat request. YouTube may change it
+> without notice, and the tool will stop working until it is updated. YouTube's Terms of
+> Service do not allow automated access: you use the tool at your own risk. Requests are sent
+> one at a time with a pause between them, but there is no guarantee that your account will
+> not be restricted.
 
-```sh
-uv tool install .
-```
+> [!NOTE]
+> Questions and answers stay in your account's chat history. The chat is not available in
+> Russia and most of the EU, nor under some videos.
 
-Или сразу из репозитория:
+## Features
+
+- **Subtitles** in any language, in `srt`, `vtt` and `json` formats.
+- **Transcript** in the original language with timecodes.
+- **Summary** of the video.
+- **Three translation modes**: YouTube's built-in chat, your own model with an OpenAI-compatible API,
+  or an AI agent that translates the transcript itself.
+- **Cache and resume**: long videos are processed in parts, and after a failure work continues where it stopped.
+- **Machine-readable output** with `--json` for scripts and AI agents.
+
+## Installation
+
+You need [uv](https://docs.astral.sh/uv/). uv downloads the right Python version itself.
 
 ```sh
 uv tool install git+https://github.com/antondmtvch/lingotube
 ```
 
-После установки в системе появится команда `lingotube`. Обновить её можно командой
-`uv tool upgrade lingotube`, удалить — `uv tool uninstall lingotube`.
+Or from a local copy of the repository:
 
-## Skill для ИИ-агентов
-
-В репозитории есть skill в открытом формате Agent Skills: с ним ИИ-агент (Claude Code, Codex,
-Cursor, Gemini CLI и другие) сам пересказывает видео, делает транскрипцию и субтитры и находит
-нужный момент по описанию, а при первом запуске помогает установить lingotube и настроить вход.
-
-Установка (нужен Node.js 22.20 или новее):
-
-```
-npx skills add antondmtvch/lingotube
+```sh
+uv tool install .
 ```
 
-Без Node.js скопируйте папку `skills/lingotube/` в папку skills своего агента:
-`~/.claude/skills/` для Claude Code или `~/.agents/skills/` для большинства остальных.
+Update and uninstall:
 
-Сам lingotube ставится отдельно (см. «Установка»); skill предложит сделать это при первом
-запуске.
+```sh
+uv tool upgrade lingotube
+uv tool uninstall lingotube
+```
 
-## Первый запуск
+## Quick start
 
-1. Войдите в YouTube. В Chrome или Edge проще всего командой:
+1. Sign in to YouTube. In Chrome or Edge the easiest way is:
 
    ```sh
    lingotube login
    ```
 
-   Откроется окно браузера с отдельным профилем lingotube. Войдите в аккаунт YouTube
-   и **закройте окно браузера**: окно само не закрывается. Google может предложить подтвердить
-   личность (например, по селфи): это можно пропустить. В Firefox достаточно войти в
-   YouTube как обычно. С любым способом входа чат должен открываться у вас и на сайте:
-   под видео есть кнопка «Спросить».
-2. Проверьте готовность:
+   A browser window opens with a separate lingotube profile. Sign in to your account and **close the
+   browser window**: the command waits until you close it. In Firefox, just sign in to YouTube as usual.
+
+2. Check that everything is ready:
 
    ```sh
    lingotube doctor
    ```
 
-   `doctor` по очереди проверяет каждый источник cookies (файл, профиль входа
-   `lingotube login` и каждый браузер),
-   вход в аккаунт и доступность чата на тестовом видео. Он только открывает чат
-   и ничего туда не пишет, поэтому в истории чата после проверки ничего не появится.
-   Чтобы проверить чат на другом видео, укажите `--video <ссылка>`.
-3. Если `doctor` сообщает, что ни один источник не работает (код 4), выполните
-   `lingotube login` (Chrome, Edge) или выгрузите файл `cookies.txt` (следующий
-   раздел) и запустите проверку с ним:
+   `doctor` checks the cookie sources, the account sign-in and chat availability on a test video.
+   It only opens the chat and writes nothing to it.
 
-   ```sh
-   lingotube doctor --cookies-file C:\путь\к\youtube.cookies.txt
-   ```
-
-   Путь запоминается в настройках, поэтому указывать его нужно только один раз.
-4. Получите субтитры:
+3. Get subtitles:
 
    ```sh
    lingotube subs https://www.youtube.com/watch?v=XXXXXXXXXXX --lang ru
    ```
 
-## Cookies: откуда утилита берёт вход
+## Commands
 
-Утилита берёт первый подходящий источник, в таком порядке:
-
-1. **Файл `cookies.txt`** — параметр `--cookies-file <путь>` (или переменная
-   `LINGOTUBE_COOKIES_FILE`, или путь, запомненный в настройках). Работает с любым
-   браузером.
-2. **Браузер, выбранный явно** — параметр `--browser <имя>` или значение `browser` в
-   настройках.
-3. **Профиль входа lingotube** — создаётся командой `lingotube login`, если он есть.
-4. Иначе утилита перебирает Firefox, Chrome, Edge и Brave.
-
-На Windows Chrome и Edge защищают cookies так, что прочитать их напрямую обычно
-нельзя. Поэтому для Chrome и Edge есть `lingotube login`; выгрузка файла остаётся
-запасным путём.
-
-### Вход через `lingotube login`
-
-```sh
-lingotube login                  # первый найденный из Chrome и Edge
-lingotube login --browser edge   # или выбрать браузер: chrome, edge
-```
-
-Команда открывает окно браузера в **отдельном профиле lingotube** (ваш обычный профиль
-браузера не затрагивается, и ваш браузер может быть открыт). Браузер запускается без порта отладки (с ним Google
-отказывает во входе). Войдите в YouTube и **закройте окно браузера**: окно само не
-закрывается. После закрытия lingotube читает cookies профиля и сохраняет их в папке
-данных lingotube. Каждый вход начинается с чистого профиля. Ждать, пока вы закроете окно,
-команда будет до 10 минут. Google может попросить подтвердить личность
-(например, селфи-проверка): это можно пропустить. После успешного входа запомненные в
-настройках `cookies_file` и `browser` удаляются, чтобы они не перекрывали вход.
-Переменную `LINGOTUBE_COOKIES_FILE` команда не трогает: она по-прежнему важнее входа,
-а `lingotube login` лишь предупреждает: «Переменная LINGOTUBE_COOKIES_FILE задана и
-важнее входа lingotube; уберите её, чтобы использовать вход.»
-
-`lingotube logout` удаляет профиль входа и сохранённые cookies.
-
-Если cookies перестали работать (код 4), снова выполните `lingotube login`. Если
-профиль входа уже открыт (окно входа ещё не закрыто), команды `login` и `logout`
-завершаются с кодом 1: закройте окно входа (или завершите его фоновый процесс браузера) и повторите.
-
-### Выгрузка `cookies.txt` в Chrome или Edge
-
-1. Установите расширение для выгрузки cookies в формате Netscape `cookies.txt`
-   (например, «Get cookies.txt LOCALLY»).
-2. Откройте **окно инкогнито** (Chrome: Ctrl+Shift+N; Edge: Ctrl+Shift+N, «InPrivate»).
-   В настройках расширения разрешите ему работать в режиме инкогнито.
-3. В этом окне войдите в YouTube.
-4. Откройте адрес `https://www.youtube.com/robots.txt` и выгрузите cookies
-   расширением в файл.
-5. **Сразу закройте окно инкогнито.** Если продолжить пользоваться окном, YouTube
-   обновит cookies, и выгруженные быстро устареют.
-
-Чем грозят устаревшие cookies: утилита сообщит, что YouTube не видит вход (код 4),
-и попросит выгрузить файл заново. На пробе выгрузки иногда переставали работать
-уже через 15–25 минут, а иногда работали дольше.
-
-### Безопасность cookies
-
-- Cookies отправляются только на `https://www.youtube.com`. Перенаправления на другие
-  адреса утилита не выполняет.
-- Cookies из браузера и из файла утилита не копирует: они хранятся только в памяти,
-  пока работает команда. Исключение — `lingotube login`: он сохраняет cookies только
-  для `youtube.com` и `google.com` в своей папке данных (на Linux и macOS файл
-  доступен только вам); `lingotube logout` удаляет их.
-- Cookies, токены и заголовки авторизации никогда не попадают в вывод, сообщения
-  об ошибках и `--json`: вместо них выводится `***`.
-- В кэше лежат только результаты: транскрипции, переводы и краткие содержания.
-- Файл `cookies.txt` даёт доступ к вашему аккаунту, поэтому храните его так же
-  бережно, как пароль. Не кладите его в общие папки и в репозитории. Если файл
-  доступен другим пользователям компьютера, утилита предупредит об этом
-  (на Linux и macOS права меняются командой `chmod 600 <файл>`). Эта проверка
-  работает только на Linux и macOS; на Windows предупреждения о правах нет.
-
-## Команды
-
-| Команда | Что делает |
+| Command | What it does |
 |---|---|
-| `lingotube subs <ссылка> --lang ru` | Создаёт файл субтитров на выбранном языке. |
-| `lingotube summary <ссылка> --lang ru` | Выводит краткое содержание на выбранном языке. |
-| `lingotube transcript <ссылка>` | Делает транскрипцию на языке оригинала с тайм-кодами (по умолчанию в JSON). |
-| `lingotube build <ссылка> --lang ru --from <файл>` | Принимает готовый перевод, сверяет его с оригиналом и собирает субтитры. |
-| `lingotube login [--browser chrome\|edge]` | Открывает окно входа в YouTube в отдельном профиле lingotube и сохраняет cookies. |
-| `lingotube logout` | Удаляет профиль входа и сохранённые cookies. |
-| `lingotube doctor` | Проверяет готовность: cookies, вход в аккаунт и чат на тестовом видео. |
+| `lingotube subs <link> --lang ru` | Creates a subtitle file in the chosen language. |
+| `lingotube summary <link> --lang ru` | Prints a summary in the chosen language. |
+| `lingotube transcript <link>` | Makes a transcript in the original language with timecodes (JSON by default). |
+| `lingotube build <link> --lang ru --from <file>` | Takes a ready translation, checks it against the original and builds subtitles. |
+| `lingotube login [--browser chrome\|edge]` | Opens a YouTube sign-in window and saves the cookies. |
+| `lingotube logout` | Deletes the sign-in profile and the saved cookies. |
+| `lingotube doctor` | Checks readiness: cookies, account sign-in and chat on a test video. |
 
-Вместо `<ссылка>` подойдёт ссылка на видео YouTube в любом обычном виде или
-идентификатор видео.
+`<link>` is any YouTube video link or a video ID.
 
-Общие параметры:
+Main options:
 
-- `--lang <код>` — язык результата (`ru`, `en`, `es`…). Без этого параметра язык
-  берётся из настроек.
-- `--format srt|vtt|json` — формат субтитров. По умолчанию `srt`.
-- `-o <путь>` — куда записать результат. По умолчанию результат записывается в файл
-  `<id>.<язык>.<формат>` в текущей папке. С `-o -` результат выводится в
-  стандартный вывод.
-- `--offset <секунды>` — сдвиг всех субтитров. Можно указать дробное или
-  отрицательное число.
-- `--cookies-file <путь>` / `--browser <имя>` — источник cookies.
-- `--no-cache` — не брать результаты из кэша.
-- `--json` — машинный вывод для агентов. Утилита выводит один JSON-документ
-  `{"ok": …, "result": …, "warnings": […], "error": {"code", "message", "hint"}}`.
+- `--lang <code>` — result language (`ru`, `en`, `es`, etc.). Without it the language comes from the settings.
+- `--format srt|vtt|json` — subtitle format, `srt` by default.
+- `-o <path>` — where to write the result. With `-o -` the result goes to standard output.
+- `--offset <seconds>` — shift all subtitles; fractional and negative numbers are allowed.
+- `--cookies-file <path>` / `--browser <name>` — cookie source.
+- `--no-cache` — do not use the cache.
+- `--json` — a single JSON document `{"ok", "result", "warnings", "error"}`.
 
-Ход работы («часть 3 из 7»), предупреждения и ошибки выводятся в поток ошибок.
-Поэтому результат можно передавать дальше по конвейеру.
-
-Длинное видео обрабатывается частями. Каждая готовая часть сразу сохраняется в
-кэш, поэтому после сбоя повторный запуск продолжает работу с места остановки.
-Если запустить ту же команду для того же видео и языка ещё раз, результат
-возьмётся из кэша сразу.
-
-**Идентификатор, который начинается с дефиса** (например, `-n5MqamatXE`), утилита
-понимает и без дополнительных знаков. Надёжнее всего передавать его после `--`:
+Pass an ID that starts with a hyphen after `--`:
 
 ```sh
 lingotube subs --lang ru -- -n5MqamatXE
 ```
 
-Параметры (`--lang`, `--cookies-file` и другие) должны стоять **до** `--`, как в
-примере выше: всё, что идёт после `--`, считается идентификатором видео.
+## Cookies and sign-in
 
-## Перевод: три режима
+The tool takes the first suitable source in this order:
 
-Режимы различаются только тем, кто переводит. Формат результата во всех режимах
-одинаковый.
+1. A `cookies.txt` file: the `--cookies-file` option, the `LINGOTUBE_COOKIES_FILE` variable or the path from the settings.
+2. A browser chosen explicitly: the `--browser` option or `browser` in the settings.
+3. The lingotube sign-in profile, if it was created by `lingotube login`.
+4. Otherwise Firefox, Chrome, Edge and Brave are tried in turn.
 
-| Режим | Когда включается | Кто переводит |
+On Windows, Chrome and Edge protect their cookies, and they usually cannot be read directly.
+For them, use `lingotube login`. Exporting a file remains a fallback.
+
+> [!CAUTION]
+> The `cookies.txt` file gives access to your account. Keep it like a password and do not put
+> it in repositories or shared folders. Cookies, tokens and authorization headers never appear
+> in the output, error messages or `--json`: `***` is printed instead.
+
+If the cookies stop working (exit code `4`), run `lingotube login` again or export a fresh file.
+
+## Translation modes
+
+| Mode | When it is on | Who translates |
 |---|---|---|
-| **Чат** (по умолчанию) | ничего не настроено | чат YouTube сразу выдаёт транскрипцию на нужном языке |
-| **Своя модель** | в настройках указан `[translator]` | ваша модель переводит транскрипцию на языке оригинала |
-| **Агент** | `transcript` → перевод агентом → `build` | ИИ-агент или вы сами |
+| **Chat** (default) | nothing is configured | YouTube's chat returns the text in the needed language right away |
+| **Own model** | the `[translator]` section is set in the settings | your model with an OpenAI-compatible API |
+| **Agent** | `transcript` → translation → `build` | an AI agent or you |
 
-### Режим «своя модель»
-
-Подойдёт любая модель с API, совместимым с OpenAI (`/chat/completions`), облачная или
-локальная. Модели передаётся только текст реплик, без тайм-кодов и cookies. Перевод
-идёт пачками пронумерованных реплик. После каждой пачки утилита сверяет номера реплик:
-при расхождении пачка переводится повторно, а при второй неудаче утилита сообщает
-об ошибке. Оригинал хранится в кэше, поэтому перевод на второй язык обходится без
-новых запросов к YouTube.
-
-Файл настроек `settings.toml` находится здесь:
+The settings are in `settings.toml`:
 
 - Windows: `%LOCALAPPDATA%\lingotube\settings.toml`
 - macOS: `~/Library/Application Support/lingotube/settings.toml`
 - Linux: `~/.config/lingotube/settings.toml`
 
+Example of the "own model" mode:
+
 ```toml
 lang = "ru"
 
 [translator]
-base_url = "https://api.openai.com/v1"   # или локальная модель, например http://127.0.0.1:11434/v1
+base_url = "https://api.openai.com/v1"   # or a local model, e.g. http://127.0.0.1:11434/v1
 model = "gpt-4o-mini"
-api_key_env = "LINGOTUBE_API_KEY"        # имя переменной окружения с ключом
+api_key_env = "LINGOTUBE_API_KEY"        # name of the environment variable with the key
 batch_size = 40
 ```
 
-Сам ключ в файл настроек не записывается и параметром команды не передаётся.
-Утилита читает его только из переменной окружения, имя которой указано в
-`api_key_env`:
+The key is never written to the settings file: the tool reads it only from the environment variable.
 
-```powershell
-$env:LINGOTUBE_API_KEY = "…"   # PowerShell
-```
+"Agent" mode:
 
 ```sh
-export LINGOTUBE_API_KEY="…"   # bash / zsh
+lingotube transcript <link> -o orig.json          # the original as JSON
+# translate the text field of every line, leaving id and time unchanged, and save it as ru.json
+lingotube build <link> --lang ru --from ru.json   # check and build the subtitles
 ```
 
-Другие настройки: `format`, `browser`, `cookies_file`, `chunk_seconds` (длина части в
-секундах, по умолчанию 300), `min_interval` (пауза между запросами к чату в секундах,
-по умолчанию 5), `max_retries` (число повторов, по умолчанию 2). Переменные окружения
-`LINGOTUBE_LANG` и `LINGOTUBE_COOKIES_FILE` переопределяют `lang` и `cookies_file`.
-Относительный путь `cookies_file` в `settings.toml` отсчитывается от папки файла настроек
-(значение из `LINGOTUBE_COOKIES_FILE` — от текущей папки).
+> [!TIP]
+> To keep the translation literal, use the "own model" or "agent" mode: they first get the original,
+> and the translation is checked by line numbers. The chat may paraphrase or merge phrases.
 
-### Режим «агент»
+## Exit codes
 
-```sh
-lingotube transcript <ссылка> -o orig.json        # оригинал в JSON
-# агент переводит поле text каждой реплики, не трогая id и время, и сохраняет ru.json с "language": "ru"
-lingotube build <ссылка> --lang ru --from ru.json  # проверка и сборка субтитров
-```
-
-`build` сверяет перевод с оригиналом из кэша: реплик должно быть столько же, их `id`
-должны совпадать, а пустых текстов быть не должно. Если что-то не сходится,
-`build` выдаёт ошибку со списком проблемных реплик. Время реплик всегда берётся
-из оригинала.
-
-### Совет про дословность
-
-В режиме «чат» сравнить перевод с оригиналом нельзя: оригинала в этом режиме нет.
-Промпт требует переводить дословно, реплику за репликой, но чат может пересказать
-или объединить фразы. Если важна дословность, используйте режим «своя модель» или
-режим «агент». В обоих режимах сначала получается транскрипция оригинала, а
-перевод затем проверяется по номерам реплик.
-
-## Коды завершения
-
-| Код | Значение |
+| Code | Meaning |
 |---|---|
-| `0` | Успех. |
-| `1` | Прочая ошибка (например, не удалось записать файл или профиль входа уже открыт). |
-| `2` | Неверные параметры команды. |
-| `3` | Чат недоступен для этого видео или аккаунта. |
-| `4` | Проблема со входом: cookies не найдены или устарели (повторите `lingotube login`), вход не выполнен, либо не задан ключ модели. |
-| `5` | Результат неполный: файл записан, но транскрипция не доходит до конца видео (место обрыва указано в предупреждении). Повторный запуск дозапросит недостающее. |
-| `6` | Сетевой сбой после исчерпания повторов. |
-| `7` | Данные не прошли проверку (ссылка, файл перевода, настройки). |
-| `130` | Прервано пользователем (Ctrl+C). |
+| `0` | Success. |
+| `1` | Other error. |
+| `2` | Invalid command options. |
+| `3` | The chat is unavailable for this video or account. |
+| `4` | Sign-in problem: cookies not found or expired, or the model key is not set. |
+| `5` | Incomplete result: the file is written, but the transcript does not reach the end of the video. |
+| `6` | Network failure after retries ran out. |
+| `7` | Data failed validation. |
+| `130` | Interrupted by the user (Ctrl+C). |
 
-## Ограничения
+## Limitations
 
-- Чат YouTube работает только для вошедших в аккаунт пользователей старше 13 лет.
-  Он доступен **не во всех странах**: например, его нет в России и в большей части
-  ЕС.
-- Чат есть **не под каждым видео**.
-- По имеющимся данным, чат недоступен **брендовым аккаунтам**. Утилита использует
-  основной аккаунт, в который вы вошли в браузере. Выбора аккаунта в этой версии
-  нет.
-- Запросы идут по одному, с паузой между ними, поэтому час видео обрабатывается
-  несколько минут.
-- Время реплик определяет чат. На коротких видео субтитры обычно расходятся с речью
-  не больше чем на пару секунд. На длинных видео точность хуже: отдельные реплики
-  могут сдвигаться на несколько секунд, а иногда и больше. Если сдвиг постоянный,
-  поправьте его параметром `--offset`.
-- **Текст на длинных видео не гарантирован дословно.** Чат иногда отвечает не
-  расшифровкой, а близким по смыслу текстом, и утилита этого не видит. Пропуски
-  речи тоже возможны: утилита предупреждает о крупных пустотах, но не обо всех.
-  Перед использованием субтитров или перевода для важных целей сверяйте текст
-  с записью.
-- Поддержки прокси в этой версии нет.
+- The chat works only for signed-in users over 13, is not available in every country
+  and is not under every video.
+- Brand accounts are not supported: the browser's main account is used.
+- An hour of video takes several minutes: requests go one at a time.
+- Line timing is set by the chat. On long videos individual lines can drift by a few
+  seconds; a constant shift is fixed with the `--offset` option.
+- The text of long videos is not guaranteed to be verbatim: the chat sometimes answers with a
+  text close in meaning, and the tool cannot see this. For important uses, check the result against the recording.
+- There is no proxy support.
+
+## Skill for AI agents
+
+The repository has a skill in the open Agent Skills format. With it an AI agent (Claude Code, Codex,
+Cursor, Gemini CLI and others) summarizes videos, makes transcripts and subtitles, finds
+a moment by description and helps with installation and sign-in.
+
+```sh
+npx skills add antondmtvch/lingotube
+```
+
+Without Node.js, copy the `skills/lingotube/` folder into your agent's skills folder
+(`~/.claude/skills/` for Claude Code or `~/.agents/skills/` for most others).
+
+## Browser extension
+
+The `extension/` folder holds an extension with translated subtitles over the YouTube player.
+It is under development and is not yet in the main branch.
+
+## Development
+
+Dependencies and the environment are managed with uv:
+
+```sh
+uv sync
+uv run pytest
+uv run ruff check
+```
+
+Test coverage (the values in the badges above were measured with these commands and are updated by hand):
+
+```sh
+uv run --with pytest-cov pytest --cov=lingotube
+cd extension && node --test --experimental-test-coverage --test-coverage-exclude='tests/**' tests/
+```
+
+Project structure:
+
+- `src/lingotube/` — the core: CLI, authorization, chat, translation, cache and result writing.
+- `skills/lingotube/` — the skill for AI agents.
+- `extension/` — the browser extension.
+- `tests/` — Python tests, `probe/` — manual probes of requests to YouTube.
+- `docs/readme/` — translations of this README.
