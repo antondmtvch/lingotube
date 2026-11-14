@@ -234,7 +234,14 @@ Uma extensão Manifest V3 para Chrome, Edge e Firefox que mostra legendas traduz
 - Você escolhe um entre 30 idiomas ou digita o seu.
 - O tempo e o texto original vêm das próprias legendas do YouTube; o chat apenas as traduz.
 - Funciona no navegador em que você já está logado no YouTube, então não é preciso configurar cookies.
-- Ela não está em nenhuma loja: abra a página de extensões do navegador, ative o modo de desenvolvedor, clique em «Carregar sem compactação» e escolha a pasta `extension/`.
+
+Ela ainda não está em nenhuma loja. Baixe os arquivos para o seu navegador na [página de versões](https://github.com/antondmtvch/lingotube/releases):
+
+- Chrome: baixe `lingotube-<version>-chromium.zip` e descompacte em uma pasta que você vá manter. Abra `chrome://extensions`, ative o «Modo do desenvolvedor», clique em «Carregar sem compactação» e escolha essa pasta. O Chrome avisa na inicialização sobre extensões em modo de desenvolvedor. Para atualizar, substitua os arquivos da pasta e clique no botão de recarregar no cartão da extensão.
+- Edge: use o mesmo arquivo. Abra `edge://extensions`, ative o «Modo do desenvolvedor», clique em «Carregar descompactada» e escolha a pasta.
+- Firefox 128 ou mais recente: baixe `lingotube-<version>-firefox.xpi`, arraste o arquivo para a janela do Firefox (ou abra `about:addons`, clique no ícone de engrenagem e escolha «Instalar extensão a partir de arquivo…») e confirme a instalação.
+
+Brave, Opera e Vivaldi não foram testados.
 
 ## Limitações
 

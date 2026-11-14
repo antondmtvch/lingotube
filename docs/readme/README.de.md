@@ -234,7 +234,14 @@ Eine Manifest-V3-Erweiterung für Chrome, Edge und Firefox, die übersetzte Unte
 - Sie wählen eine von 30 Sprachen oder tippen eine eigene ein.
 - Zeiten und Originaltext stammen aus den eigenen Untertiteln von YouTube; der Chat übersetzt sie nur.
 - Sie funktioniert in dem Browser, in dem Sie bereits bei YouTube angemeldet sind, daher ist keine Cookie-Einrichtung nötig.
-- Sie ist in keinem Store: Öffnen Sie die Erweiterungsseite Ihres Browsers, aktivieren Sie den Entwicklermodus, klicken Sie auf „Entpackte Erweiterung laden“ und wählen Sie den Ordner `extension/`.
+
+Sie ist noch in keinem Store. Laden Sie die Dateien für Ihren Browser von der [Releases-Seite](https://github.com/antondmtvch/lingotube/releases) herunter:
+
+- Chrome: Laden Sie `lingotube-<version>-chromium.zip` herunter und entpacken Sie das Archiv in einen Ordner, den Sie behalten. Öffnen Sie `chrome://extensions`, aktivieren Sie den „Entwicklermodus“, klicken Sie auf „Entpackte Erweiterung laden“ und wählen Sie diesen Ordner. Chrome erinnert beim Start an Erweiterungen im Entwicklermodus. Zum Aktualisieren ersetzen Sie die Dateien im Ordner und klicken auf der Karte der Erweiterung auf die Schaltfläche zum Neuladen.
+- Edge: Verwenden Sie dasselbe Archiv. Öffnen Sie `edge://extensions`, aktivieren Sie den „Entwicklermodus“, klicken Sie auf „Entpackt laden“ und wählen Sie den Ordner.
+- Firefox 128 oder neuer: Laden Sie `lingotube-<version>-firefox.xpi` herunter, ziehen Sie die Datei in das Firefox-Fenster (oder öffnen Sie `about:addons`, klicken Sie auf das Zahnradsymbol und wählen Sie „Add-on aus Datei installieren …“) und bestätigen Sie die Installation.
+
+Brave, Opera und Vivaldi wurden nicht getestet.
 
 ## Einschränkungen
 

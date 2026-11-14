@@ -234,7 +234,14 @@ Una extensión Manifest V3 para Chrome, Edge y Firefox que muestra subtítulos t
 - Eliges uno de 30 idiomas o escribes el tuyo.
 - Los tiempos y el texto original proceden de los propios subtítulos de YouTube; el chat solo los traduce.
 - Funciona en el navegador donde ya has iniciado sesión en YouTube, por lo que no hay que configurar cookies.
-- No está en ninguna tienda: abre la página de extensiones del navegador, activa el modo de desarrollador, pulsa «Cargar descomprimida» y elige la carpeta `extension/`.
+
+Todavía no está en ninguna tienda. Descarga los archivos para tu navegador desde la [página de versiones](https://github.com/antondmtvch/lingotube/releases):
+
+- Chrome: descarga `lingotube-<version>-chromium.zip` y descomprímelo en una carpeta que vayas a conservar. Abre `chrome://extensions`, activa el «Modo de desarrollador», pulsa «Cargar descomprimida» y elige esa carpeta. Chrome te recuerda al iniciarse que hay extensiones en modo de desarrollador. Para actualizar, sustituye los archivos de la carpeta y pulsa el botón de recarga en la tarjeta de la extensión.
+- Edge: usa el mismo archivo. Abre `edge://extensions`, activa el «Modo de desarrollador», pulsa «Cargar sin empaquetar» y elige la carpeta.
+- Firefox 128 o posterior: descarga `lingotube-<version>-firefox.xpi`, arrastra el archivo a la ventana de Firefox (o abre `about:addons`, pulsa el icono del engranaje y elige «Instalar complemento desde archivo…») y confirma la instalación.
+
+Brave, Opera y Vivaldi no se han probado.
 
 ## Limitaciones
 

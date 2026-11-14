@@ -231,7 +231,14 @@ npx skills add antondmtvch/lingotube
 - 可從 30 種語言中選擇，也可以自行輸入。
 - 時間和原文來自 YouTube 自己的字幕，聊天只負責翻譯。
 - 它在你已登入 YouTube 的瀏覽器中運作，因此不需要設定 cookie。
-- 它不在任何商店中：開啟瀏覽器的擴充功能頁面，啟用開發人員模式，點擊「載入未封裝項目」，然後選擇 `extension/` 資料夾。
+
+它目前不在任何商店中。請在[發布頁面](https://github.com/antondmtvch/lingotube/releases)下載適用於你的瀏覽器的檔案：
+
+- Chrome：下載 `lingotube-<version>-chromium.zip`，解壓縮到一個你會長期保留的資料夾。開啟 `chrome://extensions`，啟用「開發人員模式」，點擊「載入未封裝項目」，然後選擇該資料夾。Chrome 在啟動時會提醒你有處於開發人員模式的擴充功能。要更新，請取代資料夾中的檔案，並點擊擴充功能卡片上的重新載入按鈕。
+- Edge：使用同一個壓縮檔。開啟 `edge://extensions`，啟用「開發人員模式」，點擊「載入解壓縮」，然後選擇該資料夾。
+- Firefox 128 或更新版本：下載 `lingotube-<version>-firefox.xpi`，把檔案拖進 Firefox 視窗（或開啟 `about:addons`，點擊齒輪圖示，選擇「從檔案安裝附加元件…」），然後確認安裝。
+
+尚未在 Brave、Opera 和 Vivaldi 中測試過。
 
 ## 限制
 

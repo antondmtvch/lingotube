@@ -234,7 +234,14 @@ Tiện ích mở rộng Manifest V3 cho Chrome, Edge và Firefox, hiển thị p
 - Bạn chọn một trong 30 ngôn ngữ hoặc tự nhập ngôn ngữ của mình.
 - Thời gian và văn bản gốc lấy từ chính phụ đề của YouTube; chat chỉ dịch chúng.
 - Nó chạy trong trình duyệt mà bạn đã đăng nhập YouTube, nên không cần cấu hình cookie.
-- Nó chưa có trên cửa hàng nào: mở trang tiện ích của trình duyệt, bật chế độ nhà phát triển, bấm «Load unpacked» và chọn thư mục `extension/`.
+
+Nó chưa có trên cửa hàng nào. Hãy tải các tệp dành cho trình duyệt của bạn từ [trang bản phát hành](https://github.com/antondmtvch/lingotube/releases):
+
+- Chrome: tải `lingotube-<version>-chromium.zip` và giải nén vào một thư mục mà bạn sẽ giữ lại. Mở `chrome://extensions`, bật «Developer mode», bấm «Load unpacked» và chọn thư mục đó. Khi khởi động, Chrome nhắc về các tiện ích ở chế độ nhà phát triển. Để cập nhật, hãy thay các tệp trong thư mục và bấm nút tải lại trên thẻ của tiện ích.
+- Edge: dùng cùng tệp nén đó. Mở `edge://extensions`, bật «Developer mode», bấm «Load unpacked» và chọn thư mục.
+- Firefox 128 trở lên: tải `lingotube-<version>-firefox.xpi`, kéo tệp vào cửa sổ Firefox (hoặc mở `about:addons`, bấm biểu tượng bánh răng và chọn «Install Add-on From File...») rồi xác nhận cài đặt.
+
+Brave, Opera và Vivaldi chưa được kiểm thử.
 
 ## Hạn chế
 

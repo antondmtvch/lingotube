@@ -19,3 +19,39 @@ test('manifest is MV3 with minimal permissions', () => {
   assert.equal('background' in manifest, false);
   if ('host_permissions' in manifest) assert.deepEqual(manifest.host_permissions, YOUTUBE);
 });
+
+test('manifest declares icons of every size and the files exist', () => {
+  assert.deepEqual(Object.keys(manifest.icons), ['16', '32', '48', '96', '128']);
+  for (const size of Object.keys(manifest.icons)) {
+    assert.equal(manifest.icons[size], `icons/icon-${size}.png`);
+    assert.ok(readFileSync(new URL(`../${manifest.icons[size]}`, import.meta.url)).length > 0);
+  }
+});
+
+test('manifest description is a non-empty English string', () => {
+  assert.equal(typeof manifest.description, 'string');
+  assert.ok(manifest.description.length > 0);
+  assert.doesNotMatch(manifest.description, /[А-Яа-яЁё]/);
+});
+
+test('manifest version is X.Y.Z', () => {
+  assert.match(manifest.version, /^\d+\.\d+\.\d+$/);
+});
+
+test('manifest sets browser minimums', () => {
+  assert.equal(manifest.minimum_chrome_version, '111');
+  assert.equal(manifest.browser_specific_settings.gecko.strict_min_version, '128.0');
+});
+
+test('manifest declares no data collection', () => {
+  assert.deepEqual(manifest.browser_specific_settings.gecko.data_collection_permissions, {
+    required: ['none'],
+  });
+});
+
+test('gecko id is unchanged', () => {
+  assert.equal(
+    manifest.browser_specific_settings.gecko.id,
+    '{8f3c2a1e-5b7d-4e9a-9c61-2d0f4b8e7a35}',
+  );
+});
