@@ -17,6 +17,7 @@ lingotube 用於取得 YouTube 影片的字幕、逐字稿和摘要。專案由�
 > 此工具使用的是 YouTube 聊天的**內部、未公開文件**的請求。YouTube 可能隨時更改而不另行通知，
 > 屆時工具將無法使用，直到更新為止。YouTube 的服務條款不允許自動化存取：使用本工具的風險由你自行承擔。
 > 請求會逐一送出，且每次之間有間隔，但無法保證你的帳號不會受到限制。
+> 支援服務盡力而為，利用業餘時間進行，不設截止期限。
 
 > [!NOTE]
 > 提問與回答會保留在你帳號的聊天紀錄中。聊天功能在俄羅斯和歐盟大部分地區無法使用，
@@ -65,8 +66,10 @@ lingotube 用於取得 YouTube 影片的字幕、逐字稿和摘要。專案由�
 需要 [uv](https://docs.astral.sh/uv/)。uv 會自動下載所需的 Python 版本。
 
 ```sh
-uv tool install --python 3.14 git+https://github.com/antondmtvch/lingotube
+uv tool install --python 3.14 lingotube
 ```
+
+`main` 分支的最新版本： `uv tool install --python 3.14 git+https://github.com/antondmtvch/lingotube`
 
 或從儲存庫的本機副本安裝：
 
@@ -207,6 +210,7 @@ lingotube build <連結> --lang zh-Hant --from zh.json   # 檢查並產生字幕
 | `5` | 結果不完整：檔案已寫入，但逐字稿未涵蓋到影片結尾。 |
 | `6` | 重試次數用盡後發生網路故障。 |
 | `7` | 資料未通過驗證。 |
+| `8` | YouTube 改變了 lingotube 讀取的格式。請更新 lingotube：參見「安裝」部分。 |
 | `130` | 被使用者中斷（Ctrl+C）。 |
 
 ## 面向 AI 代理的 skill

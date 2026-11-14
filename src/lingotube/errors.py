@@ -39,6 +39,28 @@ class ChatUnavailableError(LingotubeError):
     exit_code = 3
 
 
+YOUTUBE_CHANGED_HINT = (
+    "YouTube changed the format lingotube reads. Update lingotube: see the Installation section "
+    "of the README. If the update does not help, report it in the issues."
+)
+
+
+class YouTubeChangedError(LingotubeError):
+    """YouTube changed the page or the chat response in a way lingotube cannot read."""
+
+    code = "youtube_changed"
+    exit_code = 8
+
+    def __init__(self, message: str, hint: str | None = None) -> None:
+        """Create the error; the update hint is the default.
+
+        Args:
+            message: Human-readable description of the problem.
+            hint: Advice on how to fix it; the update hint if None.
+        """
+        super().__init__(message, hint or YOUTUBE_CHANGED_HINT)
+
+
 class AuthError(LingotubeError):
     """Cookies are missing or expired, or sign-in to YouTube failed."""
 

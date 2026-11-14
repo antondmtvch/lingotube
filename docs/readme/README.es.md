@@ -19,6 +19,7 @@ Todas las solicitudes se hacen en nombre de tu cuenta de YouTube.
 > Las Condiciones del Servicio de YouTube no permiten el acceso automatizado: usas la herramienta
 > bajo tu propio riesgo. Las solicitudes se envían una a una, con una pausa entre ellas, pero no hay
 > garantía de que tu cuenta no sea restringida.
+> El soporte es en la medida de lo posible, en tiempo libre y sin plazos.
 
 > [!NOTE]
 > Las preguntas y respuestas quedan en el historial de chat de tu cuenta. El chat no está disponible
@@ -67,8 +68,10 @@ Todo lo de esta sección trata del comando `lingotube`. El skill y la extensión
 Necesitas [uv](https://docs.astral.sh/uv/). uv descarga por sí mismo la versión de Python adecuada.
 
 ```sh
-uv tool install --python 3.14 git+https://github.com/antondmtvch/lingotube
+uv tool install --python 3.14 lingotube
 ```
+
+Última versión de `main`: `uv tool install --python 3.14 git+https://github.com/antondmtvch/lingotube`
 
 O desde una copia local del repositorio:
 
@@ -210,6 +213,7 @@ lingotube build <enlace> --lang es --from es.json   # comprobación y generació
 | `5` | Resultado incompleto: el archivo se ha escrito, pero la transcripción no llega al final del vídeo. |
 | `6` | Fallo de red tras agotar los reintentos. |
 | `7` | Los datos no superaron la validación. |
+| `8` | YouTube cambió el formato que lee lingotube. Actualice lingotube: vea la sección «Instalación». |
 | `130` | Interrumpido por el usuario (Ctrl+C). |
 
 ## Skill para agentes de IA

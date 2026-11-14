@@ -11,10 +11,12 @@ from dataclasses import asdict, dataclass, replace
 from lingotube.ask.client import AskClient
 from lingotube.auth.base import EXPORT_HINT, LOGIN_HINT, CookieSource, Credentials
 from lingotube.errors import (
+    YOUTUBE_CHANGED_HINT,
     AuthError,
     ChatUnavailableError,
     LingotubeError,
     NetworkError,
+    YouTubeChangedError,
 )
 
 DEFAULT_TEST_VIDEO = "-n5MqamatXE"  # public video with the chat confirmed by the probe
@@ -64,6 +66,7 @@ class Check:
     hint: str | None
     critical: bool = True  # False: failed, but another source works, so not an error
     unexpected: bool = False  # the check itself crashed (a bug, not a user problem)
+    structural: bool = False  # YouTube changed the page or response (exit 8, not exit 3)
     soft_verdict: str = "not read"  # the word shown when a failure is not critical
 
 
@@ -210,6 +213,20 @@ async def run_doctor(
                 detail=e.message,
                 hint=e.hint or CHAT_HINT,
             )
+        except YouTubeChangedError as e:
+            login = Check(
+                name=LOGIN,
+                ok=True,
+                detail=f"signed in ({name})",
+                hint=None,
+            )
+            chat = Check(
+                name=CHAT,
+                ok=False,
+                detail=e.message,
+                hint=e.hint,
+                structural=True,
+            )
         except NetworkError as e:
             network_down = True
             checks.append(
@@ -330,6 +347,11 @@ def doctor_error(checks: list[Check]) -> LingotubeError | None:
         return NetworkError(
             message="Could not reach YouTube.",
             hint=NETWORK_HINT,
+        )
+    if any(c.structural for c in checks):
+        return YouTubeChangedError(
+            message="YouTube changed the format lingotube reads.",
+            hint=YOUTUBE_CHANGED_HINT,
         )
     if _passed(
         checks=checks,

@@ -117,3 +117,36 @@ def test_language_selector_links_to_every_other_readme(readme_path: Path) -> Non
     expected = {repository_path(path) for path in README_PATHS if path != readme_path}
     assert links == expected
     assert selector.count("**") == 2
+
+
+@pytest.mark.parametrize("readme_path", README_PATHS, ids=lambda path: path.name)
+def test_readme_exit_table_has_row_8(readme_path: Path) -> None:
+    """Check that every README's exit table documents exit code 8."""
+    assert re.search(r"^\| `8` \|", read_readme(readme_path), flags=re.MULTILINE)
+
+
+WARNING_BLOCK = re.compile(r"^> \[!WARNING\]\n((?:>.*\n?)+)", flags=re.MULTILINE)
+
+
+@pytest.mark.parametrize("readme_path", README_PATHS, ids=lambda path: path.name)
+def test_readme_warning_block_states_account_risk(readme_path: Path) -> None:
+    """Check that every README has a warning block about the account risk."""
+    match = WARNING_BLOCK.search(read_readme(readme_path))
+    assert match is not None
+    assert len(match.group(1).strip()) > 0
+
+
+def test_root_readme_warning_names_terms_and_restriction() -> None:
+    """Check that the root README warning names YouTube's terms and the restriction risk."""
+    match = WARNING_BLOCK.search(read_readme(REPOSITORY_ROOT / "README.md"))
+    assert match is not None
+    block = re.sub(r"\s+", " ", match.group(1).replace(">", " "))
+    assert "Terms of Service" in block
+    assert "restricted" in block
+
+
+@pytest.mark.parametrize("readme_path", README_PATHS, ids=lambda path: path.name)
+def test_readme_first_install_command_is_pypi(readme_path: Path) -> None:
+    """Check that the first install command in every README installs from PyPI."""
+    commands = [line for line in read_readme(readme_path).splitlines() if line.startswith("uv tool install")]
+    assert commands[0] == "uv tool install --python 3.14 lingotube"

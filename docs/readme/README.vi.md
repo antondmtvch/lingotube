@@ -19,6 +19,7 @@ Mọi yêu cầu đều được gửi dưới danh nghĩa tài khoản YouTube 
 > Điều khoản dịch vụ của YouTube không cho phép truy cập tự động: bạn tự chịu rủi ro khi sử dụng công cụ.
 > Các yêu cầu được gửi lần lượt, có quãng nghỉ giữa các lần, nhưng không có gì đảm bảo
 > tài khoản của bạn sẽ không bị hạn chế.
+> Hỗ trợ được thực hiện trong khả năng, vào thời gian rảnh, không có thời hạn cam kết.
 
 > [!NOTE]
 > Câu hỏi và câu trả lời vẫn nằm trong lịch sử chat của tài khoản bạn. Chat không khả dụng ở Nga
@@ -67,8 +68,10 @@ Mọi nội dung trong phần này đều nói về lệnh `lingotube`. Skill v�
 Bạn cần [uv](https://docs.astral.sh/uv/). uv tự tải đúng phiên bản Python.
 
 ```sh
-uv tool install --python 3.14 git+https://github.com/antondmtvch/lingotube
+uv tool install --python 3.14 lingotube
 ```
+
+Phiên bản mới nhất từ `main`: `uv tool install --python 3.14 git+https://github.com/antondmtvch/lingotube`
 
 Hoặc từ bản sao cục bộ của kho mã:
 
@@ -210,6 +213,7 @@ lingotube build <liên kết> --lang vi --from vi.json   # kiểm tra và dựng
 | `5` | Kết quả chưa đầy đủ: tệp đã được ghi, nhưng bản chép lời chưa tới cuối video. |
 | `6` | Lỗi mạng sau khi hết số lần thử lại. |
 | `7` | Dữ liệu không qua được bước kiểm tra. |
+| `8` | YouTube đã thay đổi định dạng mà lingotube đọc. Hãy cập nhật lingotube: xem mục «Cài đặt». |
 | `130` | Bị người dùng ngắt (Ctrl+C). |
 
 ## Skill cho tác tử AI

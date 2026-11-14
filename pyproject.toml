@@ -1,8 +1,17 @@
 [project]
 name = "lingotube"
 version = "0.1.0"
-description = "CLI for YouTube live-chat transcription, summary and translation"
+description = "Subtitles, transcripts and summaries of YouTube videos through YouTube's chat: a CLI for AI agents and people"
+readme = "docs/pypi/README.md"
 license = "MIT"
+authors = [{ name = "antondmtvch" }]
+keywords = ["youtube", "transcript", "subtitles", "summary", "ai-agent", "claude-code"]
+classifiers = [
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Multimedia :: Video",
+]
 requires-python = ">=3.14"
 dependencies = [
     "httpx",
@@ -12,6 +21,11 @@ dependencies = [
     "browser-cookie3",
     "websockets>=17.4",
 ]
+
+[project.urls]
+Homepage = "https://skills.sh/antondmtvch/lingotube"
+Repository = "https://github.com/antondmtvch/lingotube"
+Issues = "https://github.com/antondmtvch/lingotube/issues"
 
 [project.scripts]
 lingotube = "lingotube.cli:main"

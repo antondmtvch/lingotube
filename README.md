@@ -19,6 +19,7 @@ All requests are made on behalf of your YouTube account.
 > Service do not allow automated access: you use the tool at your own risk. Requests are sent
 > one at a time with a pause between them, but there is no guarantee that your account will
 > not be restricted.
+> Support is best effort, in free time, with no deadlines.
 
 > [!NOTE]
 > Questions and answers stay in your account's chat history. The chat is not available in
@@ -67,8 +68,10 @@ Everything in this section is about the `lingotube` command. The skill and the e
 You need [uv](https://docs.astral.sh/uv/). uv downloads the right Python version itself.
 
 ```sh
-uv tool install --python 3.14 git+https://github.com/antondmtvch/lingotube
+uv tool install --python 3.14 lingotube
 ```
+
+Latest code from `main`: `uv tool install --python 3.14 git+https://github.com/antondmtvch/lingotube`
 
 Or from a local copy of the repository:
 
@@ -210,6 +213,7 @@ lingotube build <link> --lang ru --from ru.json   # check and build the subtitle
 | `5` | Incomplete result: the file is written, but the transcript does not reach the end of the video. |
 | `6` | Network failure after retries ran out. |
 | `7` | Data failed validation. |
+| `8` | YouTube changed the format lingotube reads. Update lingotube: see the "Installation" section. |
 | `130` | Interrupted by the user (Ctrl+C). |
 
 ## Skill for AI agents

@@ -18,6 +18,7 @@ lingotube は、YouTube 動画の字幕、文字起こし、要約を取得し�
 > YouTube は予告なくいつでもこれを変更する可能性があり、その場合はアップデートされるまでツールが動作しなくなります。
 > YouTube の利用規約は自動化されたアクセスを認めていません。ご利用は自己責任でお願いします。
 > リクエストは間隔を空けて 1 件ずつ送信されますが、アカウントが制限されないという保証はありません。
+> サポートはできる範囲で、空いた時間に行い、期限は設けていません。
 
 > [!NOTE]
 > 質問と回答は、アカウントのチャット履歴に残ります。チャットはロシアおよび EU のほとんどの国では利用できず、
@@ -66,8 +67,10 @@ lingotube は、YouTube 動画の字幕、文字起こし、要約を取得し�
 [uv](https://docs.astral.sh/uv/) が必要です。適切な Python のバージョンは uv が自動でダウンロードします。
 
 ```sh
-uv tool install --python 3.14 git+https://github.com/antondmtvch/lingotube
+uv tool install --python 3.14 lingotube
 ```
+
+`main` の最新版: `uv tool install --python 3.14 git+https://github.com/antondmtvch/lingotube`
 
 またはリポジトリのローカルコピーから:
 
@@ -209,6 +212,7 @@ lingotube build <リンク> --lang ja --from ja.json   # 検証と字幕の作�
 | `5` | 不完全な結果：ファイルは書き込まれましたが、文字起こしが動画の最後まで届いていません。 |
 | `6` | 再試行を使い切った後のネットワーク障害。 |
 | `7` | データが検証に失敗しました。 |
+| `8` | YouTube が lingotube の読み取る形式を変更しました。lingotube を更新してください：「インストール」セクションを参照。 |
 | `130` | ユーザーによって中断されました（Ctrl+C）。 |
 
 ## AI エージェント向け skill

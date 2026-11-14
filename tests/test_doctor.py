@@ -24,7 +24,13 @@ from lingotube.doctor import (
     doctor_exit_code,
     run_doctor,
 )
-from lingotube.errors import AuthError, ChatUnavailableError, NetworkError
+from lingotube.errors import (
+    YOUTUBE_CHANGED_HINT,
+    AuthError,
+    ChatUnavailableError,
+    NetworkError,
+    YouTubeChangedError,
+)
 from lingotube.models import VideoInfo
 
 SECRET_SAPISID = "SAPISID_VALUE_DOCTOR_123"
@@ -921,3 +927,28 @@ async def test_final_error_hint_starts_with_login_hint():
     assert isinstance(error, AuthError)
     assert (error.hint or "").startswith(LOGIN_HINT)
     assert "--cookies-file" in (error.hint or "")
+
+
+async def test_signed_in_but_youtube_changed_is_structural_chat_failure():
+    """Check that a changed YouTube page is flagged as structural, not as an ordinary chat failure."""
+    checks = await run_doctor(
+        sources={"cookies file": GoodSource()},
+        make_ask=ask_factory(outcome=YouTubeChangedError(message="Could not read the YouTube watch page.")),
+        test_video_id="abcdefghijk",
+    )
+    chat = by_name(checks=checks, name=CHAT)
+    assert not chat.ok
+    assert chat.structural
+    assert chat.hint == YOUTUBE_CHANGED_HINT
+
+
+def test_doctor_command_youtube_changed_exit_8(tmp_path):
+    """Check that the doctor command exits with code 8 and the update hint when YouTube changed."""
+    h = Harness(
+        tmp_path=tmp_path,
+        sources={"cookies file": GoodSource()},
+        outcome=YouTubeChangedError(message="Could not read the YouTube watch page."),
+    )
+    code, out, err = h.run()
+    assert code == 8
+    assert YOUTUBE_CHANGED_HINT in out + err

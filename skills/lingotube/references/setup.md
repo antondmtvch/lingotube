@@ -12,6 +12,12 @@ Before installing anything, tell the person:
   Every question it sends stays in that account's YouTube chat history.
 - The YouTube chat is not available in every country (for example, not in Russia and most of
   the EU) and not for every video or account. You can only check this after sign-in (step 4).
+- YouTube's Terms of Service do not allow automated access. The tool uses the person's account
+  at their own risk.
+- The account can be restricted, and lingotube cannot prevent it.
+- Recommend a separate, ordinary Google account (not a brand account) for this, not the main one.
+- The owner supports lingotube in free time, best effort, with no deadlines. Fixes come when
+  possible; YouTube may change the chat without notice.
 
 Ask whether to proceed.
 
@@ -34,8 +40,10 @@ to open a new terminal (or restart the agent) and continue from here.
 Check with `lingotube --help`. If it is missing, show and (after "yes") run:
 
 ```
-uv tool install --python 3.14 git+https://github.com/antondmtvch/lingotube
+uv tool install --python 3.14 lingotube
 ```
+
+Latest code from `main`, if the person asks for it: `uv tool install --python 3.14 git+https://github.com/antondmtvch/lingotube`
 
 Keep `--python 3.14`: without it uv uses the first Python it finds, and on Python 3.15 a
 dependency (`lz4`) has no prebuilt package and fails to build. uv downloads Python 3.14 itself

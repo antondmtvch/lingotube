@@ -15,7 +15,7 @@ from lingotube.ask.wire import (
     is_signed_in,
     page_logged_in,
 )
-from lingotube.errors import ChatUnavailableError
+from lingotube.errors import ChatUnavailableError, YouTubeChangedError
 
 FIX = Path(__file__).parent.parent / "fixtures"
 
@@ -144,9 +144,10 @@ def test_extract_answer_ignores_junk_items():
 
 
 def test_extract_answer_empty_raises():
-    """Check that an empty answer raises ChatUnavailableError."""
+    """Check that a chat item with no answer text raises ChatUnavailableError."""
+    response = {"youChatItemViewModel": {"text": {"content": ""}}}
     with pytest.raises(expected_exception=ChatUnavailableError):
-        extract_answer(get_panel_response={})
+        extract_answer(get_panel_response=response)
 
 
 def test_extract_page():
@@ -170,9 +171,22 @@ def test_extract_page_without_asr_track_has_no_language():
 
 
 def test_extract_page_garbage_raises():
-    """Check that a page that is not a watch page raises ChatUnavailableError."""
-    with pytest.raises(expected_exception=ChatUnavailableError):
+    """Check that a page that is not a watch page raises YouTubeChangedError."""
+    with pytest.raises(expected_exception=YouTubeChangedError):
         extract_page(html="<html>nothing here</html>")
+
+
+def test_extract_answer_without_any_item_key_is_youtube_changed():
+    """Check that a response without the chat item key reports a YouTube change."""
+    with pytest.raises(expected_exception=YouTubeChangedError):
+        extract_answer(get_panel_response={"unexpected": {}})
+
+
+def test_extract_answer_empty_items_stay_chat_unavailable():
+    """Check that an empty chat answer stays the chat-unavailable error."""
+    response = {"items": [{"youChatItemViewModel": {"text": {"content": "   "}}}]}
+    with pytest.raises(expected_exception=ChatUnavailableError):
+        extract_answer(get_panel_response=response)
 
 
 def test_page_logged_in():
@@ -204,3 +218,14 @@ def test_send_command_repr_hides_token():
             click_tracking_params="CTP",
         )
     )
+
+
+def test_extract_page_unplayable_video_stays_chat_unavailable():
+    """Check that a removed or private video stays exit 3 and is not reported as a YouTube change."""
+    html = (
+        '<script>"INNERTUBE_CONTEXT": {"client": {"clientName": "WEB"}}</script>'
+        '<script>var ytInitialPlayerResponse = {"playabilityStatus": {"status": "ERROR", '
+        '"reason": "Video unavailable"}};</script>'
+    )
+    with pytest.raises(expected_exception=ChatUnavailableError):
+        extract_page(html=html)

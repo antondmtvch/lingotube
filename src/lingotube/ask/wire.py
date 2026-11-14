@@ -10,7 +10,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any
 
-from lingotube.errors import ChatUnavailableError
+from lingotube.errors import YOUTUBE_CHANGED_HINT, ChatUnavailableError, YouTubeChangedError
 from lingotube.models import VideoInfo
 
 CHAT_PANEL_ID = "PAyouchat"
@@ -240,8 +240,14 @@ def extract_answer(get_panel_response: dict[str, Any]) -> str:
         The answer text, with the parts separated by newlines.
 
     Raises:
-        ChatUnavailableError: If the response has no answer text.
+        YouTubeChangedError: If the response has no chat item at all.
+        ChatUnavailableError: If the chat item exists but has no answer text.
     """
+    if not any("youChatItemViewModel" in d for d in _walk(obj=get_panel_response)):
+        raise YouTubeChangedError(
+            message="The YouTube chat response has an unexpected shape.",
+            hint=YOUTUBE_CHANGED_HINT,
+        )
     parts: list[str] = []
     for d in _walk(obj=get_panel_response):
         item = d.get("youChatItemViewModel")
@@ -314,10 +320,12 @@ def extract_page(html: str) -> tuple[dict[str, Any], VideoInfo]:
         The Innertube client context and the video info.
 
     Raises:
-        ChatUnavailableError: If the page cannot be parsed, for example because the
-            video is unavailable.
+        YouTubeChangedError: If the page cannot be parsed.
     """
-    unavailable = ChatUnavailableError(message="Could not parse the YouTube video page (is the video unavailable?).")
+    unavailable = YouTubeChangedError(
+        message="Could not read the YouTube watch page.",
+        hint=YOUTUBE_CHANGED_HINT,
+    )
     i = html.find(_CONTEXT_MARKER)
     m = _PLAYER_MARKER.search(string=html)
     if i < 0 or m is None:
@@ -341,6 +349,9 @@ def extract_page(html: str) -> tuple[dict[str, Any], VideoInfo]:
         )
         else None
     )
+    status = player.get("playabilityStatus") if isinstance(player, dict) else None
+    if not isinstance(details, dict) and isinstance(status, dict) and status.get("status") not in (None, "OK"):
+        raise ChatUnavailableError(message="The YouTube video is unavailable (removed, private or mistyped).")
     if not isinstance(
         context,
         dict,

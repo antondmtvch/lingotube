@@ -86,7 +86,7 @@ def test_no_vpn_anywhere():
 def test_every_exit_code_handled():
     """Check that the skill describes every exit code of the CLI."""
     t = skill_text("SKILL.md")
-    for code in ("0", "1", "2", "3", "4", "5", "6", "7"):
+    for code in ("0", "1", "2", "3", "4", "5", "6", "7", "8"):
         assert f"| {code} " in t or f"| {code}," in t, code
 
 
@@ -143,6 +143,7 @@ def test_setup_install_commands_verbatim():
     t = skill_text("references/setup.md")
     assert 'powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"' in t
     assert "curl -LsSf https://astral.sh/uv/install.sh | sh" in t
+    assert "uv tool install --python 3.14 lingotube" in t
     assert "uv tool install --python 3.14 git+https://github.com/antondmtvch/lingotube" in t
 
 
@@ -204,3 +205,13 @@ def test_readme_install_commands():
     t = (ROOT / "README.md").read_text(encoding="utf-8")
     assert "npx skills add antondmtvch/lingotube" in t
     assert "~/.agents/skills/" in t
+
+
+def test_consent_states_account_risk_before_install():
+    """Check that the consent step states the account risk before any install."""
+    text = skill_text("references/setup.md")
+    consent = text.split("## 0. Consent")[1].split("## 1.")[0]
+    assert "terms" in consent.lower()  # YouTube terms forbid automated access
+    assert "restrict" in consent.lower()  # the account may be restricted
+    assert "separate" in consent.lower()  # recommend a separate Google account
+    assert "no deadline" in consent.lower() or "when possible" in consent.lower()
