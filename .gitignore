@@ -5,3 +5,7 @@ probe/out/
 cookies.txt
 .env
 .idea/
+
+# Local agent skills (installed per machine)
+.agents/
+.claude/

@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "lingotube",
+  "version": "0.1.0",
+  "description": "Переведённые субтитры поверх плеера YouTube",
+  "permissions": ["storage"],
+  "content_scripts": [
+    {
+      "matches": ["https://www.youtube.com/*"],
+      "js": ["loader.js"],
+      "css": ["overlay.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://www.youtube.com/*"],
+      "js": ["src/page/bundle.js"],
+      "world": "MAIN",
+      "run_at": "document_idle"
+    }
+  ]
+}
