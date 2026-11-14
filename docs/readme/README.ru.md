@@ -1,11 +1,12 @@
 # lingotube
 
 ![version](https://img.shields.io/badge/version-0.1.0-blue)
+![extension release](https://img.shields.io/github/v/release/antondmtvch/lingotube?filter=extension-v*&label=extension)
 ![python](https://img.shields.io/badge/python-%E2%89%A53.14-3776AB?logo=python&logoColor=white)
 ![coverage cli](https://img.shields.io/badge/coverage_cli-96%25-brightgreen)
 ![coverage extension](https://img.shields.io/badge/coverage_extension-99%25-brightgreen)
 
-[English](../../README.md) · **Русский** · [简体中文](README.zh-Hans.md) · [繁體中文](README.zh-Hant.md) · [हिन्दी](README.hi.md) · [Español](README.es.md) · [Français](README.fr.md) · [العربية](README.ar.md) · [বাংলা](README.bn.md) · [Português](README.pt.md) · [ไทย](README.th.md) · [日本語](README.ja.md) · [Tiếng Việt](README.vi.md) · [Deutsch](README.de.md)
+[English](/README.md) · **Русский** · [简体中文](/docs/readme/README.zh-Hans.md) · [繁體中文](/docs/readme/README.zh-Hant.md) · [हिन्दी](/docs/readme/README.hi.md) · [Español](/docs/readme/README.es.md) · [Français](/docs/readme/README.fr.md) · [العربية](/docs/readme/README.ar.md) · [বাংলা](/docs/readme/README.bn.md) · [Português](/docs/readme/README.pt.md) · [ไทย](/docs/readme/README.th.md) · [日本語](/docs/readme/README.ja.md) · [Tiếng Việt](/docs/readme/README.vi.md) · [Deutsch](/docs/readme/README.de.md)
 
 lingotube получает субтитры, транскрипцию и краткое содержание видео YouTube. Проект состоит из трёх частей: консольной утилиты, skill'а для ИИ-агентов и расширения для браузера (в разработке), которое показывает переведённые субтитры поверх плеера.
 Текст берётся из встроенного чата YouTube («Спросить», Gemini) на странице видео.

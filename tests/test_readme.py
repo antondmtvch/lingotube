@@ -72,3 +72,32 @@ def test_readme_notes_browser_is_untested(readme_path: Path, browser: str) -> No
 def test_every_readme_keeps_its_six_top_level_headings(readme_path: Path) -> None:
     text = readme_path.read_text(encoding="utf-8")
     assert count_top_level_headings(text) == EXPECTED_TOP_LEVEL_HEADINGS
+
+
+def badge_lines(text: str) -> list[str]:
+    """Return the badge lines of the header, the `![...]` lines before the first heading."""
+    return [line for line in text.split("\n")[:12] if line.startswith("![")]
+
+
+def language_selector(text: str) -> str:
+    """Return the language selector line of the header (the line with ` · ` separators)."""
+    return next(line for line in text.split("\n")[:14] if " · " in line)
+
+
+def repository_path(readme_path: Path) -> str:
+    """Return the root-relative link target of a README, as the header links it."""
+    return "/" + readme_path.relative_to(REPOSITORY_ROOT).as_posix()
+
+
+@pytest.mark.parametrize("readme_path", README_PATHS, ids=lambda path: path.name)
+def test_header_badges_match_root_readme(readme_path: Path) -> None:
+    assert badge_lines(read_readme(readme_path)) == badge_lines(read_readme(README_PATHS[0]))
+
+
+@pytest.mark.parametrize("readme_path", README_PATHS, ids=lambda path: path.name)
+def test_language_selector_links_to_every_other_readme(readme_path: Path) -> None:
+    selector = language_selector(read_readme(readme_path))
+    links = set(re.findall(r"\]\(([^)]+)\)", selector))
+    expected = {repository_path(path) for path in README_PATHS if path != readme_path}
+    assert links == expected
+    assert selector.count("**") == 2
