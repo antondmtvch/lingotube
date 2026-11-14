@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Subtitles, transcripts and summaries of YouTube videos through YouTube's chat: a CLI for AI agents and people"
 readme = "docs/pypi/README.md"
 license = "MIT"
-authors = [{ name = "Anton" }]
+authors = [{ name = "antondmtvch" }]
 keywords = ["youtube", "transcript", "subtitles", "summary", "ai-agent", "claude-code"]
 classifiers = [
     "Environment :: Console",
