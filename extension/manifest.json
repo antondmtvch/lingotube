@@ -3,6 +3,11 @@
   "name": "lingotube",
   "version": "0.1.0",
   "description": "Переведённые субтитры поверх плеера YouTube",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "{8f3c2a1e-5b7d-4e9a-9c61-2d0f4b8e7a35}"
+    }
+  },
   "permissions": ["storage"],
   "content_scripts": [
     {
