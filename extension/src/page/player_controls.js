@@ -11,7 +11,6 @@ import {
   placeButtonNextToSubtitlesButton,
   selectValueAfterClose,
   shouldShowHint,
-  steppedBackgroundOpacity,
   steppedTextScale,
 } from '../shared/player_panel_logic.js';
 
@@ -108,14 +107,17 @@ export class PlayerControls {
     this.#settings = settings;
     this.#renderLanguageMenu();
     this.#setSwitch(this.#toggleEnabledButton, this.#texts.subtitlesLabel, settings.enabled);
-    this.#toggleEnabledButton.setAttribute('aria-pressed', String(settings.enabled));
     this.#buttonElement.classList.toggle('lingotube-player-button-pressed', settings.enabled);
     this.#buttonElement.setAttribute('aria-pressed', String(settings.enabled));
     const isWaiting = settings.waitForSubtitles !== false;
     this.#setSwitch(this.#waitForSubtitlesButton, this.#texts.waitLabel, isWaiting);
     this.#textScaleValueElement.textContent = `${Math.round(settings.textScale * 100)}%`;
     this.#renderAppearance(settings);
-    this.#hintElement.hidden = !shouldShowHint(settings);
+    this.#renderHint();
+  }
+
+  #renderHint() {
+    this.#hintElement.hidden = this.#isOpen || !shouldShowHint(this.#settings);
   }
 
   destroy() {
@@ -221,7 +223,12 @@ export class PlayerControls {
       largerButton,
     );
 
-    this.#appearanceOpenButton = this.#createElement('button', 'lingotube-panel-button lingotube-appearance-open', this.#texts.appearanceOpen);
+    // A menu row like the player's own settings: the name on the left, a chevron on the right.
+    this.#appearanceOpenButton = this.#createElement('button', 'lingotube-panel-button lingotube-menu-row');
+    this.#appearanceOpenButton.append(
+      this.#createElement('span', 'lingotube-menu-row-label', this.#texts.appearanceTitle),
+      this.#createElement('span', 'lingotube-menu-row-chevron', this.#isRightToLeft ? '‹' : '›'),
+    );
     this.#appearanceOpenButton.addEventListener('click', () => this.#showAppearance());
 
     this.#statusLineElement = this.#createElement('div', 'lingotube-status-line');
@@ -237,11 +244,10 @@ export class PlayerControls {
       title,
       languageRow,
       this.#otherLanguageRow,
+      scaleRow,
       divider(),
       this.#toggleEnabledButton,
       this.#waitForSubtitlesButton,
-      scaleRow,
-      divider(),
       this.#appearanceOpenButton,
       this.#statusLineElement,
       this.#retryButton,
@@ -285,10 +291,6 @@ export class PlayerControls {
 
     const backgroundRow = this.#createElement('div', 'lingotube-panel-row');
     const backgroundLabel = this.#createElement('span', 'lingotube-panel-label', this.#texts.backgroundLabel);
-    const fewerButton = this.#createElement('button', 'lingotube-panel-button lingotube-opacity-button', '−');
-    fewerButton.addEventListener('click', () => this.#changeBackgroundOpacity(-1));
-    const moreButton = this.#createElement('button', 'lingotube-panel-button lingotube-opacity-button', '+');
-    moreButton.addEventListener('click', () => this.#changeBackgroundOpacity(1));
     this.#opacitySlider = this.#createElement('input', 'lingotube-opacity-slider');
     this.#opacitySlider.type = 'range';
     this.#opacitySlider.min = '0';
@@ -299,7 +301,8 @@ export class PlayerControls {
       this.#callbacks.onAppearanceChanged({ backgroundOpacity: Number(this.#opacitySlider.value) / 100 });
     });
     this.#opacityValueElement = this.#createElement('span', 'lingotube-scale-value');
-    backgroundRow.append(backgroundLabel, fewerButton, this.#opacitySlider, moreButton, this.#opacityValueElement);
+    // The native slider already moves by its step with the arrow keys, so no −/+ buttons here.
+    backgroundRow.append(backgroundLabel, this.#opacitySlider, this.#opacityValueElement);
 
     this.#outlineButton = this.#createSwitch('lingotube-outline-button');
     this.#outlineButton.addEventListener('click', () => this.#callbacks.onAppearanceChanged({ outline: this.#settings.outline !== true }));
@@ -307,11 +310,8 @@ export class PlayerControls {
     const resetButton = this.#createElement('button', 'lingotube-panel-button lingotube-reset-button', this.#texts.resetPosition);
     resetButton.addEventListener('click', () => this.#callbacks.onResetPosition());
 
-    const pairRow = this.#createElement('div', 'lingotube-panel-row lingotube-pair-row');
-    pairRow.append(this.#outlineButton, resetButton);
-
     const divider = () => this.#createElement('div', 'lingotube-divider');
-    panel.append(header, divider(), colorRow, backgroundRow, divider(), pairRow);
+    panel.append(header, divider(), colorRow, backgroundRow, this.#outlineButton, divider(), resetButton);
     panel.addEventListener('keydown', (event) => {
       if (event.key === 'Escape') this.#setOpen(false);
     });
@@ -420,11 +420,6 @@ export class PlayerControls {
     if (scale !== this.#settings.textScale) this.#callbacks.onTextScaleChanged(scale);
   }
 
-  #changeBackgroundOpacity(direction) {
-    const opacity = steppedBackgroundOpacity(this.#settings.backgroundOpacity, direction);
-    if (opacity !== this.#settings.backgroundOpacity) this.#callbacks.onAppearanceChanged({ backgroundOpacity: opacity });
-  }
-
   #showAppearance() {
     this.#panelElement.hidden = true;
     this.#appearancePanelElement.hidden = false;
@@ -444,6 +439,7 @@ export class PlayerControls {
     this.#panelElement.hidden = !isOpen;
     this.#appearancePanelElement.hidden = true;
     this.#buttonElement.setAttribute('aria-expanded', String(isOpen));
+    this.#renderHint();
   }
 
   #handleDocumentPointerDown = (event) => {

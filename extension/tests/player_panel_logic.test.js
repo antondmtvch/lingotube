@@ -4,7 +4,6 @@ import {
   TEXT_COLOR_CSS,
   appearanceVariables,
   shouldShowHint,
-  steppedBackgroundOpacity,
   customNamesForMenu,
   languageFromTypedText,
   menuValueForLanguage,
@@ -118,13 +117,6 @@ test('appearance: variables carry the colour and the background opacity', () => 
   });
 });
 
-test('appearance: background opacity steps by 0.05 and stops at the ends', () => {
-  assert.equal(steppedBackgroundOpacity(0.75, 1), 0.8);
-  assert.equal(steppedBackgroundOpacity(0.75, -1), 0.7);
-  assert.equal(steppedBackgroundOpacity(1, 1), 1);
-  assert.equal(steppedBackgroundOpacity(0, -1), 0);
-  assert.equal(steppedBackgroundOpacity(0.1, -1), 0.05);
-});
 
 test('hint: shown only before the first enable and only when it was not seen', () => {
   assert.equal(shouldShowHint({ hintSeen: false, enabled: false }), true);

@@ -1256,7 +1256,6 @@ const TEXT_COLOR_CSS = Object.freeze({
   cyan: '#7fd3ff',
 });
 
-const BACKGROUND_OPACITY_STEP_HUNDREDTHS = 5;
 
 /**
  * CSS custom properties of the overlay box for the appearance settings.
@@ -1269,22 +1268,12 @@ function appearanceVariables({ textColor, backgroundOpacity }) {
   };
 }
 
-/**
- * One step of the background slider: 0.05 per step, in whole hundredths to avoid float drift.
- * @param {number} value 0..1
- * @param {-1|1} direction
- * @returns {number} 0..1, rounded to two decimals
- */
-function steppedBackgroundOpacity(value, direction) {
-  const hundredths = Math.round(value * 100) + direction * BACKGROUND_OPACITY_STEP_HUNDREDTHS;
-  return Math.min(100, Math.max(0, hundredths)) / 100;
-}
 
 /** The first-run hint: shown until the user has enabled lingotube once. */
 function shouldShowHint({ hintSeen, enabled }) {
   return !hintSeen && !enabled;
 }
-return Object.freeze({ TEXT_SCALE_STEP: TEXT_SCALE_STEP, MIN_TEXT_SCALE: MIN_TEXT_SCALE, MAX_TEXT_SCALE: MAX_TEXT_SCALE, languageFromTypedText: languageFromTypedText, menuValueForLanguage: menuValueForLanguage, customNamesForMenu: customNamesForMenu, steppedTextScale: steppedTextScale, selectValueAfterClose: selectValueAfterClose, placeButtonNextToSubtitlesButton: placeButtonNextToSubtitlesButton, rememberTypedLanguage: rememberTypedLanguage, TEXT_COLOR_CSS: TEXT_COLOR_CSS, appearanceVariables: appearanceVariables, steppedBackgroundOpacity: steppedBackgroundOpacity, shouldShowHint: shouldShowHint });
+return Object.freeze({ TEXT_SCALE_STEP: TEXT_SCALE_STEP, MIN_TEXT_SCALE: MIN_TEXT_SCALE, MAX_TEXT_SCALE: MAX_TEXT_SCALE, languageFromTypedText: languageFromTypedText, menuValueForLanguage: menuValueForLanguage, customNamesForMenu: customNamesForMenu, steppedTextScale: steppedTextScale, selectValueAfterClose: selectValueAfterClose, placeButtonNextToSubtitlesButton: placeButtonNextToSubtitlesButton, rememberTypedLanguage: rememberTypedLanguage, TEXT_COLOR_CSS: TEXT_COLOR_CSS, appearanceVariables: appearanceVariables, shouldShowHint: shouldShowHint });
 })();
 
 // Module: src/shared/ui_strings.js
@@ -1321,7 +1310,6 @@ const TEXTS = {
     textSizeLabel: 'Размер текста:',
     retryNow: 'Повторить сейчас',
     hintFirstRun: 'Включить субтитры с переводом',
-    appearanceOpen: 'Оформление →',
     appearanceTitle: 'Оформление',
     textColorLabel: 'Цвет текста:',
     colorWhite: 'Белый',
@@ -1331,7 +1319,7 @@ const TEXTS = {
     outlineLabel: 'Контур',
     resetPosition: 'Вернуть оверлей на место',
     back: '← Назад',
-    subtitlesLabel: 'Субтитры',
+    subtitlesLabel: 'Включить субтитры',
     waitLabel: 'Ждать субтитры',
   },
   en: {
@@ -1353,7 +1341,6 @@ const TEXTS = {
     textSizeLabel: 'Text size:',
     retryNow: 'Retry now',
     hintFirstRun: 'Turn on translated subtitles',
-    appearanceOpen: 'Appearance →',
     appearanceTitle: 'Appearance',
     textColorLabel: 'Text colour:',
     colorWhite: 'White',
@@ -1363,7 +1350,7 @@ const TEXTS = {
     outlineLabel: 'Outline',
     resetPosition: 'Move overlay back',
     back: '← Back',
-    subtitlesLabel: 'Subtitles',
+    subtitlesLabel: 'Turn on subtitles',
     waitLabel: 'Wait for subtitles',
   },
   'zh-CN': {
@@ -1385,7 +1372,6 @@ const TEXTS = {
     textSizeLabel: '文字大小：',
     retryNow: '立即重试',
     hintFirstRun: '开启翻译字幕',
-    appearanceOpen: '外观 →',
     appearanceTitle: '外观',
     textColorLabel: '文字颜色：',
     colorWhite: '白色',
@@ -1395,7 +1381,7 @@ const TEXTS = {
     outlineLabel: '描边',
     resetPosition: '将字幕移回原位',
     back: '← 返回',
-    subtitlesLabel: '字幕',
+    subtitlesLabel: '开启字幕',
     waitLabel: '等待字幕',
   },
   es: {
@@ -1417,7 +1403,6 @@ const TEXTS = {
     textSizeLabel: 'Tamaño del texto:',
     retryNow: 'Reintentar ahora',
     hintFirstRun: 'Activar subtítulos traducidos',
-    appearanceOpen: 'Apariencia →',
     appearanceTitle: 'Apariencia',
     textColorLabel: 'Color del texto:',
     colorWhite: 'Blanco',
@@ -1427,7 +1412,7 @@ const TEXTS = {
     outlineLabel: 'Contorno',
     resetPosition: 'Devolver el overlay a su sitio',
     back: '← Atrás',
-    subtitlesLabel: 'Subtítulos',
+    subtitlesLabel: 'Activar subtítulos',
     waitLabel: 'Esperar subtítulos',
   },
   hi: {
@@ -1449,7 +1434,6 @@ const TEXTS = {
     textSizeLabel: 'टेक्स्ट का आकार:',
     retryNow: 'अभी दोबारा कोशिश करें',
     hintFirstRun: 'अनुवादित सबटाइटल चालू करें',
-    appearanceOpen: 'रूप-रंग →',
     appearanceTitle: 'रूप-रंग',
     textColorLabel: 'टेक्स्ट का रंग:',
     colorWhite: 'सफ़ेद',
@@ -1459,7 +1443,7 @@ const TEXTS = {
     outlineLabel: 'बाहरी रेखा',
     resetPosition: 'ओवरले को वापस जगह पर ले जाएँ',
     back: '← वापस',
-    subtitlesLabel: 'सबटाइटल',
+    subtitlesLabel: 'सबटाइटल चालू करें',
     waitLabel: 'सबटाइटल की प्रतीक्षा',
   },
   ar: {
@@ -1481,7 +1465,6 @@ const TEXTS = {
     textSizeLabel: 'حجم النص:',
     retryNow: 'أعد المحاولة الآن',
     hintFirstRun: 'تشغيل الترجمة',
-    appearanceOpen: 'المظهر ←',
     appearanceTitle: 'المظهر',
     textColorLabel: 'لون النص:',
     colorWhite: 'أبيض',
@@ -1491,7 +1474,7 @@ const TEXTS = {
     outlineLabel: 'حدود النص',
     resetPosition: 'إعادة الطبقة إلى مكانها',
     back: '→ رجوع',
-    subtitlesLabel: 'الترجمات',
+    subtitlesLabel: 'تشغيل الترجمة',
     waitLabel: 'انتظار الترجمات',
   },
   'pt-BR': {
@@ -1513,7 +1496,6 @@ const TEXTS = {
     textSizeLabel: 'Tamanho do texto:',
     retryNow: 'Tentar agora',
     hintFirstRun: 'Ativar legendas traduzidas',
-    appearanceOpen: 'Aparência →',
     appearanceTitle: 'Aparência',
     textColorLabel: 'Cor do texto:',
     colorWhite: 'Branco',
@@ -1523,7 +1505,7 @@ const TEXTS = {
     outlineLabel: 'Contorno',
     resetPosition: 'Devolver a sobreposição ao lugar',
     back: '← Voltar',
-    subtitlesLabel: 'Legendas',
+    subtitlesLabel: 'Ativar legendas',
     waitLabel: 'Aguardar legendas',
   },
   ja: {
@@ -1545,7 +1527,6 @@ const TEXTS = {
     textSizeLabel: '文字サイズ：',
     retryNow: '今すぐ再試行',
     hintFirstRun: '翻訳字幕をオンにする',
-    appearanceOpen: '外観 →',
     appearanceTitle: '外観',
     textColorLabel: '文字の色:',
     colorWhite: '白',
@@ -1555,7 +1536,7 @@ const TEXTS = {
     outlineLabel: '縁取り',
     resetPosition: 'オーバーレイを元の位置に戻す',
     back: '← 戻る',
-    subtitlesLabel: '字幕',
+    subtitlesLabel: '字幕をオンにする',
     waitLabel: '字幕を待つ',
   },
   fr: {
@@ -1577,7 +1558,6 @@ const TEXTS = {
     textSizeLabel: 'Taille du texte :',
     retryNow: 'Réessayer maintenant',
     hintFirstRun: 'Activer les sous-titres traduits',
-    appearanceOpen: 'Apparence →',
     appearanceTitle: 'Apparence',
     textColorLabel: 'Couleur du texte :',
     colorWhite: 'Blanc',
@@ -1587,7 +1567,7 @@ const TEXTS = {
     outlineLabel: 'Contour',
     resetPosition: 'Remettre l’overlay à sa place',
     back: '← Retour',
-    subtitlesLabel: 'Sous-titres',
+    subtitlesLabel: 'Activer les sous-titres',
     waitLabel: 'Attendre les sous-titres',
   },
   de: {
@@ -1609,7 +1589,6 @@ const TEXTS = {
     textSizeLabel: 'Textgröße:',
     retryNow: 'Jetzt erneut versuchen',
     hintFirstRun: 'Übersetzte Untertitel einschalten',
-    appearanceOpen: 'Darstellung →',
     appearanceTitle: 'Darstellung',
     textColorLabel: 'Textfarbe:',
     colorWhite: 'Weiß',
@@ -1619,7 +1598,7 @@ const TEXTS = {
     outlineLabel: 'Kontur',
     resetPosition: 'Overlay zurück an die Stelle setzen',
     back: '← Zurück',
-    subtitlesLabel: 'Untertitel',
+    subtitlesLabel: 'Untertitel einschalten',
     waitLabel: 'Auf Untertitel warten',
   },
 };
@@ -2317,7 +2296,7 @@ return Object.freeze({ mergePlayerRequestParameters: mergePlayerRequestParameter
 const bundledModule20Exports = (function () {
 const { OTHER_LANGUAGE_VALUE, buildLanguageMenu, targetLanguageFromMenuValue } = bundledModule16Exports;
 const { uiTexts } = bundledModule15Exports;
-const { TEXT_COLOR_CSS, customNamesForMenu, languageFromTypedText, placeButtonNextToSubtitlesButton, selectValueAfterClose, shouldShowHint, steppedBackgroundOpacity, steppedTextScale } = bundledModule14Exports;
+const { TEXT_COLOR_CSS, customNamesForMenu, languageFromTypedText, placeButtonNextToSubtitlesButton, selectValueAfterClose, shouldShowHint, steppedTextScale } = bundledModule14Exports;
 const MAX_TYPED_LANGUAGE_LENGTH = 60;
 const KEYBOARD_EVENT_TYPES = ['keydown', 'keyup', 'keypress'];
 
@@ -2411,14 +2390,17 @@ class PlayerControls {
     this.#settings = settings;
     this.#renderLanguageMenu();
     this.#setSwitch(this.#toggleEnabledButton, this.#texts.subtitlesLabel, settings.enabled);
-    this.#toggleEnabledButton.setAttribute('aria-pressed', String(settings.enabled));
     this.#buttonElement.classList.toggle('lingotube-player-button-pressed', settings.enabled);
     this.#buttonElement.setAttribute('aria-pressed', String(settings.enabled));
     const isWaiting = settings.waitForSubtitles !== false;
     this.#setSwitch(this.#waitForSubtitlesButton, this.#texts.waitLabel, isWaiting);
     this.#textScaleValueElement.textContent = `${Math.round(settings.textScale * 100)}%`;
     this.#renderAppearance(settings);
-    this.#hintElement.hidden = !shouldShowHint(settings);
+    this.#renderHint();
+  }
+
+  #renderHint() {
+    this.#hintElement.hidden = this.#isOpen || !shouldShowHint(this.#settings);
   }
 
   destroy() {
@@ -2524,7 +2506,12 @@ class PlayerControls {
       largerButton,
     );
 
-    this.#appearanceOpenButton = this.#createElement('button', 'lingotube-panel-button lingotube-appearance-open', this.#texts.appearanceOpen);
+    // A menu row like the player's own settings: the name on the left, a chevron on the right.
+    this.#appearanceOpenButton = this.#createElement('button', 'lingotube-panel-button lingotube-menu-row');
+    this.#appearanceOpenButton.append(
+      this.#createElement('span', 'lingotube-menu-row-label', this.#texts.appearanceTitle),
+      this.#createElement('span', 'lingotube-menu-row-chevron', this.#isRightToLeft ? '‹' : '›'),
+    );
     this.#appearanceOpenButton.addEventListener('click', () => this.#showAppearance());
 
     this.#statusLineElement = this.#createElement('div', 'lingotube-status-line');
@@ -2540,11 +2527,10 @@ class PlayerControls {
       title,
       languageRow,
       this.#otherLanguageRow,
+      scaleRow,
       divider(),
       this.#toggleEnabledButton,
       this.#waitForSubtitlesButton,
-      scaleRow,
-      divider(),
       this.#appearanceOpenButton,
       this.#statusLineElement,
       this.#retryButton,
@@ -2588,10 +2574,6 @@ class PlayerControls {
 
     const backgroundRow = this.#createElement('div', 'lingotube-panel-row');
     const backgroundLabel = this.#createElement('span', 'lingotube-panel-label', this.#texts.backgroundLabel);
-    const fewerButton = this.#createElement('button', 'lingotube-panel-button lingotube-opacity-button', '−');
-    fewerButton.addEventListener('click', () => this.#changeBackgroundOpacity(-1));
-    const moreButton = this.#createElement('button', 'lingotube-panel-button lingotube-opacity-button', '+');
-    moreButton.addEventListener('click', () => this.#changeBackgroundOpacity(1));
     this.#opacitySlider = this.#createElement('input', 'lingotube-opacity-slider');
     this.#opacitySlider.type = 'range';
     this.#opacitySlider.min = '0';
@@ -2602,7 +2584,8 @@ class PlayerControls {
       this.#callbacks.onAppearanceChanged({ backgroundOpacity: Number(this.#opacitySlider.value) / 100 });
     });
     this.#opacityValueElement = this.#createElement('span', 'lingotube-scale-value');
-    backgroundRow.append(backgroundLabel, fewerButton, this.#opacitySlider, moreButton, this.#opacityValueElement);
+    // The native slider already moves by its step with the arrow keys, so no −/+ buttons here.
+    backgroundRow.append(backgroundLabel, this.#opacitySlider, this.#opacityValueElement);
 
     this.#outlineButton = this.#createSwitch('lingotube-outline-button');
     this.#outlineButton.addEventListener('click', () => this.#callbacks.onAppearanceChanged({ outline: this.#settings.outline !== true }));
@@ -2610,11 +2593,8 @@ class PlayerControls {
     const resetButton = this.#createElement('button', 'lingotube-panel-button lingotube-reset-button', this.#texts.resetPosition);
     resetButton.addEventListener('click', () => this.#callbacks.onResetPosition());
 
-    const pairRow = this.#createElement('div', 'lingotube-panel-row lingotube-pair-row');
-    pairRow.append(this.#outlineButton, resetButton);
-
     const divider = () => this.#createElement('div', 'lingotube-divider');
-    panel.append(header, divider(), colorRow, backgroundRow, divider(), pairRow);
+    panel.append(header, divider(), colorRow, backgroundRow, this.#outlineButton, divider(), resetButton);
     panel.addEventListener('keydown', (event) => {
       if (event.key === 'Escape') this.#setOpen(false);
     });
@@ -2723,11 +2703,6 @@ class PlayerControls {
     if (scale !== this.#settings.textScale) this.#callbacks.onTextScaleChanged(scale);
   }
 
-  #changeBackgroundOpacity(direction) {
-    const opacity = steppedBackgroundOpacity(this.#settings.backgroundOpacity, direction);
-    if (opacity !== this.#settings.backgroundOpacity) this.#callbacks.onAppearanceChanged({ backgroundOpacity: opacity });
-  }
-
   #showAppearance() {
     this.#panelElement.hidden = true;
     this.#appearancePanelElement.hidden = false;
@@ -2747,6 +2722,7 @@ class PlayerControls {
     this.#panelElement.hidden = !isOpen;
     this.#appearancePanelElement.hidden = true;
     this.#buttonElement.setAttribute('aria-expanded', String(isOpen));
+    this.#renderHint();
   }
 
   #handleDocumentPointerDown = (event) => {

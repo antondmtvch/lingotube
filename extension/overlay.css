@@ -59,30 +59,58 @@
   opacity: 0.7;
 }
 
-.lingotube-player-button {
-  /* Match the neighbouring YouTube buttons: full control-bar height, no browser button chrome. */
+/* ---------- Player button ----------
+   YouTube styles .ytp-button after our content CSS, so the rules that shape the button are
+   scoped under .ytp-right-controls to win. The button keeps the bar's height; the white ring
+   sits on the inner label, sized like the neighbouring 24px icons. */
+
+.ytp-right-controls .lingotube-player-button.ytp-button {
   box-sizing: border-box;
-  width: 36px;
-  height: 100%;
-  padding: 0;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 100% !important;
+  padding: 0 !important;
   margin: 0;
-  border: 0;
-  background: none;
+  border: 0 !important;
+  background: none !important;
+  vertical-align: top;
+  cursor: pointer;
+}
+
+.ytp-right-controls .lingotube-player-button .lingotube-player-label {
+  position: relative;
+  box-sizing: border-box;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: 24px;
+  height: 18px;
+  border: 1.5px solid #fff;
+  border-radius: 4px;
+  color: #fff;
   font-family: Roboto, Arial, sans-serif;
-  font-size: 13px;
-  font-weight: bold;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
   line-height: 1;
-  color: #bbb;
-  opacity: 1;
 }
 
-.lingotube-player-button.lingotube-player-button-pressed {
-  opacity: 1;
-  box-shadow: inset 0 -3px 0 #f00;
+/* On: a red bar under the label, the same signal YouTube gives its own CC button. */
+.ytp-right-controls .lingotube-player-button-pressed .lingotube-player-label::after {
+  content: "";
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  bottom: -6px;
+  height: 2px;
+  border-radius: 1px;
+  background: #f00;
 }
+
+/* ---------- Panels ----------
+   One rhythm: 8px steps, every control row 32px tall, labels left and controls right. */
 
 .lingotube-panel {
   position: absolute;
@@ -91,210 +119,174 @@
   /* Same layer as the player popups, above the overlay (60). */
   z-index: 71;
   box-sizing: border-box;
-  width: 280px;
-  padding: 10px 12px;
-  border-radius: 8px;
-  background: rgba(28, 28, 28, 0.95);
-  color: #fff;
+  width: 288px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: rgba(33, 33, 33, 0.96);
+  color: #f1f1f1;
   font-family: Roboto, Arial, sans-serif;
   font-size: 13px;
-  line-height: 1.4;
+  line-height: 1.3;
   cursor: default;
+  user-select: none;
 }
 
 .lingotube-panel[hidden],
-.lingotube-panel [hidden] {
+.lingotube-panel [hidden],
+.lingotube-hint[hidden] {
   display: none;
 }
 
 .lingotube-panel-title {
-  margin-bottom: 8px;
-  font-weight: bold;
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 500;
 }
 
 .lingotube-panel-row {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 8px;
+  gap: 8px;
+  min-height: 32px;
 }
 
+/* The label takes the free space, which pushes the row's controls to the far edge. */
 .lingotube-panel-label {
+  margin-inline-end: auto;
   white-space: nowrap;
+}
+
+.lingotube-divider {
+  height: 1px;
+  margin: 8px 0;
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .lingotube-language-select,
 .lingotube-other-language-input {
-  flex: 1;
+  box-sizing: border-box;
+  height: 28px;
   min-width: 0;
-  padding: 3px 4px;
-  border: 1px solid #555;
-  border-radius: 4px;
-  background: #121212;
-  color: #fff;
-  font-size: 13px;
+  padding: 0 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #f1f1f1;
+  font: inherit;
 }
 
+.lingotube-language-select {
+  flex: 0 1 148px;
+}
+
+.lingotube-language-select option {
+  background: #212121;
+}
+
+.lingotube-other-language-input {
+  flex: 1;
+}
+
+.lingotube-other-language-row {
+  margin-top: 4px;
+}
+
+/* Small buttons: the −/+ steppers, "Done", "Retry now", "Move overlay back". */
 .lingotube-panel-button {
-  padding: 4px 10px;
-  border: 1px solid #555;
-  border-radius: 4px;
-  background: #2f2f2f;
-  color: #fff;
-  font-size: 13px;
+  box-sizing: border-box;
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #f1f1f1;
+  font: inherit;
   cursor: pointer;
 }
 
 .lingotube-panel-button:hover {
-  background: #444;
+  background: rgba(255, 255, 255, 0.16);
 }
 
-.lingotube-toggle-button,
-.lingotube-wait-button,
-.lingotube-appearance-open,
-.lingotube-retry-button {
-  display: block;
-  /* Width 100% includes the padding and border only with border-box; otherwise the button overflows the panel. */
-  box-sizing: border-box;
-  width: 100%;
-  margin-bottom: 8px;
+.lingotube-panel button:focus-visible,
+.lingotube-panel select:focus-visible,
+.lingotube-panel input:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
 }
 
-/* The wait button stands out: a white outline always, the panel's accent colour when it is on. */
-.lingotube-panel-button.lingotube-wait-button {
-  border: 1px solid #fff;
-}
-
-.lingotube-panel-button.lingotube-wait-button[aria-pressed="true"] {
-  background: #3ea6ff;
-  border-color: #fff;
-  color: #0f0f0f;
-  font-weight: bold;
-}
-
-.lingotube-panel-button.lingotube-wait-button[aria-pressed="true"]:hover {
-  background: #65b8ff;
-}
-
-/* The enable toggle shows the same "on" colour while subtitles are on. */
-.lingotube-panel-button.lingotube-toggle-button[aria-pressed="true"] {
-  background: #3ea6ff;
-  border-color: #fff;
-  color: #0f0f0f;
-  font-weight: bold;
-}
-
-.lingotube-panel-button.lingotube-toggle-button[aria-pressed="true"]:hover {
-  background: #65b8ff;
+.lingotube-scale-button {
+  width: 28px;
+  padding: 0;
+  font-size: 15px;
 }
 
 .lingotube-scale-value {
-  min-width: 3em;
+  min-width: 3.2em;
+  color: #aaa;
+  font-variant-numeric: tabular-nums;
   text-align: center;
+}
+
+.lingotube-retry-button,
+.lingotube-reset-button {
+  display: block;
+  width: 100%;
+  height: 32px;
+}
+
+.lingotube-retry-button {
+  margin-top: 8px;
 }
 
 .lingotube-status-line {
-  margin-bottom: 8px;
-  opacity: 0.85;
-}
-
-
-.lingotube-hint {
-  position: absolute;
-  transform: translate(-50%, -100%);
-  margin-top: -10px;
-  z-index: 72;
-  max-width: 220px;
-  padding: 6px 10px;
-  border-radius: 6px;
-  background: #3ea6ff;
-  color: #0f0f0f;
-  font-family: Roboto, Arial, sans-serif;
+  margin-top: 8px;
+  color: #aaa;
   font-size: 12px;
-  font-weight: bold;
-  line-height: 1.3;
-  white-space: normal;
-  text-align: center;
-  cursor: pointer;
 }
 
-.lingotube-hint[hidden] {
-  display: none;
-}
+/* ---------- Switch rows and menu rows ----------
+   Full-width rows with no chrome of their own. The state lives only in the track:
+   the label colour and the row background never change with on and off. */
 
-/* Final rules: higher specificity than YouTube's .ytp-button so the layout holds in the real player. */
-.ytp-right-controls .lingotube-player-button.ytp-button {
-  display: inline-flex !important;
-  align-items: center;
-  justify-content: center;
-  height: 100% !important;
-  width: 36px;
-  padding: 0 !important;
-  margin: 0;
-  border: 0 !important;
-  background: none !important;
-  vertical-align: top;
-  font-size: 13px;
-  font-weight: bold;
-  line-height: 1;
-  color: #bbb;
-}
-
-/* The white ring is on the label, so the button keeps the control bar's full height. */
-.ytp-right-controls .lingotube-player-button .lingotube-player-label {
-  box-sizing: border-box;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  border: 1.5px solid rgba(255, 255, 255, 0.9);
-  border-radius: 6px;
-  color: #fff;
-  font-size: 13px;
-  font-weight: bold;
-  line-height: 1;
-}
-
-.ytp-right-controls .lingotube-player-button.ytp-button.lingotube-player-button-pressed {
-  color: #fff;
-  box-shadow: inset 0 -3px 0 #f00;
-}
-
-/* Switches: the same language as the YouTube settings menu, blue when on. */
-.lingotube-panel-button.lingotube-switch {
+.lingotube-panel-button.lingotube-switch,
+.lingotube-panel-button.lingotube-menu-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   width: 100%;
-  margin-bottom: 8px;
-  padding: 4px 0;
+  height: auto;
+  min-height: 32px;
+  padding: 0;
   border: 0;
+  border-radius: 4px;
   background: none;
   color: #f1f1f1;
-  font-size: 13px;
-  text-align: left;
+  text-align: start;
 }
 
-.lingotube-panel-button.lingotube-switch:hover {
+.lingotube-panel-button.lingotube-switch:hover,
+.lingotube-panel-button.lingotube-menu-row:hover {
   background: none;
 }
 
 .lingotube-switch-track {
   position: relative;
   flex: none;
-  width: 28px;
-  height: 14px;
-  border-radius: 7px;
-  background: #5a5a5a;
+  width: 32px;
+  height: 16px;
+  border-radius: 8px;
+  background: #5f5f5f;
+  transition: background 0.15s;
 }
 
 .lingotube-switch-thumb {
   position: absolute;
   top: 2px;
   left: 2px;
-  width: 10px;
-  height: 10px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
   background: #f1f1f1;
   transition: transform 0.15s;
@@ -305,92 +297,47 @@
 }
 
 .lingotube-switch-on .lingotube-switch-thumb {
-  transform: translateX(14px);
+  transform: translateX(16px);
   background: #fff;
 }
 
-
-/* Text colour swatches: round, the chosen one gets a white ring. */
-.lingotube-color-button {
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: 1px solid #888;
-  border-radius: 50%;
-  cursor: pointer;
+[dir="rtl"] .lingotube-switch-thumb {
+  left: auto;
+  right: 2px;
 }
 
-.lingotube-color-button[data-color='white'] { background: #fff; }
-.lingotube-color-button[data-color='yellow'] { background: #ffd400; }
-.lingotube-color-button[data-color='cyan'] { background: #7fd3ff; }
-
-.lingotube-color-button[aria-pressed='true'] {
-  outline: 2px solid #fff;
-  outline-offset: 2px;
+[dir="rtl"] .lingotube-switch-on .lingotube-switch-thumb {
+  transform: translateX(-16px);
 }
 
-.lingotube-opacity-slider {
-  flex: 1;
-  min-width: 0;
-  accent-color: #fff;
+.lingotube-menu-row-chevron {
+  color: #aaa;
+  font-size: 18px;
+  line-height: 1;
 }
 
-/* First-run hint: light plate, like a white tooltip, so it stands out on the dark bar. */
-.lingotube-hint {
-  background: #fff;
-  color: #0f0f0f;
-}
+/* ---------- Appearance panel ---------- */
 
-/* Panel spacing: one 10px step between rows, dividers between groups, no text selection on clicks. */
-.lingotube-panel,
-.lingotube-appearance-panel {
-  padding: 12px 14px;
-  user-select: none;
-}
-
-.lingotube-panel-title {
-  margin-bottom: 10px;
-}
-
-.lingotube-panel-row {
-  margin-bottom: 10px;
-  gap: 8px;
-}
-
-.lingotube-divider {
-  height: 1px;
-  margin: 2px 0 10px;
-  background: rgba(255, 255, 255, 0.12);
-}
-
-.lingotube-panel-button.lingotube-switch {
-  margin: 0 0 10px;
-  padding: 0;
-  background: transparent;
-  color: #f1f1f1;
-}
-
-.lingotube-panel-button.lingotube-switch:hover {
-  background: transparent;
-}
-
-.lingotube-panel-button.lingotube-switch:focus:not(:focus-visible) {
-  outline: none;
-}
-
-.lingotube-appearance-panel {
-  width: 300px;
-}
-
+/* Back on the left, the title centred over the whole panel, an empty third column for balance. */
 .lingotube-appearance-header {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  margin-bottom: 10px;
+  min-height: 32px;
 }
 
 .lingotube-appearance-header .lingotube-appearance-back {
   justify-self: start;
+  height: 28px;
+  padding: 0 6px;
+  border: 0;
+  background: none;
+  color: #aaa;
+}
+
+.lingotube-appearance-header .lingotube-appearance-back:hover {
+  background: none;
+  color: #fff;
 }
 
 .lingotube-appearance-header .lingotube-panel-title {
@@ -398,20 +345,74 @@
   text-align: center;
 }
 
-.lingotube-pair-row {
-  align-items: stretch;
+.lingotube-color-button {
+  box-sizing: border-box;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 50%;
+  cursor: pointer;
 }
 
-.lingotube-pair-row .lingotube-switch {
-  flex: 1;
-  margin: 0;
+.lingotube-color-button + .lingotube-color-button {
+  margin-inline-start: 4px;
 }
 
-.lingotube-pair-row .lingotube-reset-button {
-  flex: 1;
+.lingotube-color-button[data-color="white"] { background: #fff; }
+.lingotube-color-button[data-color="yellow"] { background: #ffd400; }
+.lingotube-color-button[data-color="cyan"] { background: #7fd3ff; }
+
+.lingotube-color-button[aria-pressed="true"] {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.lingotube-opacity-slider {
+  flex: 1 1 auto;
+  min-width: 0;
   margin: 0;
-  padding: 6px 8px;
-  white-space: normal;
+  accent-color: #fff;
+}
+
+/* ---------- First-run hint ----------
+   A light plate above the button, the reverse of YouTube's dark tooltips, so it gets noticed. */
+
+.lingotube-hint {
+  position: absolute;
+  z-index: 72;
+  /* max-content: near the player's right edge the box would otherwise shrink and wrap. */
+  width: max-content;
+  max-width: 220px;
+  margin-top: -12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #fff;
+  color: #0f0f0f;
+  font-family: Roboto, Arial, sans-serif;
   font-size: 12px;
+  font-weight: 500;
   line-height: 1.3;
+  text-align: center;
+  white-space: normal;
+  transform: translate(-50%, -100%);
+  cursor: pointer;
+}
+
+.lingotube-hint::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -5px;
+  width: 10px;
+  height: 10px;
+  background: #fff;
+  transform: translateX(-50%) rotate(45deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lingotube-switch-track,
+  .lingotube-switch-thumb {
+    transition: none;
+  }
 }
