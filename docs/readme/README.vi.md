@@ -19,6 +19,7 @@ Mọi yêu cầu đều được gửi dưới danh nghĩa tài khoản YouTube 
 > Điều khoản dịch vụ của YouTube không cho phép truy cập tự động: bạn tự chịu rủi ro khi sử dụng công cụ.
 > Các yêu cầu được gửi lần lượt, có quãng nghỉ giữa các lần, nhưng không có gì đảm bảo
 > tài khoản của bạn sẽ không bị hạn chế.
+> Hỗ trợ được thực hiện trong khả năng, vào thời gian rảnh, không có thời hạn cam kết.
 
 > [!NOTE]
 > Câu hỏi và câu trả lời vẫn nằm trong lịch sử chat của tài khoản bạn. Chat không khả dụng ở Nga

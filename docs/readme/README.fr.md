@@ -19,6 +19,7 @@ Toutes les requêtes sont faites au nom de votre compte YouTube.
 > d'utilisation de YouTube n'autorisent pas l'accès automatisé : vous utilisez l'outil à vos risques.
 > Les requêtes sont envoyées une par une, avec une pause entre elles, mais rien ne garantit que votre
 > compte ne sera pas restreint.
+> Le support se fait dans la mesure du possible, sur le temps libre, sans délais.
 
 > [!NOTE]
 > Les questions et les réponses restent dans l'historique du chat de votre compte. Le chat n'est pas

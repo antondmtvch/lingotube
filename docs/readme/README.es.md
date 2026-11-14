@@ -19,6 +19,7 @@ Todas las solicitudes se hacen en nombre de tu cuenta de YouTube.
 > Las Condiciones del Servicio de YouTube no permiten el acceso automatizado: usas la herramienta
 > bajo tu propio riesgo. Las solicitudes se envían una a una, con una pausa entre ellas, pero no hay
 > garantía de que tu cuenta no sea restringida.
+> El soporte es en la medida de lo posible, en tiempo libre y sin plazos.
 
 > [!NOTE]
 > Las preguntas y respuestas quedan en el historial de chat de tu cuenta. El chat no está disponible

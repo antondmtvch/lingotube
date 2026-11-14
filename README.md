@@ -19,6 +19,7 @@ All requests are made on behalf of your YouTube account.
 > Service do not allow automated access: you use the tool at your own risk. Requests are sent
 > one at a time with a pause between them, but there is no guarantee that your account will
 > not be restricted.
+> Support is best effort, in free time, with no deadlines.
 
 > [!NOTE]
 > Questions and answers stay in your account's chat history. The chat is not available in

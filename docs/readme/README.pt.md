@@ -19,6 +19,7 @@ Todas as solicitações são feitas em nome da sua conta do YouTube.
 > do YouTube não permitem acesso automatizado: você usa a ferramenta por sua conta e risco.
 > As solicitações são enviadas uma a uma, com uma pausa entre elas, mas não há garantia de que a sua
 > conta não será restringida.
+> O suporte é feito na medida do possível, no tempo livre, sem prazos.
 
 > [!NOTE]
 > As perguntas e respostas ficam no histórico de chat da sua conta. O chat não está disponível

@@ -12,6 +12,12 @@ Before installing anything, tell the person:
   Every question it sends stays in that account's YouTube chat history.
 - The YouTube chat is not available in every country (for example, not in Russia and most of
   the EU) and not for every video or account. You can only check this after sign-in (step 4).
+- YouTube's Terms of Service do not allow automated access. The tool uses the person's account
+  at their own risk.
+- The account can be restricted, and lingotube cannot prevent it.
+- Recommend a separate, ordinary Google account (not a brand account) for this, not the main one.
+- The owner supports lingotube in free time, best effort, with no deadlines. Fixes come when
+  possible; YouTube may change the chat without notice.
 
 Ask whether to proceed.
 

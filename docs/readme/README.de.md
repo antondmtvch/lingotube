@@ -19,6 +19,7 @@ Alle Anfragen werden im Namen Ihres YouTube-Kontos gestellt.
 > Die Nutzungsbedingungen von YouTube erlauben keinen automatisierten Zugriff: Sie nutzen das Werkzeug
 > auf eigenes Risiko. Die Anfragen werden nacheinander mit einer Pause dazwischen gesendet, aber es gibt
 > keine Garantie, dass Ihr Konto nicht eingeschränkt wird.
+> Support erfolgt nach Möglichkeit, in der Freizeit, ohne feste Fristen.
 
 > [!NOTE]
 > Fragen und Antworten bleiben im Chatverlauf Ihres Kontos. Der Chat ist in Russland und in den meisten
