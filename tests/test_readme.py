@@ -150,4 +150,3 @@ def test_readme_first_install_command_is_pypi(readme_path: Path) -> None:
     """Check that the first install command in every README installs from PyPI."""
     commands = [line for line in read_readme(readme_path).splitlines() if line.startswith("uv tool install")]
     assert commands[0] == "uv tool install --python 3.14 lingotube"
-
