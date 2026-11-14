@@ -74,7 +74,7 @@ function createEventOnlyButton({ toggleOn, subtitlesOn = false }) {
   return button;
 }
 
-function createFakeEnvironment({ alreadySeen = [], subtitlesOn = false, requestOnClick = true }) {
+function createFakeEnvironment({ alreadySeen = [], subtitlesOn = false, requestOnClick = true, turnOnRequests = null }) {
   const clicks = [];
   const classes = new Set();
   let callback = null;
@@ -90,7 +90,11 @@ function createFakeEnvironment({ alreadySeen = [], subtitlesOn = false, requestO
       button.state = !button.state;
       clicks.push(button.state);
       if (button.state && requestOnClick) {
-        emit('https://www.youtube.com/api/timedtext?v=a&pot=NEW');
+        // turnOnRequests: what the player asks on each turn-on, in order; the last one repeats.
+        const next = turnOnRequests
+          ? turnOnRequests[Math.min(clicks.filter(Boolean).length - 1, turnOnRequests.length - 1)]
+          : 'https://www.youtube.com/api/timedtext?v=a&pot=NEW';
+        emit(next);
       }
     },
   };
@@ -251,4 +255,37 @@ test('serial captures: a failed capture does not block the next one', async () =
   const second = captureSerially({});
   await assert.rejects(first);
   assert.equal(await second, 'url');
+});
+
+const REQUEST_WITHOUT_POT = 'https://www.youtube.com/api/timedtext?v=a&fmt=json3';
+
+test('capture turns subtitles off and on again when the player asked without pot, and takes the request with pot', async () => {
+  const env = createFakeEnvironment({ turnOnRequests: [REQUEST_WITHOUT_POT, 'https://www.youtube.com/api/timedtext?v=a&pot=RETRY'] });
+  const url = await capturePlayerCaptionRequestUrl({ ...env, timeoutMs: 300 });
+  assert.match(url, /pot=RETRY/);
+  assert.deepEqual(env.clicks, [true, false, true, false]);
+  assert.equal(env.button.state, false);
+});
+
+test('capture does not press again when no caption request came at all', async () => {
+  const env = createFakeEnvironment({ requestOnClick: false });
+  assert.equal(await capturePlayerCaptionRequestUrl({ ...env, timeoutMs: 300 }), null);
+  assert.deepEqual(env.clicks, [true, false]);
+});
+
+test('capture gives up after three turn-ons without pot and restores the button', async () => {
+  const env = createFakeEnvironment({ turnOnRequests: [REQUEST_WITHOUT_POT] });
+  assert.equal(await capturePlayerCaptionRequestUrl({ ...env, timeoutMs: 300 }), null);
+  assert.equal(env.clicks.filter(Boolean).length, 3);
+  assert.equal(env.button.state, false);
+});
+
+test('capture of subtitles that were on: retries without pot still end with subtitles on', async () => {
+  const env = createFakeEnvironment({
+    subtitlesOn: true,
+    turnOnRequests: [REQUEST_WITHOUT_POT, 'https://www.youtube.com/api/timedtext?v=a&pot=RETRY'],
+  });
+  const url = await capturePlayerCaptionRequestUrl({ ...env, timeoutMs: 300 });
+  assert.match(url, /pot=RETRY/);
+  assert.equal(env.button.state, true);
 });

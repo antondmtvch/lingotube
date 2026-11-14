@@ -176,9 +176,15 @@ export class SubtitleSession {
     } catch (error) {
       loaded = null;
       hasCaptionTracks = !(error instanceof NoCaptionTracksError);
+      // Error texts of the caption loaders never carry the URL or the pot token.
+      this.#logInfo('lingotube: YouTube captions not used', {
+        reason: error?.name ?? typeof error,
+        message: String(error?.message ?? error),
+      });
     }
     if (this.#isStopped) return;
     if (!loaded || !Array.isArray(loaded.cues) || loaded.cues.length === 0) {
+      if (loaded) this.#logInfo('lingotube: YouTube captions not used', { reason: 'no cues' });
       await this.#startTranscriptFallback({ hasCaptionTracks });
       return;
     }

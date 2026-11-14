@@ -29,7 +29,7 @@ export async function fetchCaptionWords({ track, playerRequestUrl, fetch }) {
   const url = mergePlayerRequestParameters(track.baseUrl, playerRequestUrl);
   const response = await fetch(url, { credentials: 'include' });
   const body = await response.text();
-  if (!body.trim()) throw new CaptionsUnavailableError('YouTube returned an empty captions body');
+  if (!body.trim()) throw new CaptionsUnavailableError(`YouTube returned an empty captions body (HTTP ${response.status})`);
   let json3;
   try {
     json3 = JSON.parse(body);

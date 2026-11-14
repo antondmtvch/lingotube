@@ -2143,6 +2143,9 @@ const POLL_INTERVAL_MS = 100;
 const GRACE_PERIOD_MS = 300;
 const BUTTON_STATE_SETTLE_MS = 300;
 const RESTORE_PAUSE_MS = 500;
+// The player may ask for captions before its pot token is ready; that request has no pot and gets
+// an empty body. Turning subtitles off and on again makes it ask once more, then with the token.
+const MAX_TURN_ON_ATTEMPTS = 3;
 // Parameters that identify the track: the track URL keeps its own, never the player's.
 const TRACK_IDENTITY_PARAMETERS = new Set(['lang', 'kind', 'name', 'tlang']);
 
@@ -2174,6 +2177,16 @@ function isPlayerCaptionRequest(resourceUrl) {
   try {
     const url = new URL(resourceUrl, YOUTUBE_ORIGIN);
     return url.pathname.includes('/api/timedtext') && url.searchParams.has('pot');
+  } catch {
+    return false;
+  }
+}
+
+/** The player asked for this video's captions before its pot token was ready. */
+function isCaptionRequestWithoutPotForVideo(resourceUrl, videoId) {
+  try {
+    const url = new URL(resourceUrl, YOUTUBE_ORIGIN);
+    return url.pathname.includes('/api/timedtext') && !url.searchParams.has('pot') && url.searchParams.get('v') === videoId;
   } catch {
     return false;
   }
@@ -2228,6 +2241,7 @@ async function activateSubtitleButton(button, sleep) {
  * @param {(ms: number) => Promise<void>} options.sleep
  * @param {string} options.expectedVideoId only requests for this video count
  * @param {number} [options.timeoutMs]
+ * @param {(message: string, details: object) => void} [options.logInfo] diagnostics; never gets a URL
  * @returns {Promise<string|null>}
  */
 async function capturePlayerCaptionRequestUrl({
@@ -2236,10 +2250,13 @@ async function capturePlayerCaptionRequestUrl({
   sleep,
   expectedVideoId,
   timeoutMs = 6000,
+  logInfo = () => {},
 }) {
   let capturedUrl = null;
+  let hasPotlessRequestForThisVideo = false;
   const observer = new performanceObserverClass((list) => {
     for (const entry of list.getEntries()) {
+      if (isCaptionRequestWithoutPotForVideo(entry.name, expectedVideoId)) hasPotlessRequestForThisVideo = true;
       if (isPlayerCaptionRequestForVideo(entry.name, expectedVideoId)) capturedUrl = entry.name;
     }
   });
@@ -2254,13 +2271,22 @@ async function capturePlayerCaptionRequestUrl({
   const button = playerElement?.querySelector('.ytp-subtitles-button');
   const wasOn = button?.getAttribute('aria-pressed') === 'true';
   let buttonUsed = false;
+  let turnOns = 0;
   try {
     await waitForRequest(GRACE_PERIOD_MS);
     if (!capturedUrl && button) {
       buttonUsed = true;
       await activateSubtitleButton(button, sleep);
       if (wasOn) await activateSubtitleButton(button, sleep);
+      turnOns = 1;
       await waitForRequest(timeoutMs);
+      // Only a request without pot is worth another try; with no request at all the button is not the way.
+      for (let turnOn = 2; !capturedUrl && hasPotlessRequestForThisVideo && turnOn <= MAX_TURN_ON_ATTEMPTS; turnOn += 1) {
+        await activateSubtitleButton(button, sleep);
+        await activateSubtitleButton(button, sleep);
+        turnOns = turnOn;
+        await waitForRequest(timeoutMs);
+      }
     }
   } finally {
     observer.disconnect();
@@ -2268,6 +2294,9 @@ async function capturePlayerCaptionRequestUrl({
       const isOnNow = button.getAttribute('aria-pressed') === 'true';
       if (isOnNow !== wasOn) await activateSubtitleButton(button, sleep);
       await sleep(RESTORE_PAUSE_MS);
+    }
+    if (buttonUsed) {
+      logInfo('lingotube: caption capture', { turnOns, requestWithoutPotSeen: hasPotlessRequestForThisVideo, captured: Boolean(capturedUrl) });
     }
   }
   return capturedUrl;
@@ -2827,7 +2856,7 @@ async function fetchCaptionWords({ track, playerRequestUrl, fetch }) {
   const url = mergePlayerRequestParameters(track.baseUrl, playerRequestUrl);
   const response = await fetch(url, { credentials: 'include' });
   const body = await response.text();
-  if (!body.trim()) throw new CaptionsUnavailableError('YouTube returned an empty captions body');
+  if (!body.trim()) throw new CaptionsUnavailableError(`YouTube returned an empty captions body (HTTP ${response.status})`);
   let json3;
   try {
     json3 = JSON.parse(body);
@@ -3665,9 +3694,15 @@ class SubtitleSession {
     } catch (error) {
       loaded = null;
       hasCaptionTracks = !(error instanceof NoCaptionTracksError);
+      // Error texts of the caption loaders never carry the URL or the pot token.
+      this.#logInfo('lingotube: YouTube captions not used', {
+        reason: error?.name ?? typeof error,
+        message: String(error?.message ?? error),
+      });
     }
     if (this.#isStopped) return;
     if (!loaded || !Array.isArray(loaded.cues) || loaded.cues.length === 0) {
+      if (loaded) this.#logInfo('lingotube: YouTube captions not used', { reason: 'no cues' });
       await this.#startTranscriptFallback({ hasCaptionTracks });
       return;
     }
@@ -4439,6 +4474,7 @@ async function loadYouTubeCues({ window, playerElement, videoId, captureSerially
     expectedVideoId: videoId,
     performanceObserverClass: window.PerformanceObserver,
     sleep,
+    logInfo: (message, details) => console.info(message, details),
   });
   if (!playerRequestUrl) throw new CaptionsUnavailableError('The player caption request was not captured');
   const words = await fetchCaptionWords({ track, playerRequestUrl, fetch: window.fetch.bind(window) });

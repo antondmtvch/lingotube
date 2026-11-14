@@ -91,6 +91,7 @@ async function loadYouTubeCues({ window, playerElement, videoId, captureSerially
     expectedVideoId: videoId,
     performanceObserverClass: window.PerformanceObserver,
     sleep,
+    logInfo: (message, details) => console.info(message, details),
   });
   if (!playerRequestUrl) throw new CaptionsUnavailableError('The player caption request was not captured');
   const words = await fetchCaptionWords({ track, playerRequestUrl, fetch: window.fetch.bind(window) });
