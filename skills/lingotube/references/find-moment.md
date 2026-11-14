@@ -9,9 +9,13 @@ the video it is.
 lingotube transcript --format json -o <file> --json -- <url>
 ```
 
-Choose `<file>` by the rules in SKILL.md ("Where to save files"). If you already made this
-transcript in the conversation, reuse the file; repeated runs come from lingotube's cache and
-send nothing to YouTube.
+This file is only a working copy for your search, not something the person asked for. Do
+not apply "Where to save files" from SKILL.md: put it in a temporary folder (your scratchpad
+or the system temp folder, e.g. `$TEMP/lingotube-<id>.json`), never in the person's home
+folder or the current repository. Delete it when you have answered, and do not mention it as a
+result. Save a transcript to a visible place only if the person asked for the transcript
+itself. If you already made this transcript in the conversation, reuse the file; repeated
+runs come from lingotube's cache and send nothing to YouTube.
 
 The file looks like:
 
@@ -21,7 +25,9 @@ The file looks like:
 ```
 
 `start` and `end` are seconds from the beginning of the video. `language` is the language of
-the speech; the text is in that language.
+YouTube's auto-generated caption track, and it can differ from the real speech (for example
+`ar` for an English video). Do not trust it: before searching, read the first 10-20 cues,
+decide the language of the text from the text itself, and search in that language.
 
 ## 2. Search without flooding your context
 
