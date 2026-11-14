@@ -225,6 +225,14 @@ npx skills add antondmtvch/lingotube
 没有 Node.js 时，请把 `skills/lingotube/` 文件夹复制到你的代理的 skills 文件夹
 （Claude Code 为 `~/.claude/skills/`，大多数其他代理为 `~/.agents/skills/`）。
 
+然后把链接发给代理，并说明你的需求：
+
+```text
+总结这个视频：https://youtu.be/VIDEO_ID
+这个视频里哪里讲到了剪辑？https://youtu.be/VIDEO_ID
+为这个视频生成中文字幕：https://youtu.be/VIDEO_ID
+```
+
 ## 浏览器扩展
 
 一个适用于 Chrome、Edge 和 Firefox 的 Manifest V3 扩展，在 YouTube 播放器上显示翻译字幕。它仍在开发中。

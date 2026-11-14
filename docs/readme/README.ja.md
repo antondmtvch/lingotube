@@ -227,6 +227,14 @@ npx skills add antondmtvch/lingotube
 Node.js がない場合は、`skills/lingotube/` フォルダをエージェントの skills フォルダにコピーしてください
 （Claude Code は `~/.claude/skills/`、それ以外の多くは `~/.agents/skills/`）。
 
+次に、エージェントにリンクを渡して、やりたいことを伝えます。
+
+```text
+この動画を要約してください: https://youtu.be/VIDEO_ID
+この動画で編集について話している場面はどこですか？ https://youtu.be/VIDEO_ID
+日本語の字幕を作ってください: https://youtu.be/VIDEO_ID
+```
+
 ## ブラウザ拡張機能
 
 Chrome、Edge、Firefox 向けの Manifest V3 拡張機能で、YouTube プレーヤー上に翻訳字幕を表示します。現在開発中です。

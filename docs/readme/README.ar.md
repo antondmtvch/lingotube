@@ -229,6 +229,14 @@ npx skills add antondmtvch/lingotube
 بدون Node.js انسخ مجلد `skills/lingotube/` إلى مجلد skills الخاص بوكيلك
 (`~/.claude/skills/` لـ Claude Code أو `~/.agents/skills/` لمعظم الباقين).
 
+ثم أعطِ الوكيل رابطًا وأخبره بما تحتاجه:
+
+```text
+لخّص هذا الفيديو: https://youtu.be/VIDEO_ID
+في أي لحظة من هذا الفيديو يُتحدَّث عن المونتاج؟ https://youtu.be/VIDEO_ID
+أنشئ ترجمة نصية بالعربية لهذا الفيديو: https://youtu.be/VIDEO_ID
+```
+
 ## إضافة المتصفح
 
 إضافة Manifest V3 لمتصفحات Chrome وEdge وFirefox تعرض ترجمات نصية مترجمة فوق مشغّل YouTube. وهي قيد التطوير.

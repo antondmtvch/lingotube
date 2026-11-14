@@ -228,6 +228,14 @@ npx skills add antondmtvch/lingotube
 Sem Node.js, copie a pasta `skills/lingotube/` para a pasta de skills do seu agente
 (`~/.claude/skills/` para o Claude Code ou `~/.agents/skills/` para a maioria dos outros).
 
+Depois, dê um link ao agente e diga o que você precisa:
+
+```text
+Resuma este vídeo: https://youtu.be/VIDEO_ID
+Em que momento do vídeo se fala sobre edição? https://youtu.be/VIDEO_ID
+Gere legendas em português para https://youtu.be/VIDEO_ID
+```
+
 ## Extensão de navegador
 
 Uma extensão Manifest V3 para Chrome, Edge e Firefox que mostra legendas traduzidas sobre o player do YouTube. Ela está em desenvolvimento.

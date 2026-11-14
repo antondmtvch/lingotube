@@ -227,6 +227,14 @@ npx skills add antondmtvch/lingotube
 Node.js के बिना `skills/lingotube/` फ़ोल्डर को अपने एजेंट के skills फ़ोल्डर में कॉपी करें
 (Claude Code के लिए `~/.claude/skills/`, अधिकांश अन्य के लिए `~/.agents/skills/`)।
 
+फिर एजेंट को लिंक दें और बताएँ कि आपको क्या चाहिए:
+
+```text
+इस वीडियो का सारांश बनाओ: https://youtu.be/VIDEO_ID
+इस वीडियो में एडिटिंग की बात कहाँ होती है? https://youtu.be/VIDEO_ID
+इस वीडियो के हिंदी सबटाइटल बनाओ: https://youtu.be/VIDEO_ID
+```
+
 ## ब्राउज़र एक्सटेंशन
 
 Chrome, Edge और Firefox के लिए Manifest V3 एक्सटेंशन, जो YouTube प्लेयर के ऊपर अनूदित सबटाइटल दिखाता है। यह विकास के अधीन है।

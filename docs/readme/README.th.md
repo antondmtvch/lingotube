@@ -227,6 +227,14 @@ npx skills add antondmtvch/lingotube
 หากไม่มี Node.js ให้คัดลอกโฟลเดอร์ `skills/lingotube/` ไปยังโฟลเดอร์ skills ของเอเจนต์
 (`~/.claude/skills/` สำหรับ Claude Code หรือ `~/.agents/skills/` สำหรับเอเจนต์ส่วนใหญ่)
 
+จากนั้นส่งลิงก์ให้เอเจนต์และบอกว่าต้องการอะไร:
+
+```text
+สรุปวิดีโอนี้ให้หน่อย: https://youtu.be/VIDEO_ID
+วิดีโอนี้พูดถึงการตัดต่อตรงช่วงไหน? https://youtu.be/VIDEO_ID
+ทำคำบรรยายภาษาไทยสำหรับวิดีโอนี้: https://youtu.be/VIDEO_ID
+```
+
 ## ส่วนขยายเบราว์เซอร์
 
 ส่วนขยาย Manifest V3 สำหรับ Chrome, Edge และ Firefox ที่แสดงคำบรรยายที่แปลแล้วทับบนเครื่องเล่น YouTube ยังอยู่ระหว่างพัฒนา
