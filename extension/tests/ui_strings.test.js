@@ -16,8 +16,8 @@ test('every supported language has exactly the keys of Russian and non-empty str
   }
 });
 
-test('the set has the 32 keys of the plan and the fallback is English', () => {
-  assert.equal(Object.keys(uiTexts('ru')).length, 32);
+test('the set has the 30 keys of the plan and the fallback is English', () => {
+  assert.equal(Object.keys(uiTexts('ru')).length, 30);
   assert.equal(FALLBACK_UI_LANGUAGE, 'en');
   assert.equal(UI_LANGUAGES.length, 10);
 });
@@ -48,13 +48,13 @@ test('rateLimited puts the number into the text in every language', () => {
 });
 
 test('uiTexts of an unknown code is the English set', () => {
-  assert.equal(uiTexts('xx').toggleOn, uiTexts('en').toggleOn);
+  assert.equal(uiTexts('xx').subtitlesLabel, uiTexts('en').subtitlesLabel);
 });
 
 test('inherited object property names are unknown codes and fall back to English', () => {
   assert.equal(pickUiLanguage('constructor'), 'en');
   assert.equal(pickUiLanguage('__proto__'), 'en');
-  assert.equal(uiTexts('toString').toggleOn, uiTexts('en').toggleOn);
+  assert.equal(uiTexts('toString').subtitlesLabel, uiTexts('en').subtitlesLabel);
   assert.doesNotThrow(() => uiTexts('__proto__').rateLimited(1));
-  assert.equal(uiTexts('constructor').toggleOn, uiTexts('en').toggleOn);
+  assert.equal(uiTexts('constructor').subtitlesLabel, uiTexts('en').subtitlesLabel);
 });

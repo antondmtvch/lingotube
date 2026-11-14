@@ -1312,10 +1312,6 @@ const TEXTS = {
     repeatedFailures: 'Чат не отвечает. Включите субтитры заново, чтобы повторить',
     noSpeech: 'У видео нет субтитров, и чат не дал транскрипцию',
     rateLimited: 'Чат ограничил запросы. Повтор через {minutes} мин',
-    toggleOn: 'Включить субтитры',
-    toggleOff: 'Выключить субтитры',
-    waitOn: 'Ждать субтитры: вкл',
-    waitOff: 'Ждать субтитры: выкл',
     targetLanguageLabel: 'Язык перевода:',
     otherLanguagePlaceholder: 'Название языка',
     otherLanguageOption: 'Другой язык…',
@@ -1335,6 +1331,8 @@ const TEXTS = {
     outlineLabel: 'Контур',
     resetPosition: 'Вернуть оверлей на место',
     back: '← Назад',
+    subtitlesLabel: 'Субтитры',
+    waitLabel: 'Ждать субтитры',
   },
   en: {
     translating: 'Translating…',
@@ -1346,10 +1344,6 @@ const TEXTS = {
     repeatedFailures: 'The chat is not responding. Turn subtitles off and on again to retry',
     noSpeech: 'The video has no captions, and the chat gave no transcript',
     rateLimited: 'The chat limited requests. Retrying in {minutes} min',
-    toggleOn: 'Turn subtitles on',
-    toggleOff: 'Turn subtitles off',
-    waitOn: 'Wait for subtitles: on',
-    waitOff: 'Wait for subtitles: off',
     targetLanguageLabel: 'Translation language:',
     otherLanguagePlaceholder: 'Language name',
     otherLanguageOption: 'Another language…',
@@ -1369,6 +1363,8 @@ const TEXTS = {
     outlineLabel: 'Outline',
     resetPosition: 'Move overlay back',
     back: '← Back',
+    subtitlesLabel: 'Subtitles',
+    waitLabel: 'Wait for subtitles',
   },
   'zh-CN': {
     translating: '正在翻译…',
@@ -1380,10 +1376,6 @@ const TEXTS = {
     repeatedFailures: '聊天没有响应。请关闭字幕后重新开启以重试',
     noSpeech: '该视频没有字幕，聊天也未提供文字记录',
     rateLimited: '聊天限制了请求频率，{minutes} 分钟后重试',
-    toggleOn: '开启字幕',
-    toggleOff: '关闭字幕',
-    waitOn: '等待字幕：开',
-    waitOff: '等待字幕：关',
     targetLanguageLabel: '翻译语言：',
     otherLanguagePlaceholder: '语言名称',
     otherLanguageOption: '其他语言…',
@@ -1403,6 +1395,8 @@ const TEXTS = {
     outlineLabel: '描边',
     resetPosition: '将字幕移回原位',
     back: '← 返回',
+    subtitlesLabel: '字幕',
+    waitLabel: '等待字幕',
   },
   es: {
     translating: 'Traduciendo…',
@@ -1414,10 +1408,6 @@ const TEXTS = {
     repeatedFailures: 'El chat no responde. Desactiva y vuelve a activar los subtítulos para reintentar',
     noSpeech: 'El vídeo no tiene subtítulos y el chat no devolvió ninguna transcripción',
     rateLimited: 'El chat limitó las solicitudes. Reintentando en {minutes} min',
-    toggleOn: 'Activar subtítulos',
-    toggleOff: 'Desactivar subtítulos',
-    waitOn: 'Esperar subtítulos: sí',
-    waitOff: 'Esperar subtítulos: no',
     targetLanguageLabel: 'Idioma de traducción:',
     otherLanguagePlaceholder: 'Nombre del idioma',
     otherLanguageOption: 'Otro idioma…',
@@ -1437,6 +1427,8 @@ const TEXTS = {
     outlineLabel: 'Contorno',
     resetPosition: 'Devolver el overlay a su sitio',
     back: '← Atrás',
+    subtitlesLabel: 'Subtítulos',
+    waitLabel: 'Esperar subtítulos',
   },
   hi: {
     translating: 'अनुवाद हो रहा है…',
@@ -1448,10 +1440,6 @@ const TEXTS = {
     repeatedFailures: 'चैट जवाब नहीं दे रहा है। दोबारा कोशिश करने के लिए सबटाइटल बंद करके फिर चालू करें',
     noSpeech: 'इस वीडियो में सबटाइटल नहीं हैं, और चैट से ट्रांसक्रिप्ट नहीं मिला',
     rateLimited: 'चैट ने अनुरोधों को सीमित कर दिया है। {minutes} मिनट बाद फिर कोशिश होगी',
-    toggleOn: 'सबटाइटल चालू करें',
-    toggleOff: 'सबटाइटल बंद करें',
-    waitOn: 'सबटाइटल की प्रतीक्षा: चालू',
-    waitOff: 'सबटाइटल की प्रतीक्षा: बंद',
     targetLanguageLabel: 'अनुवाद की भाषा:',
     otherLanguagePlaceholder: 'भाषा का नाम',
     otherLanguageOption: 'अन्य भाषा…',
@@ -1471,6 +1459,8 @@ const TEXTS = {
     outlineLabel: 'बाहरी रेखा',
     resetPosition: 'ओवरले को वापस जगह पर ले जाएँ',
     back: '← वापस',
+    subtitlesLabel: 'सबटाइटल',
+    waitLabel: 'सबटाइटल की प्रतीक्षा',
   },
   ar: {
     translating: 'جارٍ الترجمة…',
@@ -1482,10 +1472,6 @@ const TEXTS = {
     repeatedFailures: 'الدردشة لا تستجيب. أوقف الترجمات ثم شغّلها مجددًا لإعادة المحاولة',
     noSpeech: 'لا توجد ترجمات لهذا الفيديو، ولم تقدّم الدردشة نصًا مكتوبًا',
     rateLimited: 'قيّدت الدردشة عدد الطلبات. إعادة المحاولة بعد {minutes} د',
-    toggleOn: 'تشغيل الترجمات',
-    toggleOff: 'إيقاف الترجمات',
-    waitOn: 'انتظار الترجمات: مفعّل',
-    waitOff: 'انتظار الترجمات: متوقف',
     targetLanguageLabel: 'لغة الترجمة:',
     otherLanguagePlaceholder: 'اسم اللغة',
     otherLanguageOption: 'لغة أخرى…',
@@ -1505,6 +1491,8 @@ const TEXTS = {
     outlineLabel: 'حدود النص',
     resetPosition: 'إعادة الطبقة إلى مكانها',
     back: '→ رجوع',
+    subtitlesLabel: 'الترجمات',
+    waitLabel: 'انتظار الترجمات',
   },
   'pt-BR': {
     translating: 'Traduzindo…',
@@ -1516,10 +1504,6 @@ const TEXTS = {
     repeatedFailures: 'O chat não está respondendo. Desative e ative as legendas novamente para tentar de novo',
     noSpeech: 'O vídeo não tem legendas e o chat não forneceu transcrição',
     rateLimited: 'O chat limitou as solicitações. Nova tentativa em {minutes} min',
-    toggleOn: 'Ativar legendas',
-    toggleOff: 'Desativar legendas',
-    waitOn: 'Aguardar legendas: ativado',
-    waitOff: 'Aguardar legendas: desativado',
     targetLanguageLabel: 'Idioma da tradução:',
     otherLanguagePlaceholder: 'Nome do idioma',
     otherLanguageOption: 'Outro idioma…',
@@ -1539,6 +1523,8 @@ const TEXTS = {
     outlineLabel: 'Contorno',
     resetPosition: 'Devolver a sobreposição ao lugar',
     back: '← Voltar',
+    subtitlesLabel: 'Legendas',
+    waitLabel: 'Aguardar legendas',
   },
   ja: {
     translating: '翻訳中…',
@@ -1550,10 +1536,6 @@ const TEXTS = {
     repeatedFailures: 'チャットが応答しません。字幕をオフにしてからもう一度オンにすると再試行できます',
     noSpeech: 'この動画には字幕がなく、チャットからも文字起こしを取得できませんでした',
     rateLimited: 'チャットがリクエストを制限しています。{minutes} 分後に再試行します',
-    toggleOn: '字幕をオンにする',
-    toggleOff: '字幕をオフにする',
-    waitOn: '字幕を待つ：オン',
-    waitOff: '字幕を待つ：オフ',
     targetLanguageLabel: '翻訳言語：',
     otherLanguagePlaceholder: '言語名',
     otherLanguageOption: 'その他の言語…',
@@ -1573,6 +1555,8 @@ const TEXTS = {
     outlineLabel: '縁取り',
     resetPosition: 'オーバーレイを元の位置に戻す',
     back: '← 戻る',
+    subtitlesLabel: '字幕',
+    waitLabel: '字幕を待つ',
   },
   fr: {
     translating: 'Traduction en cours…',
@@ -1584,10 +1568,6 @@ const TEXTS = {
     repeatedFailures: 'Le chat ne répond pas. Désactivez puis réactivez les sous-titres pour réessayer',
     noSpeech: 'La vidéo n’a pas de sous-titres et le chat n’a fourni aucune transcription',
     rateLimited: 'Le chat a limité les requêtes. Nouvel essai dans {minutes} min',
-    toggleOn: 'Activer les sous-titres',
-    toggleOff: 'Désactiver les sous-titres',
-    waitOn: 'Attendre les sous-titres : oui',
-    waitOff: 'Attendre les sous-titres : non',
     targetLanguageLabel: 'Langue de traduction :',
     otherLanguagePlaceholder: 'Nom de la langue',
     otherLanguageOption: 'Autre langue…',
@@ -1607,6 +1587,8 @@ const TEXTS = {
     outlineLabel: 'Contour',
     resetPosition: 'Remettre l’overlay à sa place',
     back: '← Retour',
+    subtitlesLabel: 'Sous-titres',
+    waitLabel: 'Attendre les sous-titres',
   },
   de: {
     translating: 'Übersetze…',
@@ -1618,10 +1600,6 @@ const TEXTS = {
     repeatedFailures: 'Der Chat antwortet nicht. Schalte die Untertitel aus und wieder ein, um es erneut zu versuchen',
     noSpeech: 'Das Video hat keine Untertitel und der Chat lieferte kein Transkript',
     rateLimited: 'Der Chat hat die Anfragen begrenzt. Neuer Versuch in {minutes} Min.',
-    toggleOn: 'Untertitel einschalten',
-    toggleOff: 'Untertitel ausschalten',
-    waitOn: 'Auf Untertitel warten: an',
-    waitOff: 'Auf Untertitel warten: aus',
     targetLanguageLabel: 'Übersetzungssprache:',
     otherLanguagePlaceholder: 'Name der Sprache',
     otherLanguageOption: 'Andere Sprache…',
@@ -1641,6 +1619,8 @@ const TEXTS = {
     outlineLabel: 'Kontur',
     resetPosition: 'Overlay zurück an die Stelle setzen',
     back: '← Zurück',
+    subtitlesLabel: 'Untertitel',
+    waitLabel: 'Auf Untertitel warten',
   },
 };
 
@@ -2430,12 +2410,12 @@ class PlayerControls {
   applySettings(settings) {
     this.#settings = settings;
     this.#renderLanguageMenu();
-    this.#setSwitch(this.#toggleEnabledButton, settings.enabled ? this.#texts.toggleOff : this.#texts.toggleOn, settings.enabled);
+    this.#setSwitch(this.#toggleEnabledButton, this.#texts.subtitlesLabel, settings.enabled);
     this.#toggleEnabledButton.setAttribute('aria-pressed', String(settings.enabled));
     this.#buttonElement.classList.toggle('lingotube-player-button-pressed', settings.enabled);
     this.#buttonElement.setAttribute('aria-pressed', String(settings.enabled));
     const isWaiting = settings.waitForSubtitles !== false;
-    this.#setSwitch(this.#waitForSubtitlesButton, isWaiting ? this.#texts.waitOn : this.#texts.waitOff, isWaiting);
+    this.#setSwitch(this.#waitForSubtitlesButton, this.#texts.waitLabel, isWaiting);
     this.#textScaleValueElement.textContent = `${Math.round(settings.textScale * 100)}%`;
     this.#renderAppearance(settings);
     this.#hintElement.hidden = !shouldShowHint(settings);
@@ -2478,7 +2458,8 @@ class PlayerControls {
   }
 
   #buildButton() {
-    this.#buttonElement = this.#createElement('button', 'ytp-button lingotube-player-button', 'LT');
+    this.#buttonElement = this.#createElement('button', 'ytp-button lingotube-player-button');
+    this.#buttonElement.append(this.#createElement('span', 'lingotube-player-label', 'LT'));
     this.#buttonElement.title = 'lingotube';
     this.#buttonElement.setAttribute('aria-label', 'lingotube');
     this.#buttonElement.setAttribute('aria-haspopup', 'dialog');
@@ -2554,13 +2535,16 @@ class PlayerControls {
     this.#retryButton.hidden = true;
     this.#retryButton.addEventListener('click', () => this.#callbacks.onRetryRequested());
 
+    const divider = () => this.#createElement('div', 'lingotube-divider');
     panel.append(
       title,
       languageRow,
       this.#otherLanguageRow,
+      divider(),
       this.#toggleEnabledButton,
-      scaleRow,
       this.#waitForSubtitlesButton,
+      scaleRow,
+      divider(),
       this.#appearanceOpenButton,
       this.#statusLineElement,
       this.#retryButton,
@@ -2584,9 +2568,9 @@ class PlayerControls {
     panel.hidden = true;
     if (this.#isRightToLeft) panel.dir = 'rtl';
 
-    const header = this.#createElement('div', 'lingotube-panel-row');
     const backButton = this.#createElement('button', 'lingotube-panel-button lingotube-appearance-back', this.#texts.back);
     backButton.addEventListener('click', () => this.#showMain());
+    const header = this.#createElement('div', 'lingotube-appearance-header');
     header.append(backButton, this.#createElement('span', 'lingotube-panel-title', this.#texts.appearanceTitle));
 
     const colorRow = this.#createElement('div', 'lingotube-panel-row');
@@ -2620,15 +2604,17 @@ class PlayerControls {
     this.#opacityValueElement = this.#createElement('span', 'lingotube-scale-value');
     backgroundRow.append(backgroundLabel, fewerButton, this.#opacitySlider, moreButton, this.#opacityValueElement);
 
-    const outlineRow = this.#createElement('div', 'lingotube-panel-row');
-    this.#outlineButton = this.#createElement('button', 'lingotube-panel-button lingotube-outline-button', this.#texts.outlineLabel);
+    this.#outlineButton = this.#createSwitch('lingotube-outline-button');
     this.#outlineButton.addEventListener('click', () => this.#callbacks.onAppearanceChanged({ outline: this.#settings.outline !== true }));
-    outlineRow.append(this.#outlineButton);
 
-    const resetButton = this.#createElement('button', 'lingotube-panel-button lingotube-toggle-button', this.#texts.resetPosition);
+    const resetButton = this.#createElement('button', 'lingotube-panel-button lingotube-reset-button', this.#texts.resetPosition);
     resetButton.addEventListener('click', () => this.#callbacks.onResetPosition());
 
-    panel.append(header, colorRow, backgroundRow, outlineRow, resetButton);
+    const pairRow = this.#createElement('div', 'lingotube-panel-row lingotube-pair-row');
+    pairRow.append(this.#outlineButton, resetButton);
+
+    const divider = () => this.#createElement('div', 'lingotube-divider');
+    panel.append(header, divider(), colorRow, backgroundRow, divider(), pairRow);
     panel.addEventListener('keydown', (event) => {
       if (event.key === 'Escape') this.#setOpen(false);
     });
@@ -2699,7 +2685,7 @@ class PlayerControls {
     }
     this.#opacitySlider.value = String(Math.round(settings.backgroundOpacity * 100));
     this.#opacityValueElement.textContent = `${Math.round(settings.backgroundOpacity * 100)}%`;
-    this.#outlineButton.setAttribute('aria-pressed', String(settings.outline === true));
+    this.#setSwitch(this.#outlineButton, this.#texts.outlineLabel, settings.outline === true);
   }
 
   #handleLanguageSelected = () => {

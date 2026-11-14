@@ -238,10 +238,22 @@
   font-weight: bold;
   line-height: 1;
   color: #bbb;
-  /* White ring around the label; the pressed red line stays on box-shadow. */
-  outline: 1.5px solid rgba(255, 255, 255, 0.9);
-  outline-offset: -6px;
-  border-radius: 4px;
+}
+
+/* The white ring is on the label, so the button keeps the control bar's full height. */
+.ytp-right-controls .lingotube-player-button .lingotube-player-label {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1.5px solid rgba(255, 255, 255, 0.9);
+  border-radius: 6px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: bold;
+  line-height: 1;
 }
 
 .ytp-right-controls .lingotube-player-button.ytp-button.lingotube-player-button-pressed {
@@ -297,9 +309,6 @@
   background: #fff;
 }
 
-.lingotube-switch-on .lingotube-switch-label {
-  color: #7db9e8;
-}
 
 /* Text colour swatches: round, the chosen one gets a white ring. */
 .lingotube-color-button {
@@ -330,4 +339,79 @@
 .lingotube-hint {
   background: #fff;
   color: #0f0f0f;
+}
+
+/* Panel spacing: one 10px step between rows, dividers between groups, no text selection on clicks. */
+.lingotube-panel,
+.lingotube-appearance-panel {
+  padding: 12px 14px;
+  user-select: none;
+}
+
+.lingotube-panel-title {
+  margin-bottom: 10px;
+}
+
+.lingotube-panel-row {
+  margin-bottom: 10px;
+  gap: 8px;
+}
+
+.lingotube-divider {
+  height: 1px;
+  margin: 2px 0 10px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.lingotube-panel-button.lingotube-switch {
+  margin: 0 0 10px;
+  padding: 0;
+  background: transparent;
+  color: #f1f1f1;
+}
+
+.lingotube-panel-button.lingotube-switch:hover {
+  background: transparent;
+}
+
+.lingotube-panel-button.lingotube-switch:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.lingotube-appearance-panel {
+  width: 300px;
+}
+
+.lingotube-appearance-header {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.lingotube-appearance-header .lingotube-appearance-back {
+  justify-self: start;
+}
+
+.lingotube-appearance-header .lingotube-panel-title {
+  margin: 0;
+  text-align: center;
+}
+
+.lingotube-pair-row {
+  align-items: stretch;
+}
+
+.lingotube-pair-row .lingotube-switch {
+  flex: 1;
+  margin: 0;
+}
+
+.lingotube-pair-row .lingotube-reset-button {
+  flex: 1;
+  margin: 0;
+  padding: 6px 8px;
+  white-space: normal;
+  font-size: 12px;
+  line-height: 1.3;
 }

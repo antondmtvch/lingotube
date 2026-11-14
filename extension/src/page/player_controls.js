@@ -107,12 +107,12 @@ export class PlayerControls {
   applySettings(settings) {
     this.#settings = settings;
     this.#renderLanguageMenu();
-    this.#setSwitch(this.#toggleEnabledButton, settings.enabled ? this.#texts.toggleOff : this.#texts.toggleOn, settings.enabled);
+    this.#setSwitch(this.#toggleEnabledButton, this.#texts.subtitlesLabel, settings.enabled);
     this.#toggleEnabledButton.setAttribute('aria-pressed', String(settings.enabled));
     this.#buttonElement.classList.toggle('lingotube-player-button-pressed', settings.enabled);
     this.#buttonElement.setAttribute('aria-pressed', String(settings.enabled));
     const isWaiting = settings.waitForSubtitles !== false;
-    this.#setSwitch(this.#waitForSubtitlesButton, isWaiting ? this.#texts.waitOn : this.#texts.waitOff, isWaiting);
+    this.#setSwitch(this.#waitForSubtitlesButton, this.#texts.waitLabel, isWaiting);
     this.#textScaleValueElement.textContent = `${Math.round(settings.textScale * 100)}%`;
     this.#renderAppearance(settings);
     this.#hintElement.hidden = !shouldShowHint(settings);
@@ -155,7 +155,8 @@ export class PlayerControls {
   }
 
   #buildButton() {
-    this.#buttonElement = this.#createElement('button', 'ytp-button lingotube-player-button', 'LT');
+    this.#buttonElement = this.#createElement('button', 'ytp-button lingotube-player-button');
+    this.#buttonElement.append(this.#createElement('span', 'lingotube-player-label', 'LT'));
     this.#buttonElement.title = 'lingotube';
     this.#buttonElement.setAttribute('aria-label', 'lingotube');
     this.#buttonElement.setAttribute('aria-haspopup', 'dialog');
@@ -231,13 +232,16 @@ export class PlayerControls {
     this.#retryButton.hidden = true;
     this.#retryButton.addEventListener('click', () => this.#callbacks.onRetryRequested());
 
+    const divider = () => this.#createElement('div', 'lingotube-divider');
     panel.append(
       title,
       languageRow,
       this.#otherLanguageRow,
+      divider(),
       this.#toggleEnabledButton,
-      scaleRow,
       this.#waitForSubtitlesButton,
+      scaleRow,
+      divider(),
       this.#appearanceOpenButton,
       this.#statusLineElement,
       this.#retryButton,
@@ -261,9 +265,9 @@ export class PlayerControls {
     panel.hidden = true;
     if (this.#isRightToLeft) panel.dir = 'rtl';
 
-    const header = this.#createElement('div', 'lingotube-panel-row');
     const backButton = this.#createElement('button', 'lingotube-panel-button lingotube-appearance-back', this.#texts.back);
     backButton.addEventListener('click', () => this.#showMain());
+    const header = this.#createElement('div', 'lingotube-appearance-header');
     header.append(backButton, this.#createElement('span', 'lingotube-panel-title', this.#texts.appearanceTitle));
 
     const colorRow = this.#createElement('div', 'lingotube-panel-row');
@@ -297,15 +301,17 @@ export class PlayerControls {
     this.#opacityValueElement = this.#createElement('span', 'lingotube-scale-value');
     backgroundRow.append(backgroundLabel, fewerButton, this.#opacitySlider, moreButton, this.#opacityValueElement);
 
-    const outlineRow = this.#createElement('div', 'lingotube-panel-row');
-    this.#outlineButton = this.#createElement('button', 'lingotube-panel-button lingotube-outline-button', this.#texts.outlineLabel);
+    this.#outlineButton = this.#createSwitch('lingotube-outline-button');
     this.#outlineButton.addEventListener('click', () => this.#callbacks.onAppearanceChanged({ outline: this.#settings.outline !== true }));
-    outlineRow.append(this.#outlineButton);
 
-    const resetButton = this.#createElement('button', 'lingotube-panel-button lingotube-toggle-button', this.#texts.resetPosition);
+    const resetButton = this.#createElement('button', 'lingotube-panel-button lingotube-reset-button', this.#texts.resetPosition);
     resetButton.addEventListener('click', () => this.#callbacks.onResetPosition());
 
-    panel.append(header, colorRow, backgroundRow, outlineRow, resetButton);
+    const pairRow = this.#createElement('div', 'lingotube-panel-row lingotube-pair-row');
+    pairRow.append(this.#outlineButton, resetButton);
+
+    const divider = () => this.#createElement('div', 'lingotube-divider');
+    panel.append(header, divider(), colorRow, backgroundRow, divider(), pairRow);
     panel.addEventListener('keydown', (event) => {
       if (event.key === 'Escape') this.#setOpen(false);
     });
@@ -376,7 +382,7 @@ export class PlayerControls {
     }
     this.#opacitySlider.value = String(Math.round(settings.backgroundOpacity * 100));
     this.#opacityValueElement.textContent = `${Math.round(settings.backgroundOpacity * 100)}%`;
-    this.#outlineButton.setAttribute('aria-pressed', String(settings.outline === true));
+    this.#setSwitch(this.#outlineButton, this.#texts.outlineLabel, settings.outline === true);
   }
 
   #handleLanguageSelected = () => {
