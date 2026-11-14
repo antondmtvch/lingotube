@@ -45,6 +45,7 @@ export class PlayerControls {
   #colorButtons = new Map();
   #opacityValueElement;
   #outlineButton;
+  #opacitySlider;
   #controlsObserver = null;
   #hintObserver = null;
   #isOpen = false;
@@ -106,12 +107,12 @@ export class PlayerControls {
   applySettings(settings) {
     this.#settings = settings;
     this.#renderLanguageMenu();
-    this.#toggleEnabledButton.textContent = settings.enabled ? this.#texts.toggleOff : this.#texts.toggleOn;
+    this.#setSwitch(this.#toggleEnabledButton, settings.enabled ? this.#texts.toggleOff : this.#texts.toggleOn, settings.enabled);
+    this.#toggleEnabledButton.setAttribute('aria-pressed', String(settings.enabled));
     this.#buttonElement.classList.toggle('lingotube-player-button-pressed', settings.enabled);
     this.#buttonElement.setAttribute('aria-pressed', String(settings.enabled));
     const isWaiting = settings.waitForSubtitles !== false;
-    this.#waitForSubtitlesButton.textContent = isWaiting ? this.#texts.waitOn : this.#texts.waitOff;
-    this.#waitForSubtitlesButton.setAttribute('aria-pressed', String(isWaiting));
+    this.#setSwitch(this.#waitForSubtitlesButton, isWaiting ? this.#texts.waitOn : this.#texts.waitOff, isWaiting);
     this.#textScaleValueElement.textContent = `${Math.round(settings.textScale * 100)}%`;
     this.#renderAppearance(settings);
     this.#hintElement.hidden = !shouldShowHint(settings);
@@ -127,6 +128,22 @@ export class PlayerControls {
     this.#panelElement.remove();
     this.#appearancePanelElement.remove();
     this.#hintElement.remove();
+  }
+
+  /** A row-wide switch: label on the left, a track with a thumb on the right. */
+  #createSwitch(className) {
+    const button = this.#createElement('button', `lingotube-panel-button lingotube-switch ${className}`);
+    button.setAttribute('role', 'switch');
+    const track = this.#createElement('span', 'lingotube-switch-track');
+    track.append(this.#createElement('span', 'lingotube-switch-thumb'));
+    button.append(this.#createElement('span', 'lingotube-switch-label'), track);
+    return button;
+  }
+
+  #setSwitch(button, text, isOn) {
+    button.querySelector('.lingotube-switch-label').textContent = text;
+    button.setAttribute('aria-checked', String(isOn));
+    button.classList.toggle('lingotube-switch-on', isOn);
   }
 
   #createElement(tagName, className, text) {
@@ -178,12 +195,12 @@ export class PlayerControls {
     confirmButton.addEventListener('click', () => this.#confirmTypedLanguage());
     this.#otherLanguageRow.append(this.#otherLanguageInput, confirmButton);
 
-    this.#toggleEnabledButton = this.#createElement('button', 'lingotube-panel-button lingotube-toggle-button');
+    this.#toggleEnabledButton = this.#createSwitch('lingotube-toggle-button');
     this.#toggleEnabledButton.addEventListener('click', () => {
       this.#callbacks.onEnabledChanged(!this.#settings.enabled);
     });
 
-    this.#waitForSubtitlesButton = this.#createElement('button', 'lingotube-panel-button lingotube-wait-button');
+    this.#waitForSubtitlesButton = this.#createSwitch('lingotube-wait-button');
     this.#waitForSubtitlesButton.addEventListener('click', () => {
       this.#callbacks.onWaitForSubtitlesChanged(this.#settings.waitForSubtitles === false);
     });
@@ -253,8 +270,10 @@ export class PlayerControls {
     colorRow.append(this.#createElement('span', 'lingotube-panel-label', this.#texts.textColorLabel));
     const colorNames = { white: this.#texts.colorWhite, yellow: this.#texts.colorYellow, cyan: this.#texts.colorCyan };
     for (const color of Object.keys(TEXT_COLOR_CSS)) {
-      const button = this.#createElement('button', 'lingotube-panel-button lingotube-color-button', colorNames[color]);
+      const button = this.#createElement('button', 'lingotube-color-button');
       button.dataset.color = color;
+      button.title = colorNames[color];
+      button.setAttribute('aria-label', colorNames[color]);
       button.addEventListener('click', () => this.#callbacks.onAppearanceChanged({ textColor: color }));
       this.#colorButtons.set(color, button);
       colorRow.append(button);
@@ -266,8 +285,17 @@ export class PlayerControls {
     fewerButton.addEventListener('click', () => this.#changeBackgroundOpacity(-1));
     const moreButton = this.#createElement('button', 'lingotube-panel-button lingotube-opacity-button', '+');
     moreButton.addEventListener('click', () => this.#changeBackgroundOpacity(1));
+    this.#opacitySlider = this.#createElement('input', 'lingotube-opacity-slider');
+    this.#opacitySlider.type = 'range';
+    this.#opacitySlider.min = '0';
+    this.#opacitySlider.max = '100';
+    this.#opacitySlider.step = '5';
+    this.#opacitySlider.setAttribute('aria-label', this.#texts.backgroundLabel);
+    this.#opacitySlider.addEventListener('input', () => {
+      this.#callbacks.onAppearanceChanged({ backgroundOpacity: Number(this.#opacitySlider.value) / 100 });
+    });
     this.#opacityValueElement = this.#createElement('span', 'lingotube-scale-value');
-    backgroundRow.append(backgroundLabel, fewerButton, this.#opacityValueElement, moreButton);
+    backgroundRow.append(backgroundLabel, fewerButton, this.#opacitySlider, moreButton, this.#opacityValueElement);
 
     const outlineRow = this.#createElement('div', 'lingotube-panel-row');
     this.#outlineButton = this.#createElement('button', 'lingotube-panel-button lingotube-outline-button', this.#texts.outlineLabel);
@@ -346,6 +374,7 @@ export class PlayerControls {
     for (const [color, button] of this.#colorButtons) {
       button.setAttribute('aria-pressed', String(settings.textColor === color));
     }
+    this.#opacitySlider.value = String(Math.round(settings.backgroundOpacity * 100));
     this.#opacityValueElement.textContent = `${Math.round(settings.backgroundOpacity * 100)}%`;
     this.#outlineButton.setAttribute('aria-pressed', String(settings.outline === true));
   }

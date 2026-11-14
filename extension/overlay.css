@@ -154,8 +154,38 @@
 .lingotube-appearance-open,
 .lingotube-retry-button {
   display: block;
+  /* Width 100% includes the padding and border only with border-box; otherwise the button overflows the panel. */
+  box-sizing: border-box;
   width: 100%;
   margin-bottom: 8px;
+}
+
+/* The wait button stands out: a white outline always, the panel's accent colour when it is on. */
+.lingotube-panel-button.lingotube-wait-button {
+  border: 1px solid #fff;
+}
+
+.lingotube-panel-button.lingotube-wait-button[aria-pressed="true"] {
+  background: #3ea6ff;
+  border-color: #fff;
+  color: #0f0f0f;
+  font-weight: bold;
+}
+
+.lingotube-panel-button.lingotube-wait-button[aria-pressed="true"]:hover {
+  background: #65b8ff;
+}
+
+/* The enable toggle shows the same "on" colour while subtitles are on. */
+.lingotube-panel-button.lingotube-toggle-button[aria-pressed="true"] {
+  background: #3ea6ff;
+  border-color: #fff;
+  color: #0f0f0f;
+  font-weight: bold;
+}
+
+.lingotube-panel-button.lingotube-toggle-button[aria-pressed="true"]:hover {
+  background: #65b8ff;
 }
 
 .lingotube-scale-value {
@@ -190,4 +220,114 @@
 
 .lingotube-hint[hidden] {
   display: none;
+}
+
+/* Final rules: higher specificity than YouTube's .ytp-button so the layout holds in the real player. */
+.ytp-right-controls .lingotube-player-button.ytp-button {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  height: 100% !important;
+  width: 36px;
+  padding: 0 !important;
+  margin: 0;
+  border: 0 !important;
+  background: none !important;
+  vertical-align: top;
+  font-size: 13px;
+  font-weight: bold;
+  line-height: 1;
+  color: #bbb;
+  /* White ring around the label; the pressed red line stays on box-shadow. */
+  outline: 1.5px solid rgba(255, 255, 255, 0.9);
+  outline-offset: -6px;
+  border-radius: 4px;
+}
+
+.ytp-right-controls .lingotube-player-button.ytp-button.lingotube-player-button-pressed {
+  color: #fff;
+  box-shadow: inset 0 -3px 0 #f00;
+}
+
+/* Switches: the same language as the YouTube settings menu, blue when on. */
+.lingotube-panel-button.lingotube-switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  color: #f1f1f1;
+  font-size: 13px;
+  text-align: left;
+}
+
+.lingotube-panel-button.lingotube-switch:hover {
+  background: none;
+}
+
+.lingotube-switch-track {
+  position: relative;
+  flex: none;
+  width: 28px;
+  height: 14px;
+  border-radius: 7px;
+  background: #5a5a5a;
+}
+
+.lingotube-switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #f1f1f1;
+  transition: transform 0.15s;
+}
+
+.lingotube-switch-on .lingotube-switch-track {
+  background: #7db9e8;
+}
+
+.lingotube-switch-on .lingotube-switch-thumb {
+  transform: translateX(14px);
+  background: #fff;
+}
+
+.lingotube-switch-on .lingotube-switch-label {
+  color: #7db9e8;
+}
+
+/* Text colour swatches: round, the chosen one gets a white ring. */
+.lingotube-color-button {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid #888;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.lingotube-color-button[data-color='white'] { background: #fff; }
+.lingotube-color-button[data-color='yellow'] { background: #ffd400; }
+.lingotube-color-button[data-color='cyan'] { background: #7fd3ff; }
+
+.lingotube-color-button[aria-pressed='true'] {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.lingotube-opacity-slider {
+  flex: 1;
+  min-width: 0;
+  accent-color: #fff;
+}
+
+/* First-run hint: light plate, like a white tooltip, so it stands out on the dark bar. */
+.lingotube-hint {
+  background: #fff;
+  color: #0f0f0f;
 }
