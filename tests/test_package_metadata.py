@@ -34,5 +34,6 @@ def test_urls_and_classifiers_present() -> None:
     """Check that the project URLs, keywords and classifiers are filled in."""
     project = load()
     assert {"Homepage", "Repository", "Issues"} <= set(project["urls"])
+    assert project["urls"]["Documentation"] == "https://antondmtvch.github.io/lingotube/"
     assert project["classifiers"]
     assert project["keywords"]
