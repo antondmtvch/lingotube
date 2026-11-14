@@ -24,6 +24,7 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://skills.sh/antondmtvch/lingotube"
+Documentation = "https://antondmtvch.github.io/lingotube/"
 Repository = "https://github.com/antondmtvch/lingotube"
 Issues = "https://github.com/antondmtvch/lingotube/issues"
 
