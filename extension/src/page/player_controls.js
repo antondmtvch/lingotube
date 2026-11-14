@@ -45,7 +45,6 @@ export class PlayerControls {
   #colorButtons = new Map();
   #opacityValueElement;
   #outlineButton;
-  #sampleElement;
   #controlsObserver = null;
   #hintObserver = null;
   #isOpen = false;
@@ -275,12 +274,10 @@ export class PlayerControls {
     this.#outlineButton.addEventListener('click', () => this.#callbacks.onAppearanceChanged({ outline: this.#settings.outline !== true }));
     outlineRow.append(this.#outlineButton);
 
-    this.#sampleElement = this.#createElement('div', 'lingotube-appearance-sample', this.#texts.appearanceSample);
-
     const resetButton = this.#createElement('button', 'lingotube-panel-button lingotube-toggle-button', this.#texts.resetPosition);
     resetButton.addEventListener('click', () => this.#callbacks.onResetPosition());
 
-    panel.append(header, colorRow, backgroundRow, outlineRow, this.#sampleElement, resetButton);
+    panel.append(header, colorRow, backgroundRow, outlineRow, resetButton);
     panel.addEventListener('keydown', (event) => {
       if (event.key === 'Escape') this.#setOpen(false);
     });
@@ -351,9 +348,6 @@ export class PlayerControls {
     }
     this.#opacityValueElement.textContent = `${Math.round(settings.backgroundOpacity * 100)}%`;
     this.#outlineButton.setAttribute('aria-pressed', String(settings.outline === true));
-    this.#sampleElement.style.color = TEXT_COLOR_CSS[settings.textColor];
-    this.#sampleElement.style.background = `rgba(8, 8, 8, ${settings.backgroundOpacity})`;
-    this.#sampleElement.classList.toggle('lingotube-overlay-outlined', settings.outline === true);
   }
 
   #handleLanguageSelected = () => {

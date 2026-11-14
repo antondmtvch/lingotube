@@ -60,12 +60,21 @@
 }
 
 .lingotube-player-button {
+  /* Match the neighbouring YouTube buttons: full control-bar height, no browser button chrome. */
+  box-sizing: border-box;
   width: 36px;
+  height: 100%;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  font-family: Roboto, Arial, sans-serif;
   font-size: 13px;
   font-weight: bold;
+  line-height: 1;
   color: #bbb;
   opacity: 1;
 }
@@ -141,6 +150,8 @@
 }
 
 .lingotube-toggle-button,
+.lingotube-wait-button,
+.lingotube-appearance-open,
 .lingotube-retry-button {
   display: block;
   width: 100%;
@@ -157,17 +168,6 @@
   opacity: 0.85;
 }
 
-.lingotube-appearance-sample {
-  margin: 8px 0;
-  padding: 6px 12px;
-  border-radius: 6px;
-  text-align: center;
-  font-size: 16px;
-}
-
-.lingotube-appearance-sample.lingotube-overlay-outlined {
-  text-shadow: 0 0 2px #000, 0 0 2px #000, 0 0 4px #000;
-}
 
 .lingotube-hint {
   position: absolute;

@@ -16,8 +16,8 @@ test('every supported language has exactly the keys of Russian and non-empty str
   }
 });
 
-test('the set has the 33 keys of the plan and the fallback is English', () => {
-  assert.equal(Object.keys(uiTexts('ru')).length, 33);
+test('the set has the 32 keys of the plan and the fallback is English', () => {
+  assert.equal(Object.keys(uiTexts('ru')).length, 32);
   assert.equal(FALLBACK_UI_LANGUAGE, 'en');
   assert.equal(UI_LANGUAGES.length, 10);
 });

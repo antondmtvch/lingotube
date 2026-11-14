@@ -1334,7 +1334,6 @@ const TEXTS = {
     backgroundLabel: 'Фон:',
     outlineLabel: 'Контур',
     resetPosition: 'Вернуть оверлей на место',
-    appearanceSample: 'Пример текста',
     back: '← Назад',
   },
   en: {
@@ -1369,7 +1368,6 @@ const TEXTS = {
     backgroundLabel: 'Background:',
     outlineLabel: 'Outline',
     resetPosition: 'Move overlay back',
-    appearanceSample: 'Sample text',
     back: '← Back',
   },
   'zh-CN': {
@@ -1404,7 +1402,6 @@ const TEXTS = {
     backgroundLabel: '背景：',
     outlineLabel: '描边',
     resetPosition: '将字幕移回原位',
-    appearanceSample: '示例文字',
     back: '← 返回',
   },
   es: {
@@ -1439,7 +1436,6 @@ const TEXTS = {
     backgroundLabel: 'Fondo:',
     outlineLabel: 'Contorno',
     resetPosition: 'Devolver el overlay a su sitio',
-    appearanceSample: 'Texto de ejemplo',
     back: '← Atrás',
   },
   hi: {
@@ -1474,7 +1470,6 @@ const TEXTS = {
     backgroundLabel: 'पृष्ठभूमि:',
     outlineLabel: 'बाहरी रेखा',
     resetPosition: 'ओवरले को वापस जगह पर ले जाएँ',
-    appearanceSample: 'नमूना टेक्स्ट',
     back: '← वापस',
   },
   ar: {
@@ -1509,7 +1504,6 @@ const TEXTS = {
     backgroundLabel: 'الخلفية:',
     outlineLabel: 'حدود النص',
     resetPosition: 'إعادة الطبقة إلى مكانها',
-    appearanceSample: 'نص تجريبي',
     back: '→ رجوع',
   },
   'pt-BR': {
@@ -1544,7 +1538,6 @@ const TEXTS = {
     backgroundLabel: 'Fundo:',
     outlineLabel: 'Contorno',
     resetPosition: 'Devolver a sobreposição ao lugar',
-    appearanceSample: 'Texto de exemplo',
     back: '← Voltar',
   },
   ja: {
@@ -1579,7 +1572,6 @@ const TEXTS = {
     backgroundLabel: '背景:',
     outlineLabel: '縁取り',
     resetPosition: 'オーバーレイを元の位置に戻す',
-    appearanceSample: 'サンプルテキスト',
     back: '← 戻る',
   },
   fr: {
@@ -1614,7 +1606,6 @@ const TEXTS = {
     backgroundLabel: 'Fond :',
     outlineLabel: 'Contour',
     resetPosition: 'Remettre l’overlay à sa place',
-    appearanceSample: 'Texte d’exemple',
     back: '← Retour',
   },
   de: {
@@ -1649,7 +1640,6 @@ const TEXTS = {
     backgroundLabel: 'Hintergrund:',
     outlineLabel: 'Kontur',
     resetPosition: 'Overlay zurück an die Stelle setzen',
-    appearanceSample: 'Beispieltext',
     back: '← Zurück',
   },
 };
@@ -2378,7 +2368,6 @@ class PlayerControls {
   #colorButtons = new Map();
   #opacityValueElement;
   #outlineButton;
-  #sampleElement;
   #controlsObserver = null;
   #hintObserver = null;
   #isOpen = false;
@@ -2608,12 +2597,10 @@ class PlayerControls {
     this.#outlineButton.addEventListener('click', () => this.#callbacks.onAppearanceChanged({ outline: this.#settings.outline !== true }));
     outlineRow.append(this.#outlineButton);
 
-    this.#sampleElement = this.#createElement('div', 'lingotube-appearance-sample', this.#texts.appearanceSample);
-
     const resetButton = this.#createElement('button', 'lingotube-panel-button lingotube-toggle-button', this.#texts.resetPosition);
     resetButton.addEventListener('click', () => this.#callbacks.onResetPosition());
 
-    panel.append(header, colorRow, backgroundRow, outlineRow, this.#sampleElement, resetButton);
+    panel.append(header, colorRow, backgroundRow, outlineRow, resetButton);
     panel.addEventListener('keydown', (event) => {
       if (event.key === 'Escape') this.#setOpen(false);
     });
@@ -2684,9 +2671,6 @@ class PlayerControls {
     }
     this.#opacityValueElement.textContent = `${Math.round(settings.backgroundOpacity * 100)}%`;
     this.#outlineButton.setAttribute('aria-pressed', String(settings.outline === true));
-    this.#sampleElement.style.color = TEXT_COLOR_CSS[settings.textColor];
-    this.#sampleElement.style.background = `rgba(8, 8, 8, ${settings.backgroundOpacity})`;
-    this.#sampleElement.classList.toggle('lingotube-overlay-outlined', settings.outline === true);
   }
 
   #handleLanguageSelected = () => {

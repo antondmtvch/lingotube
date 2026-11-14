@@ -43,7 +43,6 @@ const TEXTS = {
     backgroundLabel: 'Фон:',
     outlineLabel: 'Контур',
     resetPosition: 'Вернуть оверлей на место',
-    appearanceSample: 'Пример текста',
     back: '← Назад',
   },
   en: {
@@ -78,7 +77,6 @@ const TEXTS = {
     backgroundLabel: 'Background:',
     outlineLabel: 'Outline',
     resetPosition: 'Move overlay back',
-    appearanceSample: 'Sample text',
     back: '← Back',
   },
   'zh-CN': {
@@ -113,7 +111,6 @@ const TEXTS = {
     backgroundLabel: '背景：',
     outlineLabel: '描边',
     resetPosition: '将字幕移回原位',
-    appearanceSample: '示例文字',
     back: '← 返回',
   },
   es: {
@@ -148,7 +145,6 @@ const TEXTS = {
     backgroundLabel: 'Fondo:',
     outlineLabel: 'Contorno',
     resetPosition: 'Devolver el overlay a su sitio',
-    appearanceSample: 'Texto de ejemplo',
     back: '← Atrás',
   },
   hi: {
@@ -183,7 +179,6 @@ const TEXTS = {
     backgroundLabel: 'पृष्ठभूमि:',
     outlineLabel: 'बाहरी रेखा',
     resetPosition: 'ओवरले को वापस जगह पर ले जाएँ',
-    appearanceSample: 'नमूना टेक्स्ट',
     back: '← वापस',
   },
   ar: {
@@ -218,7 +213,6 @@ const TEXTS = {
     backgroundLabel: 'الخلفية:',
     outlineLabel: 'حدود النص',
     resetPosition: 'إعادة الطبقة إلى مكانها',
-    appearanceSample: 'نص تجريبي',
     back: '→ رجوع',
   },
   'pt-BR': {
@@ -253,7 +247,6 @@ const TEXTS = {
     backgroundLabel: 'Fundo:',
     outlineLabel: 'Contorno',
     resetPosition: 'Devolver a sobreposição ao lugar',
-    appearanceSample: 'Texto de exemplo',
     back: '← Voltar',
   },
   ja: {
@@ -288,7 +281,6 @@ const TEXTS = {
     backgroundLabel: '背景:',
     outlineLabel: '縁取り',
     resetPosition: 'オーバーレイを元の位置に戻す',
-    appearanceSample: 'サンプルテキスト',
     back: '← 戻る',
   },
   fr: {
@@ -323,7 +315,6 @@ const TEXTS = {
     backgroundLabel: 'Fond :',
     outlineLabel: 'Contour',
     resetPosition: 'Remettre l’overlay à sa place',
-    appearanceSample: 'Texte d’exemple',
     back: '← Retour',
   },
   de: {
@@ -358,7 +349,6 @@ const TEXTS = {
     backgroundLabel: 'Hintergrund:',
     outlineLabel: 'Kontur',
     resetPosition: 'Overlay zurück an die Stelle setzen',
-    appearanceSample: 'Beispieltext',
     back: '← Zurück',
   },
 };
