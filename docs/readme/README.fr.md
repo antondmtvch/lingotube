@@ -228,7 +228,7 @@ Sans Node.js, copiez le dossier `skills/lingotube/` dans le dossier skills de vo
 
 ## Extension de navigateur
 
-Une extension Manifest V3 pour Chrome et Edge qui affiche des sous-titres traduits sur le lecteur YouTube. Elle est en développement et ne fait pas encore partie de la branche principale.
+Une extension Manifest V3 pour Chrome, Edge et Firefox qui affiche des sous-titres traduits sur le lecteur YouTube. Elle est en développement.
 
 - Un bouton du lecteur active les sous-titres ; le panneau contenant le texte peut être déplacé.
 - Vous choisissez parmi 30 langues ou tapez la vôtre.

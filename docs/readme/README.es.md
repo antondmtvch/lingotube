@@ -228,7 +228,7 @@ Sin Node.js, copia la carpeta `skills/lingotube/` en la carpeta de skills de tu 
 
 ## Extensión del navegador
 
-Una extensión Manifest V3 para Chrome y Edge que muestra subtítulos traducidos sobre el reproductor de YouTube. Está en desarrollo y todavía no forma parte de la rama principal.
+Una extensión Manifest V3 para Chrome, Edge y Firefox que muestra subtítulos traducidos sobre el reproductor de YouTube. Está en desarrollo.
 
 - Un botón del reproductor activa los subtítulos; el panel con el texto se puede arrastrar.
 - Eliges uno de 30 idiomas o escribes el tuyo.

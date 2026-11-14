@@ -228,7 +228,7 @@ Without Node.js, copy the `skills/lingotube/` folder into your agent's skills fo
 
 ## Browser extension
 
-A Manifest V3 extension for Chrome and Edge that shows translated subtitles over the YouTube player. It is under development and is not yet in the main branch.
+A Manifest V3 extension for Chrome, Edge and Firefox that shows translated subtitles over the YouTube player. It is under development.
 
 - A button in the player turns the subtitles on; the panel with the text can be dragged.
 - You choose one of 30 languages or type your own.
