@@ -69,8 +69,10 @@
 تحتاج إلى [uv](https://docs.astral.sh/uv/). يقوم uv بتنزيل إصدار Python المناسب بنفسه.
 
 ```sh
-uv tool install --python 3.14 git+https://github.com/antondmtvch/lingotube
+uv tool install --python 3.14 lingotube
 ```
+
+أحدث نسخة من `main`: `uv tool install --python 3.14 git+https://github.com/antondmtvch/lingotube`
 
 أو من نسخة محلية من المستودع:
 

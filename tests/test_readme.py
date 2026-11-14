@@ -143,3 +143,11 @@ def test_root_readme_warning_names_terms_and_restriction() -> None:
     block = re.sub(r"\s+", " ", match.group(1).replace(">", " "))
     assert "Terms of Service" in block
     assert "restricted" in block
+
+
+@pytest.mark.parametrize("readme_path", README_PATHS, ids=lambda path: path.name)
+def test_readme_first_install_command_is_pypi(readme_path: Path) -> None:
+    """Check that the first install command in every README installs from PyPI."""
+    commands = [line for line in read_readme(readme_path).splitlines() if line.startswith("uv tool install")]
+    assert commands[0] == "uv tool install --python 3.14 lingotube"
+

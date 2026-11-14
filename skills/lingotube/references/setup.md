@@ -40,8 +40,10 @@ to open a new terminal (or restart the agent) and continue from here.
 Check with `lingotube --help`. If it is missing, show and (after "yes") run:
 
 ```
-uv tool install --python 3.14 git+https://github.com/antondmtvch/lingotube
+uv tool install --python 3.14 lingotube
 ```
+
+Latest code from `main`, if the person asks for it: `uv tool install --python 3.14 git+https://github.com/antondmtvch/lingotube`
 
 Keep `--python 3.14`: without it uv uses the first Python it finds, and on Python 3.15 a
 dependency (`lz4`) has no prebuilt package and fails to build. uv downloads Python 3.14 itself

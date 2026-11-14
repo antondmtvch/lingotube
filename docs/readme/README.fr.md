@@ -68,8 +68,10 @@ Tout ce qui figure dans cette section concerne la commande `lingotube`. Le skill
 Il vous faut [uv](https://docs.astral.sh/uv/). uv télécharge lui-même la bonne version de Python.
 
 ```sh
-uv tool install --python 3.14 git+https://github.com/antondmtvch/lingotube
+uv tool install --python 3.14 lingotube
 ```
+
+Dernière version de `main` : `uv tool install --python 3.14 git+https://github.com/antondmtvch/lingotube`
 
 Ou depuis une copie locale du dépôt :
 

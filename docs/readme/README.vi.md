@@ -68,8 +68,10 @@ Mọi nội dung trong phần này đều nói về lệnh `lingotube`. Skill v�
 Bạn cần [uv](https://docs.astral.sh/uv/). uv tự tải đúng phiên bản Python.
 
 ```sh
-uv tool install --python 3.14 git+https://github.com/antondmtvch/lingotube
+uv tool install --python 3.14 lingotube
 ```
+
+Phiên bản mới nhất từ `main`: `uv tool install --python 3.14 git+https://github.com/antondmtvch/lingotube`
 
 Hoặc từ bản sao cục bộ của kho mã:
 

@@ -67,8 +67,10 @@ lingotube YouTube ভিডিওর সাবটাইটেল, ট্রা�
 আপনার [uv](https://docs.astral.sh/uv/) লাগবে। সঠিক Python সংস্করণ uv নিজেই ডাউনলোড করে নেয়।
 
 ```sh
-uv tool install --python 3.14 git+https://github.com/antondmtvch/lingotube
+uv tool install --python 3.14 lingotube
 ```
+
+`main`-এর সর্বশেষ সংস্করণ: `uv tool install --python 3.14 git+https://github.com/antondmtvch/lingotube`
 
 অথবা রিপোজিটরির লোকাল কপি থেকে:
 

@@ -66,8 +66,10 @@ lingotube 用于获取 YouTube 视频的字幕、文字稿和摘要。项目由�
 需要 [uv](https://docs.astral.sh/uv/)。uv 会自动下载所需的 Python 版本。
 
 ```sh
-uv tool install --python 3.14 git+https://github.com/antondmtvch/lingotube
+uv tool install --python 3.14 lingotube
 ```
+
+`main` 分支的最新版本： `uv tool install --python 3.14 git+https://github.com/antondmtvch/lingotube`
 
 或者从仓库的本地副本安装：
 
