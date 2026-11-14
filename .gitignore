@@ -13,3 +13,6 @@ cookies.txt
 # Release archives
 dist/
 web-ext-artifacts/
+
+# AMO upload state (written by web-ext sign)
+extension/.amo-upload-uuid
