@@ -281,5 +281,5 @@ Project structure:
 - `src/lingotube/` — the core: CLI, authorization, chat, translation, cache and result writing.
 - `skills/lingotube/` — the skill for AI agents.
 - `extension/` — the browser extension.
-- `tests/` — Python tests, `probe/` — manual probes of requests to YouTube.
+- `tests/` — Python tests.
 - `docs/readme/` — translations of this README.

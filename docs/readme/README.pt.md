@@ -281,5 +281,5 @@ Estrutura do projeto:
 - `src/lingotube/` — o núcleo: CLI, autorização, chat, tradução, cache e gravação de resultados.
 - `skills/lingotube/` — o skill para agentes de IA.
 - `extension/` — a extensão de navegador.
-- `tests/` — testes em Python, `probe/` — sondagens manuais de solicitações ao YouTube.
+- `tests/` — testes em Python.
 - `docs/readme/` — traduções deste README.

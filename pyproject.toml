@@ -35,7 +35,7 @@ asyncio_default_fixture_loop_scope = "function"
 [tool.ruff]
 line-length = 120
 target-version = "py314"
-src = ["src", "tests", "probe"]
+src = ["src", "tests"]
 extend-exclude = ["*.md"]  # docs keep their code examples as written
 
 [tool.ruff.lint]

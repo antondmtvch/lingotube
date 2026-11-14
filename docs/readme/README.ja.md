@@ -280,5 +280,5 @@ cd extension && node --test --experimental-test-coverage --test-coverage-exclude
 - `src/lingotube/` — コア：CLI、認可、チャット、翻訳、キャッシュ、結果の書き込み。
 - `skills/lingotube/` — AI エージェント向けの skill。
 - `extension/` — ブラウザ拡張機能。
-- `tests/` — Python のテスト、`probe/` — YouTube へのリクエストを手動で調べるプローブ。
+- `tests/` — Python のテスト。
 - `docs/readme/` — この README の翻訳。

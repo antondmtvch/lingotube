@@ -280,5 +280,5 @@ cd extension && node --test --experimental-test-coverage --test-coverage-exclude
 - `src/lingotube/` — แกนหลัก: CLI การอนุญาต แชต การแปล แคช และการเขียนผลลัพธ์
 - `skills/lingotube/` — skill สำหรับเอเจนต์ AI
 - `extension/` — ส่วนขยายเบราว์เซอร์
-- `tests/` — การทดสอบ Python, `probe/` — การทดลองคำขอไปยัง YouTube ด้วยมือ
+- `tests/` — การทดสอบ Python
 - `docs/readme/` — คำแปลของ README นี้

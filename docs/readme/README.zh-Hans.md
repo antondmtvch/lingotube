@@ -278,5 +278,5 @@ cd extension && node --test --experimental-test-coverage --test-coverage-exclude
 - `src/lingotube/` — 核心：CLI、授权、聊天、翻译、缓存和结果写入。
 - `skills/lingotube/` — 面向 AI 代理的 skill。
 - `extension/` — 浏览器扩展。
-- `tests/` — Python 测试，`probe/` — 对 YouTube 请求的手动探测。
+- `tests/` — Python 测试。
 - `docs/readme/` — 本 README 的翻译。

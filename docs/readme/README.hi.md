@@ -280,5 +280,5 @@ cd extension && node --test --experimental-test-coverage --test-coverage-exclude
 - `src/lingotube/` — कोर: CLI, प्रमाणीकरण, चैट, अनुवाद, कैश और परिणाम लिखना।
 - `skills/lingotube/` — AI एजेंट के लिए skill।
 - `extension/` — ब्राउज़र एक्सटेंशन।
-- `tests/` — Python टेस्ट, `probe/` — YouTube को अनुरोधों की मैन्युअल जाँच।
+- `tests/` — Python टेस्ट।
 - `docs/readme/` — इस README के अनुवाद।

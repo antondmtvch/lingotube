@@ -283,5 +283,5 @@ cd extension && node --test --experimental-test-coverage --test-coverage-exclude
 - `src/lingotube/` — ядро: CLI, авторизация, чат, перевод, кэш и запись результатов.
 - `skills/lingotube/` — skill для ИИ-агентов.
 - `extension/` — расширение для браузера.
-- `tests/` — тесты Python, `probe/` — ручные пробы запросов к YouTube.
+- `tests/` — тесты Python.
 - `docs/readme/` — переводы этого README.

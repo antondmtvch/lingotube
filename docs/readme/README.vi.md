@@ -281,5 +281,5 @@ Cấu trúc dự án:
 - `src/lingotube/` — lõi: CLI, ủy quyền, chat, dịch, bộ nhớ đệm và ghi kết quả.
 - `skills/lingotube/` — skill cho tác tử AI.
 - `extension/` — tiện ích mở rộng trình duyệt.
-- `tests/` — kiểm thử Python, `probe/` — các thử nghiệm thủ công với yêu cầu tới YouTube.
+- `tests/` — kiểm thử Python.
 - `docs/readme/` — các bản dịch của README này.

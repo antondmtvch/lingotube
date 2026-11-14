@@ -282,7 +282,7 @@ cd extension && node --test --experimental-test-coverage --test-coverage-exclude
 - `src/lingotube/` — النواة: CLI والتفويض والدردشة والترجمة والذاكرة المؤقتة وكتابة النتائج.
 - `skills/lingotube/` — skill لوكلاء الذكاء الاصطناعي.
 - `extension/` — إضافة المتصفح.
-- `tests/` — اختبارات Python، و`probe/` — فحوص يدوية لطلبات YouTube.
+- `tests/` — اختبارات Python.
 - `docs/readme/` — ترجمات هذا الملف README.
 
 </div>
