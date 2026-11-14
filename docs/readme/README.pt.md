@@ -210,6 +210,7 @@ lingotube build <link> --lang pt --from pt.json   # verificação e montagem das
 | `5` | Resultado incompleto: o arquivo foi gravado, mas a transcrição não chega ao fim do vídeo. |
 | `6` | Falha de rede após esgotar as tentativas. |
 | `7` | Os dados não passaram na validação. |
+| `8` | O YouTube mudou o formato que o lingotube lê. Atualize o lingotube: veja a seção «Instalação». |
 | `130` | Interrompido pelo usuário (Ctrl+C). |
 
 ## Skill para agentes de IA

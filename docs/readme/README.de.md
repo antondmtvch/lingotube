@@ -210,6 +210,7 @@ lingotube build <Link> --lang de --from de.json   # Prüfung und Aufbau der Unte
 | `5` | Unvollständiges Ergebnis: Die Datei ist geschrieben, aber das Transkript reicht nicht bis zum Videoende. |
 | `6` | Netzwerkfehler nach Ausschöpfen der Wiederholungen. |
 | `7` | Die Daten haben die Prüfung nicht bestanden. |
+| `8` | YouTube hat das Format geändert, das lingotube liest. lingotube aktualisieren: siehe Abschnitt „Installation“. |
 | `130` | Vom Benutzer abgebrochen (Strg+C). |
 
 ## Skill für KI-Agenten

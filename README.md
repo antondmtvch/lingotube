@@ -210,6 +210,7 @@ lingotube build <link> --lang ru --from ru.json   # check and build the subtitle
 | `5` | Incomplete result: the file is written, but the transcript does not reach the end of the video. |
 | `6` | Network failure after retries ran out. |
 | `7` | Data failed validation. |
+| `8` | YouTube changed the format lingotube reads. Update lingotube: see the "Installation" section. |
 | `130` | Interrupted by the user (Ctrl+C). |
 
 ## Skill for AI agents

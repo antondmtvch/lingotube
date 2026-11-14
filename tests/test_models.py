@@ -9,6 +9,7 @@ from lingotube.errors import (
     LingotubeError,
     NetworkError,
     ValidationError,
+    YouTubeChangedError,
 )
 from lingotube.models import Cue, Transcript
 
@@ -94,6 +95,7 @@ def test_from_dict_invalid(bad):
         (IncompleteError, "incomplete", 5),
         (NetworkError, "network", 6),
         (ValidationError, "validation", 7),
+        (YouTubeChangedError, "youtube_changed", 8),
     ],
 )
 def test_errors(

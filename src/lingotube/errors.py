@@ -39,6 +39,13 @@ class ChatUnavailableError(LingotubeError):
     exit_code = 3
 
 
+class YouTubeChangedError(LingotubeError):
+    """YouTube changed the page or the chat response in a way lingotube cannot read."""
+
+    code = "youtube_changed"
+    exit_code = 8
+
+
 class AuthError(LingotubeError):
     """Cookies are missing or expired, or sign-in to YouTube failed."""
 

@@ -117,3 +117,9 @@ def test_language_selector_links_to_every_other_readme(readme_path: Path) -> Non
     expected = {repository_path(path) for path in README_PATHS if path != readme_path}
     assert links == expected
     assert selector.count("**") == 2
+
+
+@pytest.mark.parametrize("readme_path", README_PATHS, ids=lambda path: path.name)
+def test_readme_exit_table_has_row_8(readme_path: Path) -> None:
+    """Check that every README's exit table documents exit code 8."""
+    assert re.search(r"^\| `8` \|", read_readme(readme_path), flags=re.MULTILINE)

@@ -210,6 +210,7 @@ lingotube build <lien> --lang fr --from fr.json   # vérification et constructio
 | `5` | Résultat incomplet : le fichier est écrit, mais la transcription n'atteint pas la fin de la vidéo. |
 | `6` | Échec réseau après épuisement des nouvelles tentatives. |
 | `7` | Les données n'ont pas passé la validation. |
+| `8` | YouTube a changé le format que lit lingotube. Mettez à jour lingotube : voir la section « Installation ». |
 | `130` | Interrompu par l'utilisateur (Ctrl+C). |
 
 ## Skill pour agents IA

@@ -207,6 +207,7 @@ lingotube build <連結> --lang zh-Hant --from zh.json   # 檢查並產生字幕
 | `5` | 結果不完整：檔案已寫入，但逐字稿未涵蓋到影片結尾。 |
 | `6` | 重試次數用盡後發生網路故障。 |
 | `7` | 資料未通過驗證。 |
+| `8` | YouTube 改變了 lingotube 讀取的格式。請更新 lingotube：參見「安裝」部分。 |
 | `130` | 被使用者中斷（Ctrl+C）。 |
 
 ## 面向 AI 代理的 skill

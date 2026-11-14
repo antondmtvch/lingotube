@@ -86,7 +86,7 @@ def test_no_vpn_anywhere():
 def test_every_exit_code_handled():
     """Check that the skill describes every exit code of the CLI."""
     t = skill_text("SKILL.md")
-    for code in ("0", "1", "2", "3", "4", "5", "6", "7"):
+    for code in ("0", "1", "2", "3", "4", "5", "6", "7", "8"):
         assert f"| {code} " in t or f"| {code}," in t, code
 
 

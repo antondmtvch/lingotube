@@ -19,7 +19,7 @@ built-in chat about the video. You run it in the terminal and work with its outp
   processes, policies or flags. The only window you may cause is the one `lingotube login` opens
   itself, and only after warning the person.
 - **Chat unavailable means stop.** If lingotube says the YouTube chat is unavailable for this
-  video, account or country, say so plainly and stop. Do not suggest workarounds.
+  video, account or country, say so plainly and stop. Do not suggest workarounds. This rule covers exit code 3 only.
 - **Reply in the person's language** (the language they write to you in), unless they ask for
   another.
 - **Be honest about accuracy.** Timecodes and text come from YouTube's chat. On long videos a
@@ -93,5 +93,6 @@ When the person asks where in the video something is said or shown, follow
 | 5 | Result incomplete (file written, transcript stops before the end) | Tell the person where it stops (see `warnings`) and offer to rerun; a rerun fetches only the missing part. |
 | 6 | Network failure after retries | Suggest trying again later. |
 | 7 | Invalid input (link, file, settings) | Check the link and arguments, fix and retry once; otherwise explain the message. |
+| 8 | YouTube changed the format lingotube reads | Say that lingotube needs an update, point to its README "Installation" section, do not retry, do not suggest workarounds. |
 
 Code 130 means the run was interrupted (Ctrl+C); just tell the person.

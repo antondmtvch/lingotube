@@ -210,6 +210,7 @@ lingotube build <liên kết> --lang vi --from vi.json   # kiểm tra và dựng
 | `5` | Kết quả chưa đầy đủ: tệp đã được ghi, nhưng bản chép lời chưa tới cuối video. |
 | `6` | Lỗi mạng sau khi hết số lần thử lại. |
 | `7` | Dữ liệu không qua được bước kiểm tra. |
+| `8` | YouTube đã thay đổi định dạng mà lingotube đọc. Hãy cập nhật lingotube: xem mục «Cài đặt». |
 | `130` | Bị người dùng ngắt (Ctrl+C). |
 
 ## Skill cho tác tử AI
