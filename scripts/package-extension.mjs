@@ -19,7 +19,7 @@ const EXTENSION_ROOT = join(REPO_ROOT, 'extension');
 const ARTIFACTS_DIR = join(REPO_ROOT, 'dist');
 const COMMITTED_BUNDLE_FILE = join(EXTENSION_ROOT, 'src/page/bundle.js');
 const WEB_EXT = 'web-ext@10.8.0';
-export const PACKAGE_IGNORE_GLOBS = ['tests/**', 'package.json'];
+export const PACKAGE_IGNORE_GLOBS = ['tests', 'tests/**', 'package.json'];
 
 const quoteForShell = (text) => `"${text}"`;
 const normalizeLineEndings = (text) => text.replace(/\r\n/g, '\n');

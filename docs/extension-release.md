@@ -36,15 +36,16 @@
 5. Подпишите расширение для Firefox:
 
    ```sh
-   npx web-ext@10.8.0 sign --source-dir extension --channel unlisted --artifacts-dir dist --ignore-files "tests/**" "package.json" --upload-source-code dist/lingotube-<version>-source.zip
+   npx web-ext@10.8.0 sign --source-dir extension --channel unlisted --artifacts-dir dist --ignore-files "tests" "tests/**" "package.json" --upload-source-code dist/lingotube-<version>-source.zip
    ```
 
    В `dist/` появится подписанный `.xpi`.
 6. Переименуйте его в `dist/lingotube-<version>-firefox.xpi`.
-7. Создайте релиз:
+7. Запушьте коммит, из которого собраны архивы (коммит с новой версией), и убедитесь, что он есть на GitHub. Без этого тег может указать на более старый коммит.
+8. Создайте релиз, указав этот коммит явно (`<sha>` — результат `git rev-parse HEAD` на шаге 4):
 
    ```sh
-   gh release create extension-v<version> dist/lingotube-<version>-chromium.zip dist/lingotube-<version>-firefox.xpi --title "Расширение lingotube <version>" --notes "Что изменилось..."
+   gh release create extension-v<version> dist/lingotube-<version>-chromium.zip dist/lingotube-<version>-firefox.xpi --target <sha> --title "lingotube extension <version>" --notes "Что изменилось..."
    ```
 
 ## Проверка вручную
@@ -61,7 +62,7 @@
 Линтер должен проходить без ошибок:
 
 ```sh
-npx web-ext@10.8.0 lint --source-dir extension --ignore-files "tests/**" "package.json"
+npx web-ext@10.8.0 lint --source-dir extension --ignore-files "tests" "tests/**" "package.json"
 ```
 
 Два предупреждения о `data_collection_permissions` (`KEY_FIREFOX_UNSUPPORTED_BY_MIN_VERSION` и `KEY_FIREFOX_ANDROID_UNSUPPORTED_BY_MIN_VERSION`) ожидаемы: ключ появился в Firefox 140 для настольной версии и 142 для Android, а более старые версии его игнорируют.
