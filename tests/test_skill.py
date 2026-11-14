@@ -111,7 +111,7 @@ def test_setup_install_commands_verbatim():
     t = skill_text("references/setup.md")
     assert 'powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"' in t
     assert "curl -LsSf https://astral.sh/uv/install.sh | sh" in t
-    assert "uv tool install git+https://github.com/antondmtvch/lingotube" in t
+    assert "uv tool install --python 3.14 git+https://github.com/antondmtvch/lingotube" in t
 
 
 def test_setup_steps_in_order():

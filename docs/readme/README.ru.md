@@ -67,13 +67,13 @@ lingotube получает субтитры, транскрипцию и кра�
 Нужен [uv](https://docs.astral.sh/uv/). Нужную версию Python uv скачает сам.
 
 ```sh
-uv tool install git+https://github.com/antondmtvch/lingotube
+uv tool install --python 3.14 git+https://github.com/antondmtvch/lingotube
 ```
 
 Или из папки локальной копии репозитория:
 
 ```sh
-uv tool install .
+uv tool install --python 3.14 .
 ```
 
 Обновление и удаление:

@@ -66,13 +66,13 @@ lingotube YouTube वीडियो के सबटाइटल, ट्रा�
 आपको [uv](https://docs.astral.sh/uv/) चाहिए। uv सही Python संस्करण खुद डाउनलोड कर लेता है।
 
 ```sh
-uv tool install git+https://github.com/antondmtvch/lingotube
+uv tool install --python 3.14 git+https://github.com/antondmtvch/lingotube
 ```
 
 या रिपॉज़िटरी की स्थानीय प्रति से:
 
 ```sh
-uv tool install .
+uv tool install --python 3.14 .
 ```
 
 अपडेट और अनइंस्टॉल:

@@ -66,13 +66,13 @@ lingotube は、YouTube 動画の字幕、文字起こし、要約を取得し�
 [uv](https://docs.astral.sh/uv/) が必要です。適切な Python のバージョンは uv が自動でダウンロードします。
 
 ```sh
-uv tool install git+https://github.com/antondmtvch/lingotube
+uv tool install --python 3.14 git+https://github.com/antondmtvch/lingotube
 ```
 
 またはリポジトリのローカルコピーから:
 
 ```sh
-uv tool install .
+uv tool install --python 3.14 .
 ```
 
 更新とアンインストール:
