@@ -13,8 +13,8 @@
   box-sizing: border-box;
   padding: 6px 12px;
   border-radius: 6px;
-  background: rgba(8, 8, 8, 0.75);
-  color: #fff;
+  background: rgba(8, 8, 8, var(--lingotube-bg-opacity, 0.75));
+  color: var(--lingotube-text-color, #fff);
   font-family: Roboto, Arial, sans-serif;
   font-size: calc(22px * var(--lingotube-text-scale, 1));
   line-height: 1.3;
@@ -24,6 +24,10 @@
   touch-action: none;
   /* The layer must not block the video; only the box itself takes pointer events. */
   pointer-events: auto;
+}
+
+.lingotube-overlay-outlined .lingotube-overlay-text {
+  text-shadow: 0 0 2px #000, 0 0 2px #000, 0 0 4px #000;
 }
 
 .lingotube-overlay.lingotube-dragging {

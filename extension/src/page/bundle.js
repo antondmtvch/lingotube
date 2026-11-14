@@ -1159,8 +1159,136 @@ function positionFromDrag(drag) {
 return Object.freeze({ DEFAULT_OVERLAY_POSITION: DEFAULT_OVERLAY_POSITION, clampOverlayPosition: clampOverlayPosition, positionFromDrag: positionFromDrag });
 })();
 
-// Module: src/shared/ui_strings.js
+// Module: src/shared/player_panel_logic.js
 const bundledModule14Exports = (function () {
+const { sanitizeLanguageName } = bundledModule8Exports;
+const TEXT_SCALE_STEP = 0.2;
+const MIN_TEXT_SCALE = 0.6;
+const MAX_TEXT_SCALE = 2.0;
+const CUSTOM_VALUE_PREFIX = 'custom:';
+
+/**
+ * Turns the text typed into the "other language" input into a target language.
+ * @param {string} typedText
+ * @returns {import('./language_choices.js').TargetLanguage|null} null for empty or whitespace-only text
+ */
+function languageFromTypedText(typedText) {
+  const name = sanitizeLanguageName(String(typedText ?? ''));
+  return name ? { code: null, name } : null;
+}
+
+/**
+ * The dropdown value that stands for the given language (the inverse of targetLanguageFromMenuValue).
+ * @param {import('./language_choices.js').TargetLanguage} language
+ * @returns {string}
+ */
+function menuValueForLanguage(language) {
+  return language.code === null ? `${CUSTOM_VALUE_PREFIX}${language.name}` : language.code;
+}
+
+/**
+ * Typed language names for the dropdown: the remembered ones, plus the current language
+ * when it is typed and not remembered yet, so the select can always show it.
+ * @param {string[]} customLanguageNames
+ * @param {import('./language_choices.js').TargetLanguage} currentLanguage
+ * @returns {string[]}
+ */
+function customNamesForMenu(customLanguageNames, currentLanguage) {
+  if (currentLanguage.code !== null) return [...customLanguageNames];
+  const currentIdentity = currentLanguage.name.toLowerCase();
+  const isRemembered = customLanguageNames.some((name) => name.toLowerCase() === currentIdentity);
+  return isRemembered ? [...customLanguageNames] : [currentLanguage.name, ...customLanguageNames];
+}
+
+/**
+ * @param {number} currentScale
+ * @param {1|-1} direction 1 to enlarge, -1 to shrink
+ * @returns {number} the scale one step away, kept within the allowed range
+ */
+function steppedTextScale(currentScale, direction) {
+  const stepped = Math.round((currentScale + direction * TEXT_SCALE_STEP) * 100) / 100;
+  return Math.min(MAX_TEXT_SCALE, Math.max(MIN_TEXT_SCALE, stepped));
+}
+
+/**
+ * The dropdown value to show once the "other language" input is abandoned or confirmed:
+ * always the value of the language that is actually in use, never the "other" item.
+ * @param {import('./language_choices.js').TargetLanguage} currentLanguage
+ * @returns {string}
+ */
+function selectValueAfterClose(currentLanguage) {
+  return menuValueForLanguage(currentLanguage);
+}
+
+/**
+ * Puts the button right before the subtitles button, in whatever element holds it
+ * (it may be nested inside a wrapper); without that button, first among the right controls.
+ * @param {{rightControls: object, subtitlesButton: object|null, button: object}} elements
+ */
+function placeButtonNextToSubtitlesButton({ rightControls, subtitlesButton, button }) {
+  if (subtitlesButton && subtitlesButton.parentNode) {
+    subtitlesButton.parentNode.insertBefore(button, subtitlesButton);
+    return;
+  }
+  rightControls.insertBefore(button, rightControls.firstChild);
+}
+
+const MAX_REMEMBERED_TYPED_LANGUAGES = 5;
+
+/**
+ * The remembered typed language names after choosing `language`: a typed language goes first,
+ * replacing a case-insensitive duplicate, and the list keeps five; a listed language changes nothing.
+ * @param {string[]} customLanguageNames
+ * @param {import('./language_choices.js').TargetLanguage} language
+ * @returns {string[]}
+ */
+function rememberTypedLanguage(customLanguageNames, language) {
+  if (language.code !== null) return [...customLanguageNames];
+  const identity = language.name.toLowerCase();
+  const others = customLanguageNames.filter((name) => name.toLowerCase() !== identity);
+  return [language.name, ...others].slice(0, MAX_REMEMBERED_TYPED_LANGUAGES);
+}
+
+/** CSS colours of the three text presets; the keys are the stored `textColor` values. */
+const TEXT_COLOR_CSS = Object.freeze({
+  white: '#fff',
+  yellow: '#ffd400',
+  cyan: '#7fd3ff',
+});
+
+const BACKGROUND_OPACITY_STEP_HUNDREDTHS = 5;
+
+/**
+ * CSS custom properties of the overlay box for the appearance settings.
+ * @param {{textColor: 'white'|'yellow'|'cyan', backgroundOpacity: number}} settings
+ */
+function appearanceVariables({ textColor, backgroundOpacity }) {
+  return {
+    '--lingotube-text-color': TEXT_COLOR_CSS[textColor],
+    '--lingotube-bg-opacity': String(backgroundOpacity),
+  };
+}
+
+/**
+ * One step of the background slider: 0.05 per step, in whole hundredths to avoid float drift.
+ * @param {number} value 0..1
+ * @param {-1|1} direction
+ * @returns {number} 0..1, rounded to two decimals
+ */
+function steppedBackgroundOpacity(value, direction) {
+  const hundredths = Math.round(value * 100) + direction * BACKGROUND_OPACITY_STEP_HUNDREDTHS;
+  return Math.min(100, Math.max(0, hundredths)) / 100;
+}
+
+/** The first-run hint: shown until the user has enabled lingotube once. */
+function shouldShowHint({ hintSeen, enabled }) {
+  return !hintSeen && !enabled;
+}
+return Object.freeze({ TEXT_SCALE_STEP: TEXT_SCALE_STEP, MIN_TEXT_SCALE: MIN_TEXT_SCALE, MAX_TEXT_SCALE: MAX_TEXT_SCALE, languageFromTypedText: languageFromTypedText, menuValueForLanguage: menuValueForLanguage, customNamesForMenu: customNamesForMenu, steppedTextScale: steppedTextScale, selectValueAfterClose: selectValueAfterClose, placeButtonNextToSubtitlesButton: placeButtonNextToSubtitlesButton, rememberTypedLanguage: rememberTypedLanguage, TEXT_COLOR_CSS: TEXT_COLOR_CSS, appearanceVariables: appearanceVariables, steppedBackgroundOpacity: steppedBackgroundOpacity, shouldShowHint: shouldShowHint });
+})();
+
+// Module: src/shared/ui_strings.js
+const bundledModule15Exports = (function () {
 /** Interface languages of the overlay, as BCP 47 tags. */
 const UI_LANGUAGES = ['ru', 'en', 'zh-CN', 'es', 'hi', 'ar', 'pt-BR', 'ja', 'fr', 'de'];
 
@@ -1448,10 +1576,282 @@ function uiTexts(languageCode) {
 return Object.freeze({ UI_LANGUAGES: UI_LANGUAGES, FALLBACK_UI_LANGUAGE: FALLBACK_UI_LANGUAGE, pickUiLanguage: pickUiLanguage, isRightToLeft: isRightToLeft, uiTexts: uiTexts });
 })();
 
+// Module: src/shared/language_choices.js
+const bundledModule16Exports = (function () {
+const { sanitizeLanguageName } = bundledModule8Exports;
+/**
+ * @typedef {{code: string|null, name: string}} TargetLanguage
+ * A listed language has its list code and English name; a typed one has code null.
+ */
+
+const OTHER_LANGUAGE_VALUE = '__other__';
+const CUSTOM_VALUE_PREFIX = 'custom:';
+const FALLBACK_PROMPT_LANGUAGE = 'Russian';
+
+/** The 30 languages of the dropdown, in the order of the spec; each is labeled in its own language. */
+const LANGUAGE_CHOICES = [
+  { code: 'en', nativeName: 'English', englishName: 'English' },
+  { code: 'zh-Hans', nativeName: '简体中文', englishName: 'Chinese (Simplified)' },
+  { code: 'zh-Hant', nativeName: '繁體中文', englishName: 'Chinese (Traditional)' },
+  { code: 'hi', nativeName: 'हिन्दी', englishName: 'Hindi' },
+  { code: 'es', nativeName: 'Español', englishName: 'Spanish' },
+  { code: 'fr', nativeName: 'Français', englishName: 'French' },
+  { code: 'ar', nativeName: 'العربية', englishName: 'Arabic' },
+  { code: 'bn', nativeName: 'বাংলা', englishName: 'Bengali' },
+  { code: 'pt', nativeName: 'Português', englishName: 'Portuguese' },
+  { code: 'ru', nativeName: 'Русский', englishName: 'Russian' },
+  { code: 'ur', nativeName: 'اردو', englishName: 'Urdu' },
+  { code: 'id', nativeName: 'Bahasa Indonesia', englishName: 'Indonesian' },
+  { code: 'de', nativeName: 'Deutsch', englishName: 'German' },
+  { code: 'ja', nativeName: '日本語', englishName: 'Japanese' },
+  { code: 'tr', nativeName: 'Türkçe', englishName: 'Turkish' },
+  { code: 'ko', nativeName: '한국어', englishName: 'Korean' },
+  { code: 'vi', nativeName: 'Tiếng Việt', englishName: 'Vietnamese' },
+  { code: 'it', nativeName: 'Italiano', englishName: 'Italian' },
+  { code: 'th', nativeName: 'ไทย', englishName: 'Thai' },
+  { code: 'pl', nativeName: 'Polski', englishName: 'Polish' },
+  { code: 'uk', nativeName: 'Українська', englishName: 'Ukrainian' },
+  { code: 'nl', nativeName: 'Nederlands', englishName: 'Dutch' },
+  { code: 'fa', nativeName: 'فارسی', englishName: 'Persian' },
+  { code: 'he', nativeName: 'עברית', englishName: 'Hebrew' },
+  { code: 'el', nativeName: 'Ελληνικά', englishName: 'Greek' },
+  { code: 'cs', nativeName: 'Čeština', englishName: 'Czech' },
+  { code: 'sv', nativeName: 'Svenska', englishName: 'Swedish' },
+  { code: 'ro', nativeName: 'Română', englishName: 'Romanian' },
+  { code: 'hu', nativeName: 'Magyar', englishName: 'Hungarian' },
+  { code: 'kk', nativeName: 'Қазақша', englishName: 'Kazakh' },
+];
+
+/**
+ * Items of the language dropdown: typed names first, then the listed languages, then "other".
+ * @param {string[]} customLanguageNames
+ * @param {string} [otherLanguageLabel] label of the "other language" item
+ * @returns {{value: string, label: string}[]}
+ */
+function buildLanguageMenu(customLanguageNames, otherLanguageLabel = 'Другой язык…') {
+  return [
+    ...customLanguageNames.map((name) => ({ value: `${CUSTOM_VALUE_PREFIX}${name}`, label: name })),
+    ...LANGUAGE_CHOICES.map((choice) => ({ value: choice.code, label: choice.nativeName })),
+    { value: OTHER_LANGUAGE_VALUE, label: otherLanguageLabel },
+  ];
+}
+
+/**
+ * @param {string} value a value of the menu built by buildLanguageMenu
+ * @returns {TargetLanguage|null} null for "other", unknown values and empty typed names
+ */
+function targetLanguageFromMenuValue(value) {
+  if (value.startsWith(CUSTOM_VALUE_PREFIX)) {
+    const name = sanitizeLanguageName(value.slice(CUSTOM_VALUE_PREFIX.length));
+    return name ? { code: null, name } : null;
+  }
+  const choice = LANGUAGE_CHOICES.find((candidate) => candidate.code === value);
+  return choice ? { code: choice.code, name: choice.englishName } : null;
+}
+
+/**
+ * The language name that goes into the prompt; never empty.
+ * @param {TargetLanguage} language
+ * @returns {string}
+ */
+function promptLanguageName(language) {
+  const choice = LANGUAGE_CHOICES.find((candidate) => candidate.code === language.code);
+  if (choice) return choice.englishName;
+  return sanitizeLanguageName(String(language.name ?? '')) || FALLBACK_PROMPT_LANGUAGE;
+}
+return Object.freeze({ OTHER_LANGUAGE_VALUE: OTHER_LANGUAGE_VALUE, LANGUAGE_CHOICES: LANGUAGE_CHOICES, buildLanguageMenu: buildLanguageMenu, targetLanguageFromMenuValue: targetLanguageFromMenuValue, promptLanguageName: promptLanguageName });
+})();
+
+// Module: src/page/settings_store.js
+const bundledModule17Exports = (function () {
+const { LANGUAGE_CHOICES } = bundledModule16Exports;
+const { sanitizeLanguageName } = bundledModule8Exports;
+const SETTINGS_STORAGE_KEY = 'settings';
+const MIN_TEXT_SCALE = 0.6;
+const MAX_TEXT_SCALE = 2.0;
+const MAX_CUSTOM_LANGUAGE_NAMES = 5;
+const DEFAULT_BACKGROUND_OPACITY = 0.75;
+
+const TEXT_COLORS = Object.freeze(['white', 'yellow', 'cyan']);
+
+/**
+ * @typedef {{enabled: boolean, language: import('../shared/language_choices.js').TargetLanguage,
+ *   customLanguageNames: string[], textScale: number, overlayPosition: {centerXFraction: number, bottomYFraction: number}|null,
+ *   waitForSubtitles: boolean, textColor: 'white'|'yellow'|'cyan', backgroundOpacity: number, outline: boolean,
+ *   hintSeen: boolean}} Settings
+ */
+
+/** @type {Settings} */
+const DEFAULT_SETTINGS = Object.freeze({
+  enabled: false,
+  language: Object.freeze({ code: 'ru', name: 'Russian' }),
+  customLanguageNames: Object.freeze([]),
+  textScale: 1,
+  overlayPosition: null,
+  waitForSubtitles: true,
+  textColor: 'white',
+  backgroundOpacity: DEFAULT_BACKGROUND_OPACITY,
+  outline: false,
+  hintSeen: false,
+});
+
+function isPlainObject(value) {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function normalizeLanguage(value) {
+  if (!isPlainObject(value)) return { ...DEFAULT_SETTINGS.language };
+  const choice = LANGUAGE_CHOICES.find((candidate) => candidate.code === value.code);
+  if (choice) return { code: choice.code, name: choice.englishName };
+  if (value.code !== null || typeof value.name !== 'string') return { ...DEFAULT_SETTINGS.language };
+  const name = sanitizeLanguageName(value.name);
+  return name ? { code: null, name } : { ...DEFAULT_SETTINGS.language };
+}
+
+/** Sanitizes names, drops empty ones and case-insensitive duplicates (the first wins), keeps five. */
+function normalizeCustomLanguageNames(value) {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set();
+  const names = [];
+  for (const item of value) {
+    if (typeof item !== 'string') continue;
+    const name = sanitizeLanguageName(item);
+    const identity = name.toLowerCase();
+    if (!name || seen.has(identity)) continue;
+    seen.add(identity);
+    names.push(name);
+  }
+  return names.slice(0, MAX_CUSTOM_LANGUAGE_NAMES);
+}
+
+function normalizeTextScale(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return DEFAULT_SETTINGS.textScale;
+  return Math.min(MAX_TEXT_SCALE, Math.max(MIN_TEXT_SCALE, value));
+}
+
+function normalizeTextColor(value) {
+  return TEXT_COLORS.includes(value) ? value : DEFAULT_SETTINGS.textColor;
+}
+
+/** A non-number (a string too) is not a usable opacity: the default applies, not a clamped value. */
+function normalizeBackgroundOpacity(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return DEFAULT_BACKGROUND_OPACITY;
+  return Math.min(1, Math.max(0, value));
+}
+
+function isFractionOfPlayer(value) {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1;
+}
+
+function normalizeOverlayPosition(value) {
+  if (!isPlainObject(value)) return null;
+  const { centerXFraction, bottomYFraction } = value;
+  if (!isFractionOfPlayer(centerXFraction) || !isFractionOfPlayer(bottomYFraction)) return null;
+  return { centerXFraction, bottomYFraction };
+}
+
+/** @returns {Settings} every field valid, missing or invalid ones taken from the defaults */
+function normalizeSettings(raw) {
+  const source = isPlainObject(raw) ? raw : {};
+  return {
+    enabled: typeof source.enabled === 'boolean' ? source.enabled : DEFAULT_SETTINGS.enabled,
+    language: normalizeLanguage(source.language),
+    customLanguageNames: normalizeCustomLanguageNames(source.customLanguageNames),
+    textScale: normalizeTextScale(source.textScale),
+    overlayPosition: normalizeOverlayPosition(source.overlayPosition),
+    waitForSubtitles: typeof source.waitForSubtitles === 'boolean' ? source.waitForSubtitles : DEFAULT_SETTINGS.waitForSubtitles,
+    textColor: normalizeTextColor(source.textColor),
+    backgroundOpacity: normalizeBackgroundOpacity(source.backgroundOpacity),
+    outline: typeof source.outline === 'boolean' ? source.outline : DEFAULT_SETTINGS.outline,
+    hintSeen: typeof source.hintSeen === 'boolean' ? source.hintSeen : DEFAULT_SETTINGS.hintSeen,
+  };
+}
+
+/** @returns {Settings} a fresh, mutable copy of the defaults */
+function copyOfDefaultSettings() {
+  return normalizeSettings({});
+}
+
+/**
+ * Loads the settings at page start. The storage host runs in another content script that may
+ * start later, so a rejected load (bridge timeout) is retried after a pause; when every attempt
+ * fails the defaults are used. Never rejects.
+ * @param {{load: () => Promise<Settings>}} settingsStore
+ * @param {{sleep: (ms: number) => Promise<void>, attempts?: number, pauseMs?: number}} options
+ * @returns {Promise<Settings>}
+ */
+async function loadSettingsWithRetries(settingsStore, { sleep, attempts = 3, pauseMs = 1000 }) {
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await settingsStore.load();
+    } catch {
+      if (attempt < attempts) await sleep(pauseMs);
+    }
+  }
+  return copyOfDefaultSettings();
+}
+
+/** Display settings kept in the extension storage; holds no tokens or account data. */
+class SettingsStore {
+  /** @param {{get: Function, set: Function}} extensionStorage */
+  constructor(extensionStorage) {
+    this.extensionStorage = extensionStorage;
+  }
+
+  /** @returns {Promise<Settings>} */
+  async load() {
+    const stored = await this.extensionStorage.get([SETTINGS_STORAGE_KEY]);
+    return normalizeSettings(stored[SETTINGS_STORAGE_KEY]);
+  }
+
+  /**
+   * @param {Partial<Settings>} changes
+   * @returns {Promise<Settings>} the settings as stored
+   */
+  async save(changes) {
+    return this.update(() => changes);
+  }
+
+  /**
+   * Loads the stored settings, merges the changes computed from them, and stores the result.
+   * @param {(stored: Settings) => Partial<Settings>} computeChanges
+   * @returns {Promise<Settings>} the settings as stored
+   */
+  async update(computeChanges) {
+    const stored = await this.load();
+    const merged = normalizeSettings({ ...stored, ...computeChanges(stored) });
+    await this.extensionStorage.set({ [SETTINGS_STORAGE_KEY]: merged });
+    return merged;
+  }
+}
+
+/**
+ * Saves setting changes from the page one after another. Only the changed fields are written,
+ * merged into the settings loaded from storage right before the write, so a change made in
+ * another tab (or values stored while this page used the defaults) is never overwritten.
+ * A change may be a function of the freshly loaded settings (for lists such as the remembered
+ * languages). Never rejects: a failed save resolves null and the next one still runs.
+ * @param {SettingsStore} settingsStore
+ * @returns {(changes: Partial<Settings>|((stored: Settings) => Partial<Settings>)) => Promise<Settings|null>}
+ */
+function createSettingsSaver(settingsStore) {
+  let previousSave = Promise.resolve();
+  return (changes) => {
+    const computeChanges = typeof changes === 'function' ? changes : () => changes;
+    const result = previousSave.then(() => settingsStore.update(computeChanges)).catch(() => null);
+    previousSave = result;
+    return result;
+  };
+}
+return Object.freeze({ TEXT_COLORS: TEXT_COLORS, DEFAULT_SETTINGS: DEFAULT_SETTINGS, loadSettingsWithRetries: loadSettingsWithRetries, SettingsStore: SettingsStore, createSettingsSaver: createSettingsSaver });
+})();
+
 // Module: src/page/overlay_view.js
-const bundledModule15Exports = (function () {
+const bundledModule18Exports = (function () {
 const { DEFAULT_OVERLAY_POSITION, clampOverlayPosition, positionFromDrag } = bundledModule13Exports;
-const { uiTexts } = bundledModule14Exports;
+const { appearanceVariables } = bundledModule14Exports;
+const { uiTexts } = bundledModule15Exports;
+const { DEFAULT_SETTINGS } = bundledModule17Exports;
 /** A pointer movement shorter than this many pixels is a click, not a drag. */
 const DRAG_THRESHOLD_PX = 4;
 
@@ -1476,9 +1876,10 @@ class OverlayView {
    * @param {{document: Document, containerElement: HTMLElement,
    *   position: import('../shared/overlay_position.js').OverlayPosition|null,
    *   textScale: number, onPositionChanged: (position: object) => void,
+   *   appearance?: {textColor: string, backgroundOpacity: number, outline: boolean},
    *   texts?: Record<string, any>, isRightToLeft?: boolean}} options
    */
-  constructor({ document, containerElement, position, textScale, onPositionChanged, texts = uiTexts('ru'), isRightToLeft = false }) {
+  constructor({ document, containerElement, position, textScale, onPositionChanged, appearance = DEFAULT_SETTINGS, texts = uiTexts('ru'), isRightToLeft = false }) {
     this.#container = containerElement;
     this.#onPositionChanged = onPositionChanged;
     this.#position = position ?? { ...DEFAULT_OVERLAY_POSITION };
@@ -1495,6 +1896,7 @@ class OverlayView {
     this.#boxElement.append(this.#textElement, this.#labelElement);
     this.#boxElement.hidden = true;
     this.#boxElement.style.setProperty('--lingotube-text-scale', String(textScale));
+    this.applyAppearance(appearance);
 
     this.#boxElement.addEventListener('pointerdown', this.#handlePointerDown);
     this.#boxElement.addEventListener('pointermove', this.#handlePointerMove);
@@ -1536,6 +1938,20 @@ class OverlayView {
   /** @param {number} scale multiplier of the base font size */
   setTextScale(scale) {
     this.#boxElement.style.setProperty('--lingotube-text-scale', String(scale));
+    this.#applyPosition();
+  }
+
+  /** @param {{textColor: string, backgroundOpacity: number, outline: boolean}} appearance */
+  applyAppearance({ textColor, backgroundOpacity, outline }) {
+    for (const [name, value] of Object.entries(appearanceVariables({ textColor, backgroundOpacity }))) {
+      this.#boxElement.style.setProperty(name, value);
+    }
+    this.#boxElement.classList.toggle('lingotube-overlay-outlined', outline === true);
+  }
+
+  /** Puts the box back to its default place; safe while the box is not shown. */
+  resetPosition() {
+    this.#position = { ...DEFAULT_OVERLAY_POSITION };
     this.#applyPosition();
   }
 
@@ -1650,7 +2066,7 @@ return Object.freeze({ OverlayView: OverlayView });
 })();
 
 // Module: src/page/player_caption_request.js
-const bundledModule16Exports = (function () {
+const bundledModule19Exports = (function () {
 // The caption URL and its `pot` token never leave the MAIN world and are never logged.
 
 const YOUTUBE_ORIGIN = 'https://www.youtube.com';
@@ -1807,189 +2223,11 @@ function createSerialCaptionCapture(capture = capturePlayerCaptionRequestUrl) {
 return Object.freeze({ mergePlayerRequestParameters: mergePlayerRequestParameters, isPlayerCaptionRequest: isPlayerCaptionRequest, activateSubtitleButton: activateSubtitleButton, capturePlayerCaptionRequestUrl: capturePlayerCaptionRequestUrl, createSerialCaptionCapture: createSerialCaptionCapture });
 })();
 
-// Module: src/shared/language_choices.js
-const bundledModule17Exports = (function () {
-const { sanitizeLanguageName } = bundledModule8Exports;
-/**
- * @typedef {{code: string|null, name: string}} TargetLanguage
- * A listed language has its list code and English name; a typed one has code null.
- */
-
-const OTHER_LANGUAGE_VALUE = '__other__';
-const CUSTOM_VALUE_PREFIX = 'custom:';
-const FALLBACK_PROMPT_LANGUAGE = 'Russian';
-
-/** The 30 languages of the dropdown, in the order of the spec; each is labeled in its own language. */
-const LANGUAGE_CHOICES = [
-  { code: 'en', nativeName: 'English', englishName: 'English' },
-  { code: 'zh-Hans', nativeName: '简体中文', englishName: 'Chinese (Simplified)' },
-  { code: 'zh-Hant', nativeName: '繁體中文', englishName: 'Chinese (Traditional)' },
-  { code: 'hi', nativeName: 'हिन्दी', englishName: 'Hindi' },
-  { code: 'es', nativeName: 'Español', englishName: 'Spanish' },
-  { code: 'fr', nativeName: 'Français', englishName: 'French' },
-  { code: 'ar', nativeName: 'العربية', englishName: 'Arabic' },
-  { code: 'bn', nativeName: 'বাংলা', englishName: 'Bengali' },
-  { code: 'pt', nativeName: 'Português', englishName: 'Portuguese' },
-  { code: 'ru', nativeName: 'Русский', englishName: 'Russian' },
-  { code: 'ur', nativeName: 'اردو', englishName: 'Urdu' },
-  { code: 'id', nativeName: 'Bahasa Indonesia', englishName: 'Indonesian' },
-  { code: 'de', nativeName: 'Deutsch', englishName: 'German' },
-  { code: 'ja', nativeName: '日本語', englishName: 'Japanese' },
-  { code: 'tr', nativeName: 'Türkçe', englishName: 'Turkish' },
-  { code: 'ko', nativeName: '한국어', englishName: 'Korean' },
-  { code: 'vi', nativeName: 'Tiếng Việt', englishName: 'Vietnamese' },
-  { code: 'it', nativeName: 'Italiano', englishName: 'Italian' },
-  { code: 'th', nativeName: 'ไทย', englishName: 'Thai' },
-  { code: 'pl', nativeName: 'Polski', englishName: 'Polish' },
-  { code: 'uk', nativeName: 'Українська', englishName: 'Ukrainian' },
-  { code: 'nl', nativeName: 'Nederlands', englishName: 'Dutch' },
-  { code: 'fa', nativeName: 'فارسی', englishName: 'Persian' },
-  { code: 'he', nativeName: 'עברית', englishName: 'Hebrew' },
-  { code: 'el', nativeName: 'Ελληνικά', englishName: 'Greek' },
-  { code: 'cs', nativeName: 'Čeština', englishName: 'Czech' },
-  { code: 'sv', nativeName: 'Svenska', englishName: 'Swedish' },
-  { code: 'ro', nativeName: 'Română', englishName: 'Romanian' },
-  { code: 'hu', nativeName: 'Magyar', englishName: 'Hungarian' },
-  { code: 'kk', nativeName: 'Қазақша', englishName: 'Kazakh' },
-];
-
-/**
- * Items of the language dropdown: typed names first, then the listed languages, then "other".
- * @param {string[]} customLanguageNames
- * @param {string} [otherLanguageLabel] label of the "other language" item
- * @returns {{value: string, label: string}[]}
- */
-function buildLanguageMenu(customLanguageNames, otherLanguageLabel = 'Другой язык…') {
-  return [
-    ...customLanguageNames.map((name) => ({ value: `${CUSTOM_VALUE_PREFIX}${name}`, label: name })),
-    ...LANGUAGE_CHOICES.map((choice) => ({ value: choice.code, label: choice.nativeName })),
-    { value: OTHER_LANGUAGE_VALUE, label: otherLanguageLabel },
-  ];
-}
-
-/**
- * @param {string} value a value of the menu built by buildLanguageMenu
- * @returns {TargetLanguage|null} null for "other", unknown values and empty typed names
- */
-function targetLanguageFromMenuValue(value) {
-  if (value.startsWith(CUSTOM_VALUE_PREFIX)) {
-    const name = sanitizeLanguageName(value.slice(CUSTOM_VALUE_PREFIX.length));
-    return name ? { code: null, name } : null;
-  }
-  const choice = LANGUAGE_CHOICES.find((candidate) => candidate.code === value);
-  return choice ? { code: choice.code, name: choice.englishName } : null;
-}
-
-/**
- * The language name that goes into the prompt; never empty.
- * @param {TargetLanguage} language
- * @returns {string}
- */
-function promptLanguageName(language) {
-  const choice = LANGUAGE_CHOICES.find((candidate) => candidate.code === language.code);
-  if (choice) return choice.englishName;
-  return sanitizeLanguageName(String(language.name ?? '')) || FALLBACK_PROMPT_LANGUAGE;
-}
-return Object.freeze({ OTHER_LANGUAGE_VALUE: OTHER_LANGUAGE_VALUE, LANGUAGE_CHOICES: LANGUAGE_CHOICES, buildLanguageMenu: buildLanguageMenu, targetLanguageFromMenuValue: targetLanguageFromMenuValue, promptLanguageName: promptLanguageName });
-})();
-
-// Module: src/shared/player_panel_logic.js
-const bundledModule18Exports = (function () {
-const { sanitizeLanguageName } = bundledModule8Exports;
-const TEXT_SCALE_STEP = 0.2;
-const MIN_TEXT_SCALE = 0.6;
-const MAX_TEXT_SCALE = 2.0;
-const CUSTOM_VALUE_PREFIX = 'custom:';
-
-/**
- * Turns the text typed into the "other language" input into a target language.
- * @param {string} typedText
- * @returns {import('./language_choices.js').TargetLanguage|null} null for empty or whitespace-only text
- */
-function languageFromTypedText(typedText) {
-  const name = sanitizeLanguageName(String(typedText ?? ''));
-  return name ? { code: null, name } : null;
-}
-
-/**
- * The dropdown value that stands for the given language (the inverse of targetLanguageFromMenuValue).
- * @param {import('./language_choices.js').TargetLanguage} language
- * @returns {string}
- */
-function menuValueForLanguage(language) {
-  return language.code === null ? `${CUSTOM_VALUE_PREFIX}${language.name}` : language.code;
-}
-
-/**
- * Typed language names for the dropdown: the remembered ones, plus the current language
- * when it is typed and not remembered yet, so the select can always show it.
- * @param {string[]} customLanguageNames
- * @param {import('./language_choices.js').TargetLanguage} currentLanguage
- * @returns {string[]}
- */
-function customNamesForMenu(customLanguageNames, currentLanguage) {
-  if (currentLanguage.code !== null) return [...customLanguageNames];
-  const currentIdentity = currentLanguage.name.toLowerCase();
-  const isRemembered = customLanguageNames.some((name) => name.toLowerCase() === currentIdentity);
-  return isRemembered ? [...customLanguageNames] : [currentLanguage.name, ...customLanguageNames];
-}
-
-/**
- * @param {number} currentScale
- * @param {1|-1} direction 1 to enlarge, -1 to shrink
- * @returns {number} the scale one step away, kept within the allowed range
- */
-function steppedTextScale(currentScale, direction) {
-  const stepped = Math.round((currentScale + direction * TEXT_SCALE_STEP) * 100) / 100;
-  return Math.min(MAX_TEXT_SCALE, Math.max(MIN_TEXT_SCALE, stepped));
-}
-
-/**
- * The dropdown value to show once the "other language" input is abandoned or confirmed:
- * always the value of the language that is actually in use, never the "other" item.
- * @param {import('./language_choices.js').TargetLanguage} currentLanguage
- * @returns {string}
- */
-function selectValueAfterClose(currentLanguage) {
-  return menuValueForLanguage(currentLanguage);
-}
-
-/**
- * Puts the button right before the subtitles button, in whatever element holds it
- * (it may be nested inside a wrapper); without that button, first among the right controls.
- * @param {{rightControls: object, subtitlesButton: object|null, button: object}} elements
- */
-function placeButtonNextToSubtitlesButton({ rightControls, subtitlesButton, button }) {
-  if (subtitlesButton && subtitlesButton.parentNode) {
-    subtitlesButton.parentNode.insertBefore(button, subtitlesButton);
-    return;
-  }
-  rightControls.insertBefore(button, rightControls.firstChild);
-}
-
-const MAX_REMEMBERED_TYPED_LANGUAGES = 5;
-
-/**
- * The remembered typed language names after choosing `language`: a typed language goes first,
- * replacing a case-insensitive duplicate, and the list keeps five; a listed language changes nothing.
- * @param {string[]} customLanguageNames
- * @param {import('./language_choices.js').TargetLanguage} language
- * @returns {string[]}
- */
-function rememberTypedLanguage(customLanguageNames, language) {
-  if (language.code !== null) return [...customLanguageNames];
-  const identity = language.name.toLowerCase();
-  const others = customLanguageNames.filter((name) => name.toLowerCase() !== identity);
-  return [language.name, ...others].slice(0, MAX_REMEMBERED_TYPED_LANGUAGES);
-}
-return Object.freeze({ TEXT_SCALE_STEP: TEXT_SCALE_STEP, MIN_TEXT_SCALE: MIN_TEXT_SCALE, MAX_TEXT_SCALE: MAX_TEXT_SCALE, languageFromTypedText: languageFromTypedText, menuValueForLanguage: menuValueForLanguage, customNamesForMenu: customNamesForMenu, steppedTextScale: steppedTextScale, selectValueAfterClose: selectValueAfterClose, placeButtonNextToSubtitlesButton: placeButtonNextToSubtitlesButton, rememberTypedLanguage: rememberTypedLanguage });
-})();
-
 // Module: src/page/player_controls.js
-const bundledModule19Exports = (function () {
-const { OTHER_LANGUAGE_VALUE, buildLanguageMenu, targetLanguageFromMenuValue } = bundledModule17Exports;
-const { uiTexts } = bundledModule14Exports;
-const { customNamesForMenu, languageFromTypedText, placeButtonNextToSubtitlesButton, selectValueAfterClose, steppedTextScale } = bundledModule18Exports;
+const bundledModule20Exports = (function () {
+const { OTHER_LANGUAGE_VALUE, buildLanguageMenu, targetLanguageFromMenuValue } = bundledModule16Exports;
+const { uiTexts } = bundledModule15Exports;
+const { customNamesForMenu, languageFromTypedText, placeButtonNextToSubtitlesButton, selectValueAfterClose, steppedTextScale } = bundledModule14Exports;
 const MAX_TYPED_LANGUAGE_LENGTH = 60;
 const KEYBOARD_EVENT_TYPES = ['keydown', 'keyup', 'keypress'];
 
@@ -2265,168 +2503,6 @@ class PlayerControls {
 return Object.freeze({ PlayerControls: PlayerControls });
 })();
 
-// Module: src/page/settings_store.js
-const bundledModule20Exports = (function () {
-const { LANGUAGE_CHOICES } = bundledModule17Exports;
-const { sanitizeLanguageName } = bundledModule8Exports;
-const SETTINGS_STORAGE_KEY = 'settings';
-const MIN_TEXT_SCALE = 0.6;
-const MAX_TEXT_SCALE = 2.0;
-const MAX_CUSTOM_LANGUAGE_NAMES = 5;
-
-/**
- * @typedef {{enabled: boolean, language: import('../shared/language_choices.js').TargetLanguage,
- *   customLanguageNames: string[], textScale: number, overlayPosition: {centerXFraction: number, bottomYFraction: number}|null,
- *   waitForSubtitles: boolean}} Settings
- */
-
-/** @type {Settings} */
-const DEFAULT_SETTINGS = Object.freeze({
-  enabled: false,
-  language: Object.freeze({ code: 'ru', name: 'Russian' }),
-  customLanguageNames: Object.freeze([]),
-  textScale: 1,
-  overlayPosition: null,
-  waitForSubtitles: true,
-});
-
-function isPlainObject(value) {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function normalizeLanguage(value) {
-  if (!isPlainObject(value)) return { ...DEFAULT_SETTINGS.language };
-  const choice = LANGUAGE_CHOICES.find((candidate) => candidate.code === value.code);
-  if (choice) return { code: choice.code, name: choice.englishName };
-  if (value.code !== null || typeof value.name !== 'string') return { ...DEFAULT_SETTINGS.language };
-  const name = sanitizeLanguageName(value.name);
-  return name ? { code: null, name } : { ...DEFAULT_SETTINGS.language };
-}
-
-/** Sanitizes names, drops empty ones and case-insensitive duplicates (the first wins), keeps five. */
-function normalizeCustomLanguageNames(value) {
-  if (!Array.isArray(value)) return [];
-  const seen = new Set();
-  const names = [];
-  for (const item of value) {
-    if (typeof item !== 'string') continue;
-    const name = sanitizeLanguageName(item);
-    const identity = name.toLowerCase();
-    if (!name || seen.has(identity)) continue;
-    seen.add(identity);
-    names.push(name);
-  }
-  return names.slice(0, MAX_CUSTOM_LANGUAGE_NAMES);
-}
-
-function normalizeTextScale(value) {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return DEFAULT_SETTINGS.textScale;
-  return Math.min(MAX_TEXT_SCALE, Math.max(MIN_TEXT_SCALE, value));
-}
-
-function isFractionOfPlayer(value) {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1;
-}
-
-function normalizeOverlayPosition(value) {
-  if (!isPlainObject(value)) return null;
-  const { centerXFraction, bottomYFraction } = value;
-  if (!isFractionOfPlayer(centerXFraction) || !isFractionOfPlayer(bottomYFraction)) return null;
-  return { centerXFraction, bottomYFraction };
-}
-
-/** @returns {Settings} every field valid, missing or invalid ones taken from the defaults */
-function normalizeSettings(raw) {
-  const source = isPlainObject(raw) ? raw : {};
-  return {
-    enabled: typeof source.enabled === 'boolean' ? source.enabled : DEFAULT_SETTINGS.enabled,
-    language: normalizeLanguage(source.language),
-    customLanguageNames: normalizeCustomLanguageNames(source.customLanguageNames),
-    textScale: normalizeTextScale(source.textScale),
-    overlayPosition: normalizeOverlayPosition(source.overlayPosition),
-    waitForSubtitles: typeof source.waitForSubtitles === 'boolean' ? source.waitForSubtitles : DEFAULT_SETTINGS.waitForSubtitles,
-  };
-}
-
-/** @returns {Settings} a fresh, mutable copy of the defaults */
-function copyOfDefaultSettings() {
-  return normalizeSettings({});
-}
-
-/**
- * Loads the settings at page start. The storage host runs in another content script that may
- * start later, so a rejected load (bridge timeout) is retried after a pause; when every attempt
- * fails the defaults are used. Never rejects.
- * @param {{load: () => Promise<Settings>}} settingsStore
- * @param {{sleep: (ms: number) => Promise<void>, attempts?: number, pauseMs?: number}} options
- * @returns {Promise<Settings>}
- */
-async function loadSettingsWithRetries(settingsStore, { sleep, attempts = 3, pauseMs = 1000 }) {
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    try {
-      return await settingsStore.load();
-    } catch {
-      if (attempt < attempts) await sleep(pauseMs);
-    }
-  }
-  return copyOfDefaultSettings();
-}
-
-/** Display settings kept in the extension storage; holds no tokens or account data. */
-class SettingsStore {
-  /** @param {{get: Function, set: Function}} extensionStorage */
-  constructor(extensionStorage) {
-    this.extensionStorage = extensionStorage;
-  }
-
-  /** @returns {Promise<Settings>} */
-  async load() {
-    const stored = await this.extensionStorage.get([SETTINGS_STORAGE_KEY]);
-    return normalizeSettings(stored[SETTINGS_STORAGE_KEY]);
-  }
-
-  /**
-   * @param {Partial<Settings>} changes
-   * @returns {Promise<Settings>} the settings as stored
-   */
-  async save(changes) {
-    return this.update(() => changes);
-  }
-
-  /**
-   * Loads the stored settings, merges the changes computed from them, and stores the result.
-   * @param {(stored: Settings) => Partial<Settings>} computeChanges
-   * @returns {Promise<Settings>} the settings as stored
-   */
-  async update(computeChanges) {
-    const stored = await this.load();
-    const merged = normalizeSettings({ ...stored, ...computeChanges(stored) });
-    await this.extensionStorage.set({ [SETTINGS_STORAGE_KEY]: merged });
-    return merged;
-  }
-}
-
-/**
- * Saves setting changes from the page one after another. Only the changed fields are written,
- * merged into the settings loaded from storage right before the write, so a change made in
- * another tab (or values stored while this page used the defaults) is never overwritten.
- * A change may be a function of the freshly loaded settings (for lists such as the remembered
- * languages). Never rejects: a failed save resolves null and the next one still runs.
- * @param {SettingsStore} settingsStore
- * @returns {(changes: Partial<Settings>|((stored: Settings) => Partial<Settings>)) => Promise<Settings|null>}
- */
-function createSettingsSaver(settingsStore) {
-  let previousSave = Promise.resolve();
-  return (changes) => {
-    const computeChanges = typeof changes === 'function' ? changes : () => changes;
-    const result = previousSave.then(() => settingsStore.update(computeChanges)).catch(() => null);
-    previousSave = result;
-    return result;
-  };
-}
-return Object.freeze({ DEFAULT_SETTINGS: DEFAULT_SETTINGS, loadSettingsWithRetries: loadSettingsWithRetries, SettingsStore: SettingsStore, createSettingsSaver: createSettingsSaver });
-})();
-
 // Module: src/shared/json3_captions.js
 const bundledModule21Exports = (function () {
 /** A word is never shown as lasting longer than this before a pause. */
@@ -2489,7 +2565,7 @@ return Object.freeze({ MAX_WORD_DURATION_MS: MAX_WORD_DURATION_MS, timedWordsFro
 // Module: src/page/youtube_captions_source.js
 const bundledModule22Exports = (function () {
 const { timedWordsFromJson3 } = bundledModule21Exports;
-const { mergePlayerRequestParameters } = bundledModule16Exports;
+const { mergePlayerRequestParameters } = bundledModule19Exports;
 class CaptionsUnavailableError extends Error {
   constructor(message) {
     super(message);
@@ -3183,8 +3259,8 @@ const { NoCaptionTracksError } = bundledModule22Exports;
 const { CHAT_TRANSCRIPT_SOURCE_KEY, translationCacheKey } = bundledModule24Exports;
 const { ChatRateLimitedError } = bundledModule1Exports;
 const { CueTrack } = bundledModule25Exports;
-const { promptLanguageName } = bundledModule17Exports;
-const { uiTexts } = bundledModule14Exports;
+const { promptLanguageName } = bundledModule16Exports;
+const { uiTexts } = bundledModule15Exports;
 const { decideWaitAction } = bundledModule26Exports;
 const { TranscriptChunkPump } = bundledModule28Exports;
 const { TranscriptChunkStore } = bundledModule6Exports;
@@ -4043,10 +4119,10 @@ const { ChatTranscriptSource } = bundledModule7Exports;
 const { ChatTranslator } = bundledModule9Exports;
 const { createExtensionStorage } = bundledModule11Exports;
 const { hideNativeCaptions, showNativeCaptions } = bundledModule12Exports;
-const { OverlayView } = bundledModule15Exports;
-const { createSerialCaptionCapture } = bundledModule16Exports;
-const { PlayerControls } = bundledModule19Exports;
-const { SettingsStore, createSettingsSaver, loadSettingsWithRetries } = bundledModule20Exports;
+const { OverlayView } = bundledModule18Exports;
+const { createSerialCaptionCapture } = bundledModule19Exports;
+const { PlayerControls } = bundledModule20Exports;
+const { SettingsStore, createSettingsSaver, loadSettingsWithRetries } = bundledModule17Exports;
 const { SubtitleSession } = bundledModule31Exports;
 const { TranslationCache } = bundledModule32Exports;
 const { CaptionsUnavailableError, fetchCaptionWords, NoCaptionTracksError } = bundledModule22Exports;
@@ -4054,8 +4130,8 @@ const { watchYouTubePage } = bundledModule34Exports;
 const { findPlayerElement, readCaptionTracks, readVideoDetails } = bundledModule35Exports;
 const { captionSourceKey } = bundledModule24Exports;
 const { chooseCaptionTrack } = bundledModule36Exports;
-const { rememberTypedLanguage } = bundledModule18Exports;
-const { isRightToLeft, pickUiLanguage, uiTexts } = bundledModule14Exports;
+const { rememberTypedLanguage } = bundledModule14Exports;
+const { isRightToLeft, pickUiLanguage, uiTexts } = bundledModule15Exports;
 const { createVideoPlayback } = bundledModule37Exports;
 const { DEFAULT_CUE_RULES, buildCues } = bundledModule23Exports;
 // Entry of the page bundle (MAIN world): builds every component once per page and wires them.

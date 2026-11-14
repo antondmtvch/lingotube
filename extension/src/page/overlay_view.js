@@ -3,7 +3,9 @@ import {
   clampOverlayPosition,
   positionFromDrag,
 } from '../shared/overlay_position.js';
+import { appearanceVariables } from '../shared/player_panel_logic.js';
 import { uiTexts } from '../shared/ui_strings.js';
+import { DEFAULT_SETTINGS } from './settings_store.js';
 
 /** A pointer movement shorter than this many pixels is a click, not a drag. */
 const DRAG_THRESHOLD_PX = 4;
@@ -29,9 +31,10 @@ export class OverlayView {
    * @param {{document: Document, containerElement: HTMLElement,
    *   position: import('../shared/overlay_position.js').OverlayPosition|null,
    *   textScale: number, onPositionChanged: (position: object) => void,
+   *   appearance?: {textColor: string, backgroundOpacity: number, outline: boolean},
    *   texts?: Record<string, any>, isRightToLeft?: boolean}} options
    */
-  constructor({ document, containerElement, position, textScale, onPositionChanged, texts = uiTexts('ru'), isRightToLeft = false }) {
+  constructor({ document, containerElement, position, textScale, onPositionChanged, appearance = DEFAULT_SETTINGS, texts = uiTexts('ru'), isRightToLeft = false }) {
     this.#container = containerElement;
     this.#onPositionChanged = onPositionChanged;
     this.#position = position ?? { ...DEFAULT_OVERLAY_POSITION };
@@ -48,6 +51,7 @@ export class OverlayView {
     this.#boxElement.append(this.#textElement, this.#labelElement);
     this.#boxElement.hidden = true;
     this.#boxElement.style.setProperty('--lingotube-text-scale', String(textScale));
+    this.applyAppearance(appearance);
 
     this.#boxElement.addEventListener('pointerdown', this.#handlePointerDown);
     this.#boxElement.addEventListener('pointermove', this.#handlePointerMove);
@@ -89,6 +93,20 @@ export class OverlayView {
   /** @param {number} scale multiplier of the base font size */
   setTextScale(scale) {
     this.#boxElement.style.setProperty('--lingotube-text-scale', String(scale));
+    this.#applyPosition();
+  }
+
+  /** @param {{textColor: string, backgroundOpacity: number, outline: boolean}} appearance */
+  applyAppearance({ textColor, backgroundOpacity, outline }) {
+    for (const [name, value] of Object.entries(appearanceVariables({ textColor, backgroundOpacity }))) {
+      this.#boxElement.style.setProperty(name, value);
+    }
+    this.#boxElement.classList.toggle('lingotube-overlay-outlined', outline === true);
+  }
+
+  /** Puts the box back to its default place; safe while the box is not shown. */
+  resetPosition() {
+    this.#position = { ...DEFAULT_OVERLAY_POSITION };
     this.#applyPosition();
   }
 
