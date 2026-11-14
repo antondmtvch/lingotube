@@ -9,3 +9,7 @@ cookies.txt
 # Local agent skills (installed per machine)
 .agents/
 .claude/
+
+# Release archives
+dist/
+web-ext-artifacts/
