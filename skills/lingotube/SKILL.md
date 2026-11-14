@@ -5,8 +5,9 @@ description: Summarize, transcribe, subtitle or find a moment in a YouTube video
 
 # lingotube
 
-`lingotube` is a command-line tool that gets a transcript, subtitles or a summary of a YouTube
-video by asking YouTube's built-in chat. You run it in the terminal and work with its output.
+Lets an agent summarize, transcribe, subtitle or find a moment in a YouTube video. It runs the
+`lingotube` command-line tool (installed separately, see "Before first use"), which asks YouTube's
+built-in chat about the video. You run it in the terminal and work with its output.
 
 ## Hard rules
 
