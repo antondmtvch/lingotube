@@ -1,6 +1,6 @@
 # lingotube
 
-![version](https://img.shields.io/badge/version-0.1.0-blue)
+![cli](https://img.shields.io/pypi/v/lingotube?label=cli)
 ![extension release](https://img.shields.io/github/v/release/antondmtvch/lingotube?filter=extension-v*&label=extension)
 ![python](https://img.shields.io/badge/python-%E2%89%A53.14-3776AB?logo=python&logoColor=white)
 ![coverage cli](https://img.shields.io/badge/coverage_cli-96%25-brightgreen)
