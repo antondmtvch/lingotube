@@ -43,6 +43,10 @@ test('manifest sets browser minimums', () => {
   assert.equal(manifest.browser_specific_settings.gecko.strict_min_version, '140.0');
 });
 
+test('manifest sets the Firefox for Android minimum to 142', () => {
+  assert.equal(manifest.browser_specific_settings.gecko_android.strict_min_version, '142.0');
+});
+
 test('manifest declares no data collection', () => {
   assert.deepEqual(manifest.browser_specific_settings.gecko.data_collection_permissions, {
     required: ['none'],
