@@ -5,13 +5,13 @@ from typing import Protocol
 
 from lingotube.errors import AuthError
 
-LOGIN_HINT = "Выполните lingotube login: откроется окно Chrome или Edge, войдите в YouTube."
+LOGIN_HINT = "Run lingotube login: a Chrome or Edge window opens; sign in to YouTube there."
 
 EXPORT_HINT = (
-    LOGIN_HINT + " Запасной путь — выгрузить cookies через режим инкогнито: откройте окно инкогнито, "
-    "разрешите там расширение для экспорта, войдите на youtube.com, выгрузите cookies на "
-    "странице https://www.youtube.com/robots.txt и сразу закройте окно инкогнито. "
-    "Затем запустите с --cookies-file <путь> (путь запомнится)."
+    LOGIN_HINT + " Fallback: export the cookies in a private window: open a private window, "
+    "allow the export extension there, sign in to youtube.com, export the cookies on "
+    "the page https://www.youtube.com/robots.txt and close the private window right away. "
+    "Then run again with --cookies-file <path> (the path is remembered)."
 )
 
 _ALLOWED_ROOTS = ("youtube.com", "google.com")
@@ -73,7 +73,7 @@ class Credentials:
         value = self.sapisid()
         if not value:
             raise AuthError(
-                message="В cookies нет SAPISID (вход в YouTube не найден).",
+                message="The cookies have no SAPISID (no sign-in to YouTube found).",
                 hint=EXPORT_HINT,
             )
         return value

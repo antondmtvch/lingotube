@@ -224,5 +224,5 @@ async def put_best_effort(
             value=value,
         )
     except OSError as e:
-        return f"не удалось сохранить в кэш: {type(e).__name__}"
+        return f"could not save to the cache: {type(e).__name__}"
     return None

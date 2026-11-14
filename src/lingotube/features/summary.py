@@ -80,8 +80,8 @@ class SummaryFeature:
         ).strip()
         if not text:
             raise ChatUnavailableError(
-                message="Чат вернул пустой ответ вместо краткого содержания.",
-                hint="Повторите запрос позже.",
+                message="The chat returned an empty answer instead of a summary.",
+                hint="Try the request again later.",
             )
         failed = await put_best_effort(
             cache=self._cache,
@@ -107,7 +107,7 @@ def register(
 
     @app.command(
         name="summary",
-        help="Краткое содержание на выбранном языке.",
+        help="Summary in the chosen language.",
     )
     def summary(
         video: c.VideoArg,

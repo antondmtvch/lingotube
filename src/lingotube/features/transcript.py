@@ -310,8 +310,8 @@ class TranscriptFeature:
                     ceil=True,
                 )
                 warnings.append(
-                    f"отрезок {format_time(seconds=start)}–{range_end} остался оборванным: "
-                    f"ответ чата дошёл только до {format_time(seconds=reached)}"
+                    f"the range {format_time(seconds=start)}–{range_end} was cut short: "
+                    f"the chat answer reached only {format_time(seconds=reached)}"
                 )
             elif prior.truncated and not is_last:
                 # the chat gave nothing more for a range in the middle of the video: name
@@ -322,8 +322,8 @@ class TranscriptFeature:
                     ceil=True,
                 )
                 warnings.append(
-                    f"отрезок {format_time(seconds=start)}–{range_end}: чат перестал отвечать "
-                    f"на {format_time(seconds=reached)}, остаток отрезка не получен"
+                    f"the range {format_time(seconds=start)}–{range_end}: the chat stopped answering "
+                    f"at {format_time(seconds=reached)}, the rest of the range was not received"
                 )
             chunks.append(prior.lines)
             self._progress(
@@ -399,9 +399,9 @@ class TranscriptFeature:
                     ceil=True,
                 )
                 raise ChatUnavailableError(
-                    message=f"Чат не вернул транскрипцию отрезка {format_time(seconds=start)}–"
-                    f"{range_end}: в ответе нет ни одного тайм-кода.",
-                    hint="Возможно, чат отказался отвечать по этому видео. Повторите позже.",
+                    message=f"The chat returned no transcript for the range {format_time(seconds=start)}–"
+                    f"{range_end}: the answer has no timecodes.",
+                    hint="The chat may have refused to answer for this video. Try again later.",
                 )
         else:
             lines = list(prior.lines)
@@ -529,7 +529,7 @@ def _completeness_warnings(
     completeness: Completeness,
     duration: float,
 ) -> list[str]:
-    warnings = [f"пропуск {format_time(seconds=a)}–{format_time(seconds=b)}" for a, b in completeness.gaps]
+    warnings = [f"gap {format_time(seconds=a)}–{format_time(seconds=b)}" for a, b in completeness.gaps]
     if not completeness.complete:
         total = format_time(
             seconds=duration,
@@ -537,7 +537,7 @@ def _completeness_warnings(
         )
         warnings.insert(
             0,
-            f"транскрипция неполная: обрывается на {format_time(seconds=completeness.last_end)} из {total}",
+            f"transcript incomplete: it ends at {format_time(seconds=completeness.last_end)} of {total}",
         )
     return warnings
 
@@ -674,7 +674,7 @@ def register(
 
     @app.command(
         name="transcript",
-        help="Транскрипция на языке оригинала с тайм-кодами (по умолчанию JSON).",
+        help="Transcript in the original language with timecodes (JSON by default).",
     )
     def transcript(
         video: c.VideoArg,

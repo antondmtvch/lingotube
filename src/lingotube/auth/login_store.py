@@ -34,7 +34,7 @@ class SavedLogin:
 
 def _corrupted_login_error() -> AuthError:
     return AuthError(
-        message="Сохранённый вход lingotube повреждён или отсутствует.",
+        message="The saved lingotube sign-in is damaged or missing.",
         hint=LOGIN_HINT,
     )
 

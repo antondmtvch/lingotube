@@ -139,7 +139,7 @@ def test_login_saves_and_reports_without_cookie_values(tmp_path):
     code, out, err = h.run("login")
     assert code == 0, err
     assert LEAK not in out + err
-    assert "Вход выполнен (chrome)" in out
+    assert "Signed in (chrome)" in out
     assert h.paths.cookies_file.is_file()
 
 
@@ -184,7 +184,7 @@ def test_login_warns_when_env_cookies_file_is_set(tmp_path):
     h = LoginHarness(tmp_path, env={"LINGOTUBE_COOKIES_FILE": "x.txt"})
     code, out, err = h.run("login")
     assert code == 0, err
-    assert "LINGOTUBE_COOKIES_FILE" in err and "важнее входа" in err
+    assert "LINGOTUBE_COOKIES_FILE" in err and "takes priority over the lingotube sign-in" in err
 
 
 def test_login_without_settings_file_path_skips_settings_cleanup(tmp_path):
@@ -218,7 +218,7 @@ def test_login_settings_write_os_error_is_a_warning_not_an_error(tmp_path, monke
     )
     code, out, err = h.run("login", "--json")
     assert code == 0, err
-    assert any("настроек" in warning for warning in json.loads(out)["warnings"])
+    assert any("settings" in warning for warning in json.loads(out)["warnings"])
     assert LEAK not in out + err
     assert h.paths.cookies_file.is_file()
 
@@ -232,7 +232,7 @@ def test_login_busy_profile_is_checked_before_the_flow_starts(tmp_path, monkeypa
     )
     code, out, err = h.run("login")
     assert code == 1
-    assert "Закройте окно входа" in err
+    assert "Close the lingotube sign-in window" in err
     assert h.flow_calls == []
 
 
@@ -241,7 +241,7 @@ def test_login_explicit_browser_that_is_not_installed_is_exit_4(tmp_path):
     h = LoginHarness(tmp_path, installed=("chrome", EXECUTABLE))
     code, out, err = h.run("login", "--browser", "edge")
     assert code == 4
-    assert "Не найден Chrome или Edge." in err
+    assert "Chrome or Edge was not found." in err
     assert h.flow_calls == []
 
 
@@ -250,7 +250,7 @@ def test_login_unknown_browser_is_usage_error(tmp_path):
     h = LoginHarness(tmp_path)
     code, out, err = h.run("login", "--browser", "firefox")
     assert code == 2
-    assert "Неизвестный браузер: firefox." in err
+    assert "Unknown browser: firefox." in err
     assert h.flow_calls == []
 
 
@@ -267,7 +267,7 @@ def test_login_no_browser_installed_is_exit_4(tmp_path):
     h = LoginHarness(tmp_path, installed=None)
     code, out, err = h.run("login")
     assert code == 4
-    assert "Не найден Chrome или Edge." in err
+    assert "Chrome or Edge was not found." in err
     assert h.flow_calls == []
 
 
@@ -276,13 +276,13 @@ def test_login_profile_busy_is_exit_1_with_close_hint(tmp_path):
     h = LoginHarness(
         tmp_path,
         flow_error=ProfileBusyError(
-            message="Профиль входа lingotube сейчас открыт.",
+            message="The lingotube login profile is open right now.",
             hint=PROFILE_BUSY_HINT,
         ),
     )
     code, out, err = h.run("login")
     assert code == 1
-    assert "Закройте окно входа" in err
+    assert "Close the lingotube sign-in window" in err
 
 
 def test_logout_removes_profile_and_cookies(tmp_path):
@@ -303,7 +303,7 @@ def test_logout_with_nothing_is_success(tmp_path):
     h = LoginHarness(tmp_path)
     code, out, err = h.run("logout")
     assert code == 0, err
-    assert "Нечего удалять" in out
+    assert "Nothing to delete" in out
 
 
 def test_logout_busy_profile_is_exit_1(tmp_path, monkeypatch):
@@ -316,7 +316,7 @@ def test_logout_busy_profile_is_exit_1(tmp_path, monkeypatch):
     )
     code, out, err = h.run("logout")
     assert code == 1
-    assert "Закройте окно входа" in err
+    assert "Close the lingotube sign-in window" in err
     assert h.paths.profile_dir.exists()
 
 
@@ -345,8 +345,8 @@ def test_logout_other_os_error_while_removing_profile_is_fixed_text_exit_1(tmp_p
     code, out, err = h.run("logout")
     assert code == 1
     assert "LEAKME" not in err
-    assert "Не удалось удалить" in err
-    assert "Внутренняя ошибка" not in err
+    assert "Could not delete" in err
+    assert "Internal error" not in err
 
 
 def test_logout_permission_error_on_cookies_file_is_profile_busy(tmp_path, monkeypatch):
@@ -360,7 +360,7 @@ def test_logout_permission_error_on_cookies_file_is_profile_busy(tmp_path, monke
     monkeypatch.setattr("pathlib.Path.unlink", locked)
     code, out, err = h.run("logout")
     assert code == 1
-    assert "Закройте окно входа" in err
+    assert "Close the lingotube sign-in window" in err
     assert "LEAKME" not in err
 
 
@@ -375,7 +375,7 @@ def test_logout_other_os_error_on_cookies_file_is_fixed_text(tmp_path, monkeypat
     monkeypatch.setattr("pathlib.Path.unlink", broken)
     code, out, err = h.run("logout")
     assert code == 1
-    assert "Не удалось удалить" in err
+    assert "Could not delete" in err
     assert "LEAKME" not in err
 
 
@@ -388,11 +388,11 @@ def test_login_settings_cleanup_failure_is_a_warning_not_an_error(tmp_path):
     result = json.loads(out)["result"]
     assert result["forgotten_settings"] == []
     assert h.paths.cookies_file.is_file()
-    assert any("настроек" in warning for warning in json.loads(out)["warnings"])
+    assert any("settings" in warning for warning in json.loads(out)["warnings"])
     assert LEAK not in out + err
 
 
 def test_export_hint_starts_with_login():
     """Check that the export hint starts with the login hint."""
     assert EXPORT_HINT.startswith(LOGIN_HINT)
-    assert "инкогнито" in EXPORT_HINT
+    assert "private window" in EXPORT_HINT

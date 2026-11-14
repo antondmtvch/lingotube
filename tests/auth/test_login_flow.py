@@ -316,7 +316,9 @@ async def test_sign_in_opens_login_page_in_window_and_notifies_once(paths, store
         paths.profile_dir,
         LOGIN_PAGE_URL,
     )
-    assert messages == ["Войдите в YouTube в открывшемся окне и закройте окно браузера; жду до 10 минут."]
+    assert messages == [
+        "Sign in to YouTube in the window that opens and close the browser window; waiting up to 10 minutes."
+    ]
     assert LOGIN_PAGE_URL.startswith("https://accounts.google.com/ServiceLogin")
 
 
@@ -360,8 +362,8 @@ async def test_window_closed_without_sign_in_is_auth_error_and_nothing_written(p
     harness = Harness(FakeConnection([[cookie("PREF", "LEAKME")]]), window_exits_at=1.0)
     with pytest.raises(AuthError) as caught:
         await sign_in(harness, paths, store)
-    assert "закрыто" in caught.value.message
-    assert caught.value.hint == "Повторите lingotube login и войдите в аккаунт."
+    assert "was closed" in caught.value.message
+    assert caught.value.hint == "Run lingotube login again and sign in to the account."
     assert harness.clock.now == 1.0
     assert harness.running.shut_down_calls >= 1
     assert not paths.cookies_file.exists()
@@ -380,8 +382,8 @@ async def test_sign_in_timeout_terminates_own_window_and_skips_headless(paths, s
     harness = Harness(FakeConnection([SIGNED_IN]), window_exits_at=None)
     with pytest.raises(AuthError) as caught:
         await sign_in(harness, paths, store)
-    assert caught.value.message == "За 10 минут вход в YouTube не выполнен."
-    assert caught.value.hint == "Повторите lingotube login."
+    assert caught.value.message == "The sign-in to YouTube was not completed within 10 minutes."
+    assert caught.value.hint == "Run lingotube login again."
     assert 600.0 <= harness.clock.now < 610.0
     assert harness.window.close_calls >= 1
     assert harness.launch_args == ()
@@ -455,7 +457,7 @@ async def test_sign_in_connect_failure_is_auth_error_and_shuts_down_without_conn
     harness.connect = failing_connect
     with pytest.raises(AuthError) as caught:
         await sign_in(harness, paths, store)
-    assert caught.value.message == "Не удалось прочитать вход из профиля lingotube."
+    assert caught.value.message == "Could not read the sign-in from the lingotube profile."
     assert "LEAKME" not in str(caught.value)
     assert harness.running.shut_down_connections[-1] is None
     assert not paths.cookies_file.exists()
@@ -471,7 +473,7 @@ async def test_sign_in_store_write_failure_is_auth_error_with_fixed_text(paths, 
     store.write = failing_write
     with pytest.raises(AuthError) as caught:
         await sign_in(harness, paths, store)
-    assert caught.value.message == "Не удалось сохранить вход lingotube."
+    assert caught.value.message == "Could not save the lingotube sign-in."
     assert "LEAKME" not in (caught.value.hint or "")
     assert harness.running.shut_down_calls >= 1
 
@@ -545,7 +547,7 @@ async def test_refresh_store_write_failure_is_auth_error(paths, store):
     store.write = failing_write
     with pytest.raises(AuthError) as caught:
         await refresh(harness, paths, store)
-    assert caught.value.message == "Не удалось сохранить вход lingotube."
+    assert caught.value.message == "Could not save the lingotube sign-in."
 
 
 async def test_refresh_busy_profile_is_auth_error_with_close_window_hint(paths, store, monkeypatch):
@@ -605,7 +607,7 @@ async def test_refresh_devtools_failure_is_auth_error_with_login_hint(paths, sto
     harness = Harness(BrokenConnection([[]]))
     with pytest.raises(AuthError) as caught:
         await refresh(harness, paths, store)
-    assert caught.value.message == "Не удалось обновить вход в профиле lingotube."
+    assert caught.value.message == "Could not refresh the sign-in in the lingotube profile."
     assert caught.value.hint == LOGIN_HINT
     assert "LEAKME" not in str(caught.value)
     assert harness.running.shut_down_calls >= 1

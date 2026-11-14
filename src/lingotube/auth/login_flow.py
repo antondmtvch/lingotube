@@ -79,8 +79,8 @@ def _is_youtube_domain(domain: str) -> bool:
 
 def _login_window_closed_error() -> AuthError:
     return AuthError(
-        message="Окно входа закрыто до входа в YouTube.",
-        hint="Повторите lingotube login и войдите в аккаунт.",
+        message="The sign-in window was closed before signing in to YouTube.",
+        hint="Run lingotube login again and sign in to the account.",
     )
 
 
@@ -94,8 +94,8 @@ async def _save_login(store: LoginCookieStore, saved: SavedLogin) -> None:
     except OSError:
         # No exception text: it may contain paths.
         raise AuthError(
-            message="Не удалось сохранить вход lingotube.",
-            hint="Проверьте место на диске и права на папку, затем повторите lingotube login.",
+            message="Could not save the lingotube sign-in.",
+            hint="Check the disk space and the folder permissions, then run lingotube login again.",
         ) from None
 
 
@@ -137,7 +137,7 @@ async def sign_in_with_login_browser(
     """
     window = await launch_window(executable, paths.profile_dir, LOGIN_PAGE_URL)
     try:
-        notify("Войдите в YouTube в открывшемся окне и закройте окно браузера; жду до 10 минут.")
+        notify("Sign in to YouTube in the window that opens and close the browser window; waiting up to 10 minutes.")
         await wait_for_sign_in_window_to_close(window=window, sleep=sleep, clock=clock)
     finally:
         # Ctrl+C or a timeout: close our own window; no-op once it has exited.
@@ -154,8 +154,8 @@ async def sign_in_with_login_browser(
         )
     except DevToolsError:
         raise AuthError(
-            message="Не удалось прочитать вход из профиля lingotube.",
-            hint="Повторите lingotube login.",
+            message="Could not read the sign-in from the lingotube profile.",
+            hint="Run lingotube login again.",
         ) from None
     if not _has_sapisid(cookies):
         raise _login_window_closed_error()
@@ -179,8 +179,8 @@ async def wait_for_sign_in_window_to_close(window: SignInWindow, sleep: Sleep, c
     while not window.has_exited:
         if clock() >= deadline:
             raise AuthError(
-                message="За 10 минут вход в YouTube не выполнен.",
-                hint="Повторите lingotube login.",
+                message="The sign-in to YouTube was not completed within 10 minutes.",
+                hint="Run lingotube login again.",
             )
         await sleep(WINDOW_POLL_SECONDS)
 
@@ -209,7 +209,7 @@ async def read_cookies_from_login_profile(
         connect: Function that opens a DevTools connection.
 
     Returns:
-        The cookies прочитаны from the browser.
+        The cookies read from the browser.
     """
     running = await launch(executable, profile_dir, mode, start_url)
     connection: DevToolsConnection | None = None
@@ -270,7 +270,7 @@ async def refresh_cookies_from_login_profile(
     saved = await store.read()
     executable = find_executable(saved.browser)
     if executable is None:
-        raise AuthError(message="Браузер для обновления входа не найден.", hint=LOGIN_HINT)
+        raise AuthError(message="The browser for refreshing the sign-in was not found.", hint=LOGIN_HINT)
     if is_login_profile_in_use(paths.profile_dir):
         raise _profile_busy_auth_error()
     previous_value = saved.cookies.get(ROTATING_COOKIE)
@@ -296,9 +296,9 @@ async def refresh_cookies_from_login_profile(
     except ProfileBusyError:
         raise _profile_busy_auth_error() from None
     except DevToolsError:
-        raise AuthError(message="Не удалось обновить вход в профиле lingotube.", hint=LOGIN_HINT) from None
+        raise AuthError(message="Could not refresh the sign-in in the lingotube profile.", hint=LOGIN_HINT) from None
     if not _has_sapisid(cookies):
-        raise AuthError(message="Вход в профиле lingotube больше не действует.", hint=LOGIN_HINT)
+        raise AuthError(message="The sign-in in the lingotube profile is no longer valid.", hint=LOGIN_HINT)
     refreshed = SavedLogin(browser=saved.browser, cookies=youtube_cookies_only(cookies))
     await _save_login(store, refreshed)
     new_rotating_value = refreshed.cookies.get(ROTATING_COOKIE)

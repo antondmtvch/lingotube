@@ -288,7 +288,7 @@ async def test_signed_out_is_auth_error(
             ftime=ftime,
         ).open(video_id=VIDEO)
     assert e.value.exit_code == 4
-    assert e.value.hint and "инкогнито" in e.value.hint
+    assert e.value.hint and "private window" in e.value.hint
 
 
 async def test_signed_out_watch_page_is_auth_error(

@@ -92,7 +92,7 @@ def test_validate_missing_ids_lists_them():
             translated=d,
             language="ru",
         )
-    assert "отсутствуют id: 3, 7" in e.value.message
+    assert "missing ids: 3, 7" in e.value.message
 
 
 def test_validate_extra_or_duplicate_ids():
@@ -106,8 +106,8 @@ def test_validate_extra_or_duplicate_ids():
             translated=d,
             language="ru",
         )
-    assert "лишние id: 42" in e.value.message
-    assert "повторяются id: 2" in e.value.message
+    assert "extra ids: 42" in e.value.message
+    assert "duplicate ids: 2" in e.value.message
 
 
 def test_validate_empty_text():
@@ -120,7 +120,7 @@ def test_validate_empty_text():
             translated=d,
             language="ru",
         )
-    assert "пустой текст у id: 5" in e.value.message
+    assert "empty text for ids: 5" in e.value.message
 
 
 def test_validate_collects_all_problems_sorted():
@@ -135,8 +135,8 @@ def test_validate_collects_all_problems_sorted():
             language="ru",
         )
     msg = e.value.message
-    assert "отсутствуют id: 3, 7" in msg
-    assert "пустой текст у id: 1" in msg
+    assert "missing ids: 3, 7" in msg
+    assert "empty text for ids: 1" in msg
 
 
 def test_validate_wrong_video_id():
@@ -216,7 +216,7 @@ def test_validate_many_missing_ids_is_capped():
             language="ru",
         )
     assert len(e.value.message) < 300
-    assert "… и ещё 1980" in e.value.message
+    assert "… and 1980 more" in e.value.message
 
 
 async def test_build_accepts_incomplete_cached_original(tmp_path):
@@ -323,5 +323,5 @@ async def test_build_cache_write_failure_keeps_result_and_warns(tmp_path):
         translated=translated(),
     )
     assert result.transcript.language == "ru"
-    assert result.warnings == ("не удалось сохранить в кэш: PermissionError",)
+    assert result.warnings == ("could not save to the cache: PermissionError",)
     assert all("secret" not in w for w in result.warnings)

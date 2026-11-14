@@ -322,7 +322,7 @@ def test_subs_stdout_with_dash_o(tmp_path):
     assert code == 0, err
     assert out.startswith("1\n00:00:00,000 --> ")
     assert "реплика 20" in out
-    assert "часть 1 из 3" in err and "часть 3 из 3" in err
+    assert "part 1 of 3" in err and "part 3 of 3" in err
     assert not list(tmp_path.glob(pattern="*.srt"))
 
 
@@ -342,7 +342,7 @@ def test_subs_incomplete_writes_file_and_exits_5(tmp_path):
     assert code == 5
     path = tmp_path / f"{VID}.ru.srt"
     assert path.exists() and "реплика 10" in path.read_text(encoding="utf-8")
-    assert "обрывается на" in err
+    assert "ends at" in err
     assert "Traceback" not in err
 
 
@@ -491,7 +491,7 @@ def test_build_reads_file_and_validates(tmp_path):
         "bad.json",
     )
     assert code == 7
-    assert "отсутствуют id: 3" in err
+    assert "missing ids: 3" in err
 
     (tmp_path / "broken.json").write_text(
         data="{not json",
@@ -664,7 +664,7 @@ def test_json_envelope_incomplete(tmp_path):
     assert doc["ok"] is False
     assert doc["error"]["code"] == "incomplete"
     assert doc["result"]["complete"] is False
-    assert any("обрывается на" in w for w in doc["warnings"])
+    assert any("ends at" in w for w in doc["warnings"])
 
 
 def test_bad_url_fails_before_any_network(tmp_path):
@@ -1284,7 +1284,7 @@ def test_failed_write_keeps_previous_file(
         "ru",
     )
     assert code == 1
-    assert "Не удалось записать файл" in err
+    assert "Could not write the file" in err
     assert target.read_text(encoding="utf-8") == "old content"
     assert sorted(p.name for p in tmp_path.iterdir() if p.is_file()) == [target.name]
     monkeypatch.undo()

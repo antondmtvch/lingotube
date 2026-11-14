@@ -270,7 +270,7 @@ def extract_answer(get_panel_response: dict[str, Any]) -> str:
         ):
             parts.append(content)
     if not parts:
-        raise ChatUnavailableError(message="Чат YouTube вернул пустой ответ.")
+        raise ChatUnavailableError(message="The YouTube chat returned an empty answer.")
     return "\n".join(parts)
 
 
@@ -317,7 +317,7 @@ def extract_page(html: str) -> tuple[dict[str, Any], VideoInfo]:
         ChatUnavailableError: If the page cannot be parsed, for example because the
             video is unavailable.
     """
-    unavailable = ChatUnavailableError(message="Не удалось разобрать страницу видео YouTube (видео недоступно?).")
+    unavailable = ChatUnavailableError(message="Could not parse the YouTube video page (is the video unavailable?).")
     i = html.find(_CONTEXT_MARKER)
     m = _PLAYER_MARKER.search(string=html)
     if i < 0 or m is None:

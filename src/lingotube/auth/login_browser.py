@@ -17,8 +17,8 @@ from typing import Literal
 from lingotube.auth.devtools import DevToolsConnection, DevToolsError, close_browser
 from lingotube.errors import AuthError, ProfileBusyError
 
-PROFILE_BUSY_MESSAGE = "Профиль входа lingotube сейчас открыт."
-PROFILE_BUSY_HINT = "Закройте окно входа lingotube (или завершите его фоновый процесс браузера) и повторите."
+PROFILE_BUSY_MESSAGE = "The lingotube login profile is open right now."
+PROFILE_BUSY_HINT = "Close the lingotube sign-in window (or end its background browser process) and try again."
 LOGIN_BROWSERS = ("chrome", "edge")
 LaunchMode = Literal["headless", "offscreen"]
 
@@ -339,8 +339,8 @@ async def launch_login_browser(
     except OSError:
         # No exception text: it may contain paths; the message is fixed.
         raise AuthError(
-            message="Браузер не запустился.",
-            hint="Проверьте установку Chrome или Edge и повторите `lingotube login`.",
+            message="The browser did not start.",
+            hint="Check that Chrome or Edge is installed, then run `lingotube login` again.",
         ) from None
     try:
         async with asyncio.timeout(port_file_timeout):
@@ -354,8 +354,8 @@ async def launch_login_browser(
     except TimeoutError:
         await shut_down_spawned_process(process)
         raise AuthError(
-            message="Браузер не ответил вовремя.",
-            hint="Повторите `lingotube login`.",
+            message="The browser did not respond in time.",
+            hint="Run `lingotube login` again.",
         ) from None
     except BaseException:
         await shut_down_spawned_process(process)
@@ -364,8 +364,8 @@ async def launch_login_browser(
     if is_login_profile_in_use(profile_dir):
         raise profile_busy_error()
     raise AuthError(
-        message="Браузер не запустился.",
-        hint="Проверьте установку Chrome или Edge и повторите `lingotube login`.",
+        message="The browser did not start.",
+        hint="Check that Chrome or Edge is installed, then run `lingotube login` again.",
     )
 
 
@@ -426,8 +426,8 @@ async def launch_sign_in_window(
         raise profile_busy_error() from None
     except OSError:
         raise AuthError(
-            message="Не удалось подготовить профиль входа lingotube.",
-            hint="Проверьте права на папку профиля и повторите `lingotube login`.",
+            message="Could not prepare the lingotube login profile.",
+            hint="Check the permissions of the profile folder and run `lingotube login` again.",
         ) from None
     try:
         process = await spawn(
@@ -438,7 +438,7 @@ async def launch_sign_in_window(
         )
     except OSError:
         raise AuthError(
-            message="Браузер не запустился.",
-            hint="Проверьте установку Chrome или Edge и повторите `lingotube login`.",
+            message="The browser did not start.",
+            hint="Check that Chrome or Edge is installed, then run `lingotube login` again.",
         ) from None
     return SignInWindow(process)

@@ -62,7 +62,7 @@ def parse_answer(text: str) -> list[ParsedLine]:
         The timed lines in order, or an empty list if the answer has no timecodes.
     """
     cues: list[list] = []  # [start, end, text]
-    gap = False  # после последней реплики встретилась пустая строка
+    gap = False  # an empty line came after the last cue
     for raw in text.splitlines():
         line = raw.strip()
         match = _CUE.match(string=line)
@@ -71,7 +71,7 @@ def parse_answer(text: str) -> list[ParsedLine]:
             end = _seconds(stamp=match.group("end")) if match.group("end") else None
             if start is not None and (end is not None or not match.group("end")):
                 if end is not None and end < start:
-                    end = None  # конец вычислит fix_ends
+                    end = None  # fix_ends will compute the end
                 body = match.group("text").strip()
                 if match.group("bold"):
                     body = body.rstrip("*").strip()  # "**(0:02) x**": closing bold
@@ -79,12 +79,12 @@ def parse_answer(text: str) -> list[ParsedLine]:
                 gap = False
                 continue
         if not cues:
-            continue  # вступление до первого тайм-кода
+            continue  # introduction before the first timecode
         if not line:
             gap = True
         elif not gap:
             cues[-1][2] = f"{cues[-1][2]} {line}".strip()
-        # иначе: заключительная фраза после пустой строки — отбрасывается
+        # otherwise: a closing phrase after an empty line is dropped
     return [
         ParsedLine(
             start=s,

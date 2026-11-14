@@ -110,7 +110,7 @@ def test_no_visible_window_launch_mode_with_debugging_port_exists():
 def test_profile_busy_hint_mentions_lingering_background_process():
     """Check that the profile-busy hint mentions a background process that is still running."""
     assert PROFILE_BUSY_HINT == (
-        "Закройте окно входа lingotube (или завершите его фоновый процесс браузера) и повторите."
+        "Close the lingotube sign-in window (or end its background browser process) and try again."
     )
 
 
@@ -366,7 +366,7 @@ async def test_launch_raises_auth_error_when_process_exits_without_lock(tmp_path
             start_url="u",
             spawn=spawn,
         )
-    assert info.value.message == "Браузер не запустился."
+    assert info.value.message == "The browser did not start."
 
 
 async def test_launch_timeout_kills_own_process(tmp_path):
@@ -385,7 +385,7 @@ async def test_launch_timeout_kills_own_process(tmp_path):
             spawn=spawn,
             port_file_timeout=0.3,
         )
-    assert info.value.message == "Браузер не ответил вовремя."
+    assert info.value.message == "The browser did not respond in time."
     assert "terminate" in process.calls
 
 
@@ -480,7 +480,7 @@ async def test_launch_maps_spawn_os_error_to_auth_error_without_exception_text(
             start_url="u",
             spawn=spawn,
         )
-    assert info.value.message == "Браузер не запустился."
+    assert info.value.message == "The browser did not start."
     assert "LEAKME" not in info.value.message + (info.value.hint or "")
     assert info.value.__cause__ is None
 

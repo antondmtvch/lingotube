@@ -112,7 +112,7 @@ def progress_writer(stream: TextIO) -> Callable[[int, int], None]:
         A function that takes the number of parts done and the total number of parts.
     """
     write = stream_writer(stream=stream)
-    return lambda done, total: write(f"часть {done} из {total}")
+    return lambda done, total: write(f"part {done} of {total}")
 
 
 BrowserLoader = Callable[[str], Mapping[str, str]]
@@ -275,8 +275,8 @@ def translator_api_key(
     ).strip()
     if not key:
         raise AuthError(
-            message="Не задан ключ модели перевода.",
-            hint=f"Задайте ключ в переменной окружения {name} (ключ не передаётся параметром команды).",
+            message="The translator API key is not set.",
+            hint=f"Set the key in the environment variable {name} (the key is not passed as a command option).",
         )
     return key
 

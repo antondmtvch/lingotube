@@ -192,7 +192,7 @@ def register(
 
     @app.command(
         name="subs",
-        help="Файл субтитров на выбранном языке.",
+        help="Subtitles file in the chosen language.",
     )
     def subs(
         video: c.VideoArg,

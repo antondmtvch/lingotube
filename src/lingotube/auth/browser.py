@@ -13,7 +13,7 @@ from lingotube.auth.base import (
 from lingotube.errors import AuthError
 
 BROWSERS = ("firefox", "chrome", "edge", "brave")
-_WIN_HINT = "Chrome/Edge на Windows обычно нельзя прочитать напрямую. " + EXPORT_HINT
+_WIN_HINT = "Chrome and Edge on Windows usually cannot be read directly. " + EXPORT_HINT
 
 
 def default_loader(browser: str) -> Mapping[str, str]:
@@ -76,13 +76,13 @@ class BrowserCookieSource:
             cookies = self._loader(browser)
         except Exception:  # never propagate text: may contain paths or values
             raise AuthError(
-                message=f"Не удалось прочитать cookies из браузера {browser}.",
+                message=f"Could not read the cookies from the {browser} browser.",
                 hint=self._hint(browser=browser),
             ) from None
         creds = Credentials(cookies=cookies)
         if not creds.sapisid():
             raise AuthError(
-                message=f"В браузере {browser} нет входа в YouTube.",
+                message=f"The {browser} browser has no sign-in to YouTube.",
                 hint=self._hint(browser=browser),
             )
         return creds
@@ -96,7 +96,7 @@ class BrowserCookieSource:
             except AuthError:
                 continue
         raise AuthError(
-            message="Не удалось получить cookies ни из одного браузера.",
+            message="Could not get the cookies from any browser.",
             hint=_WIN_HINT if self._platform == "win32" else EXPORT_HINT,
         )
 
@@ -139,6 +139,6 @@ class ChainCookieSource:
             except AuthError as e:
                 hint = e.hint or hint  # keep the last source's own hint (e.g. the Windows one)
         raise AuthError(
-            message="Не удалось получить cookies ни из одного источника.",
+            message="Could not get the cookies from any source.",
             hint=hint,
         )

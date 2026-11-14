@@ -153,7 +153,7 @@ VideoArg = Annotated[
     str,
     typer.Argument(
         metavar="URL",
-        help="Ссылка на видео YouTube или его идентификатор.",
+        help="A YouTube video link or video id.",
         show_default=False,
     ),
 ]
@@ -161,14 +161,14 @@ LangOpt = Annotated[
     str | None,
     typer.Option(
         default="--lang",
-        help="Язык результата (ru, en, es…); по умолчанию — из настроек.",
+        help="Language of the result (ru, en, es…); by default taken from the settings.",
     ),
 ]
 FormatOpt = Annotated[
     str | None,
     typer.Option(
         default="--format",
-        help="Формат: srt, vtt или json.",
+        help="Format: srt, vtt or json.",
     ),
 ]
 OutputOpt = Annotated[
@@ -176,42 +176,42 @@ OutputOpt = Annotated[
     typer.Option(
         "-o",
         "--output",
-        help="Куда писать; по умолчанию файл <id>.<язык>.<формат>; «-» — в stdout.",
+        help="Where to write; by default the file <id>.<language>.<format>; '-' means standard output.",
     ),
 ]
 OffsetOpt = Annotated[
     float,
     typer.Option(
         default="--offset",
-        help="Сдвиг всех субтитров в секундах (можно дробный и отрицательный).",
+        help="Shift all subtitles by this many seconds (fractional and negative values are allowed).",
     ),
 ]
 CookiesFileOpt = Annotated[
     Path | None,
     typer.Option(
         default="--cookies-file",
-        help="Файл cookies.txt (путь запоминается в настройках).",
+        help="Cookies file cookies.txt (the path is remembered in the settings).",
     ),
 ]
 BrowserOpt = Annotated[
     str | None,
     typer.Option(
         default="--browser",
-        help=f"Браузер для cookies: {', '.join(BROWSERS)}.",
+        help=f"Browser to read the cookies from: {', '.join(BROWSERS)}.",
     ),
 ]
 NoCacheOpt = Annotated[
     bool,
     typer.Option(
         default="--no-cache",
-        help="Не использовать сохранённые результаты.",
+        help="Do not use saved results.",
     ),
 ]
 JsonOpt = Annotated[
     bool,
     typer.Option(
         default="--json",
-        help="Машинный вывод: один JSON-документ в stdout.",
+        help="Machine-readable output: one JSON document on standard output.",
     ),
 ]
 
@@ -252,7 +252,7 @@ def execute(
             out=ctx.out,
             err=ctx.err,
             json_mode=ctx.json_mode,
-            error=LingotubeError(message="Прервано."),
+            error=LingotubeError(message="Interrupted."),
         )
         code = INTERRUPTED
     raise typer.Exit(code=code)
@@ -288,8 +288,8 @@ async def _execute(
     except Exception as e:
         # never a traceback, never the exception text (may hold secrets)
         error = LingotubeError(
-            message=f"Внутренняя ошибка ({type(e).__name__}).",
-            hint="Повторите команду; если ошибка повторяется — сообщите о ней.",
+            message=f"Internal error ({type(e).__name__}).",
+            hint="Run the command again; if the error repeats, report it.",
         )
         return report(
             out=ctx.out,
@@ -314,7 +314,7 @@ async def _configure(
 ) -> None:
     """Applies --cookies-file / --browser over the settings; remembers a given cookies file."""
     if common.cookies_file is not None and common.browser is not None:
-        raise UsageError(message="Укажите что-то одно: --cookies-file или --browser.")
+        raise UsageError(message="Give only one of --cookies-file and --browser.")
     settings = ctx.settings
     cookies_file, browser = settings.cookies_file, settings.browser
     if common.cookies_file is not None:
@@ -325,8 +325,8 @@ async def _configure(
         cookies_file = ctx.path(value=cookies_file)
     if browser is not None and browser not in BROWSERS:
         raise UsageError(
-            message=f"Неизвестный браузер: {browser}.",
-            hint=f"Доступны: {', '.join(BROWSERS)}.",
+            message=f"Unknown browser: {browser}.",
+            hint=f"Available: {', '.join(BROWSERS)}.",
         )
     ctx.use_settings(
         settings=replace(
@@ -386,11 +386,11 @@ def report(
         if text is not None:
             out.write(text if text.endswith("\n") else text + "\n")
         for warning in warnings:
-            err.write(f"Предупреждение: {warning}\n")
+            err.write(f"Warning: {warning}\n")
         if error is not None:
-            err.write(f"Ошибка: {error.message}\n")
+            err.write(f"Error: {error.message}\n")
             if error.hint:
-                err.write(f"Подсказка: {error.hint}\n")
+                err.write(f"Hint: {error.hint}\n")
     out.flush()
     err.flush()
     return 0 if error is None else error.exit_code
@@ -418,8 +418,8 @@ def require_lang(
     value = (lang or "").strip() or (settings.lang or "").strip()
     if not value:
         raise UsageError(
-            message="Не задан язык результата.",
-            hint="Укажите --lang <код> (например, --lang ru) или lang в файле настроек.",
+            message="The output language is not set.",
+            hint="Give --lang <code> (for example, --lang ru) or set lang in the settings file.",
         )
     return value
 
@@ -445,8 +445,8 @@ def require_format(
     value = fmt if fmt is not None else (settings.format if settings is not None else default)
     if value not in FORMATS:
         raise UsageError(
-            message=f"Неизвестный формат: {value}.",
-            hint=f"Доступны: {', '.join(FORMATS)}.",
+            message=f"Unknown format: {value}.",
+            hint=f"Available: {', '.join(FORMATS)}.",
         )
     return value
 
@@ -464,7 +464,7 @@ def require_offset(offset: float) -> float:
         UsageError: If the offset is not finite.
     """
     if not math.isfinite(offset):
-        raise UsageError(message="--offset должен быть конечным числом секунд.")
+        raise UsageError(message="--offset must be a finite number of seconds.")
     return offset
 
 
@@ -527,8 +527,8 @@ async def deliver(
         )
     except OSError as e:
         raise LingotubeError(
-            message=f"Не удалось записать файл {path}: {e.strerror or type(e).__name__}.",
-            hint="Проверьте путь и права на запись или укажите другой через -o.",
+            message=f"Could not write the file {path}: {e.strerror or type(e).__name__}.",
+            hint="Check the path and the write permissions, or give another one with -o.",
         ) from None
     return path
 
@@ -584,10 +584,10 @@ async def transcript_outcome(
         payload["content"] = text
     error = None
     if not complete:
-        where = "файл записан" if path is not None else "результат выведен"
+        where = "file written" if path is not None else "result printed"
         error = IncompleteError(
-            message=f"Результат неполный: {where}, но транскрипция не доходит до конца видео (см. предупреждения).",
-            hint="Повторите команду позже: готовые части возьмутся из кэша, недостающие будут дозапрошены.",
+            message=f"The result is incomplete: {where}, but the transcript does not reach the end of the video (see the warnings).",
+            hint="Run the command again later: the parts that are ready will come from the cache, and the missing ones will be requested.",
         )
     return Outcome(
         result=payload,

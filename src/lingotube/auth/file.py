@@ -75,11 +75,11 @@ class FileCookieSource:
             text, mode = await asyncio.to_thread(self._read)
         except OSError:
             raise AuthError(
-                message=f"Не удалось прочитать файл cookies: {self._path}",
+                message=f"Could not read the cookies file: {self._path}",
                 hint=EXPORT_HINT,
             ) from None
         if mode is not None and mode & 0o044:
-            self._warn(f"Файл cookies доступен другим пользователям: {self._path} (chmod 600).")
+            self._warn(f"The cookies file is readable by other users: {self._path} (chmod 600).")
         creds = Credentials(cookies=_parse(text=text))
         creds.require_sapisid()
         return creds

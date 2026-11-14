@@ -16,7 +16,7 @@ def _ids(ids: list[int]) -> str:
     ordered = sorted(ids)
     text = ", ".join(str(i) for i in ordered[:MAX_IDS])
     if len(ordered) > MAX_IDS:
-        text += f" … и ещё {len(ordered) - MAX_IDS}"
+        text += f" … and {len(ordered) - MAX_IDS} more"
     return text
 
 
@@ -43,7 +43,7 @@ def validate_translation(
     parsed = Transcript.from_dict(d=translated)
     if parsed.video_id != original.video_id:
         raise ValidationError(
-            message=f"video_id перевода ({parsed.video_id}) не совпадает с видео оригинала ({original.video_id})."
+            message=f"the video_id of the translation ({parsed.video_id}) does not match the video of the original ({original.video_id})."
         )
     expected = {c.id for c in original.cues}
     seen: set[int] = set()
@@ -60,17 +60,17 @@ def validate_translation(
             empty.add(cue.id)
     problems: list[str] = []
     if missing := expected - seen:
-        problems.append(f"отсутствуют id: {_ids(ids=list(missing))}")
+        problems.append(f"missing ids: {_ids(ids=list(missing))}")
     if extra := seen - expected:
-        problems.append(f"лишние id: {_ids(ids=list(extra))}")
+        problems.append(f"extra ids: {_ids(ids=list(extra))}")
     if duplicate:
-        problems.append(f"повторяются id: {_ids(ids=list(duplicate))}")
+        problems.append(f"duplicate ids: {_ids(ids=list(duplicate))}")
     if empty:
-        problems.append(f"пустой текст у id: {_ids(ids=list(empty))}")
+        problems.append(f"empty text for ids: {_ids(ids=list(empty))}")
     if problems:
         raise ValidationError(
-            message="Перевод не совпадает с оригиналом: " + "; ".join(problems) + ".",
-            hint="Верните все реплики оригинала, по одной на id, с непустым текстом.",
+            message="The translation does not match the original: " + "; ".join(problems) + ".",
+            hint="Return all cues of the original, one per id, each with non-empty text.",
         )
     cues = tuple(
         Cue(
@@ -138,8 +138,8 @@ class BuildFeature:
         )
         if original is None:
             raise ValidationError(
-                message="Оригинальная транскрипция этого видео не найдена в кэше.",
-                hint="Сначала выполните `lingotube transcript <url>`.",
+                message="The original transcript of this video is not in the cache.",
+                hint="First run `lingotube transcript <url>`.",
             )
         result = validate_translation(
             original=original,
@@ -173,11 +173,11 @@ def _read_json(path) -> Any:
         ) as f:
             return json.load(fp=f)
     except FileNotFoundError:
-        raise ValidationError(message=f"Файл перевода не найден: {path}") from None
+        raise ValidationError(message=f"Translation file not found: {path}") from None
     except (OSError, ValueError) as e:
         raise ValidationError(
-            message=f"Не удалось прочитать файл перевода {path} как JSON UTF-8: {type(e).__name__}.",
-            hint="Файл должен быть в формате транскрипции (раздел 8): video_id, duration, language, cues.",
+            message=f"Could not read the translation file {path} as UTF-8 JSON: {type(e).__name__}.",
+            hint="The file must be in the transcript JSON format: video_id, duration, language, cues.",
         ) from None
 
 
@@ -204,13 +204,13 @@ def register(
         Path,
         typer.Option(
             default="--from",
-            help="Файл с переведённой транскрипцией (JSON).",
+            help="File with the translated transcript (JSON).",
         ),
     ]
 
     @app.command(
         name="build",
-        help="Сверяет готовый перевод с оригиналом и собирает субтитры.",
+        help="Checks a ready translation against the original and builds the subtitles.",
     )
     def build(
         video: c.VideoArg,

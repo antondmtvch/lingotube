@@ -163,4 +163,4 @@ async def test_cache_write_failure_keeps_text_and_warns(tmp_path):
         )
         == "итог"
     )
-    assert warnings == ["не удалось сохранить в кэш: OSError"]
+    assert warnings == ["could not save to the cache: OSError"]

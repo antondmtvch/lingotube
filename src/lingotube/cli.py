@@ -99,12 +99,12 @@ def build_app(
         add_completion=False,
         no_args_is_help=True,
         pretty_exceptions_enable=False,
-        help="Субтитры, транскрипция и краткое содержание видео YouTube через чат YouTube.",
+        help="Subtitles, transcripts and summaries of YouTube videos, through the YouTube chat.",
     )
 
     @app.callback()
     def _root() -> None:
-        """Субтитры, транскрипция и краткое содержание видео YouTube через чат YouTube."""
+        """Subtitles, transcripts and summaries of YouTube videos, through the YouTube chat."""
 
     registry.apply(
         app=app,
@@ -281,7 +281,7 @@ def run(
             out=out,
             err=err,
             json_mode=json_mode,
-            error=LingotubeError(message="Прервано."),
+            error=LingotubeError(message="Interrupted."),
             code=1,
         )
     except typer.TyperException as e:
@@ -291,8 +291,8 @@ def run(
         if not message and not json_mode:
             return e.exit_code
         error = UsageError(
-            message=message or "Не указана команда.",
-            hint=f"Справка: {PROG} --help",
+            message=message or "No command given.",
+            hint=f"Help: {PROG} --help",
         )
         return _report_safely(
             out=out,
@@ -315,8 +315,8 @@ def run(
     except Exception as e:
         # never a traceback, never the exception text (may hold secrets)
         error = LingotubeError(
-            message=f"Внутренняя ошибка ({type(e).__name__}).",
-            hint="Повторите команду; если ошибка повторяется — сообщите о ней.",
+            message=f"Internal error ({type(e).__name__}).",
+            hint="Run the command again; if the error repeats, report it.",
         )
         return _report_safely(
             out=out,

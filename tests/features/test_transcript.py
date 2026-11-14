@@ -353,7 +353,7 @@ async def test_truncation_retry_is_bounded(tmp_path):
     assert "с 1:30 по 5:00" in client.prompts[2]
     assert "с 2:00 по 5:00" in client.prompts[3]
     assert not result.completeness.complete
-    assert any("оборван" in w for w in result.warnings)
+    assert any("cut short" in w for w in result.warnings)
 
 
 async def test_rerequest_without_progress_stops_and_part_is_not_reasked(tmp_path):
@@ -372,8 +372,8 @@ async def test_rerequest_without_progress_stops_and_part_is_not_reasked(tmp_path
     # первый дозапрос без продвижения — дальше не спрашиваем
     assert len(client.prompts) == 2
     assert not result.completeness.complete
-    assert not any("оборван" in w for w in result.warnings)  # обрыв описан проверкой полноты
-    assert any("неполная" in w for w in result.warnings)
+    assert not any("cut short" in w for w in result.warnings)  # обрыв описан проверкой полноты
+    assert any("incomplete" in w for w in result.warnings)
     second = FakeAskClient(
         info=info(duration=300),
         answer=full,
@@ -467,7 +467,7 @@ async def test_no_timecodes_is_error_not_empty_file(tmp_path):
             client=client,
             tmp_path=tmp_path,
         ).run(video_id=VID)
-    assert "транскрип" in exc.value.message
+    assert "transcript" in exc.value.message
     final = CacheKey(
         video_id=VID,
         kind="transcript",
@@ -853,7 +853,7 @@ async def test_gaps_reported_as_warnings(tmp_path):
     ).run(video_id=VID)
     assert result.completeness.complete
     assert result.completeness.gaps
-    assert any(w.startswith("пропуск 4:5") and w.endswith("8:20") for w in result.warnings)
+    assert any(w.startswith("gap 4:5") and w.endswith("8:20") for w in result.warnings)
 
 
 async def test_ends_fixed_and_ids_sequential(tmp_path):
@@ -1202,7 +1202,7 @@ async def test_cache_write_failure_keeps_result_and_warns(tmp_path):
         settings=Settings(),
     ).run(video_id=VID)
     assert len(result.transcript.cues) == 30
-    assert "не удалось сохранить в кэш: PermissionError" in result.warnings
+    assert "could not save to the cache: PermissionError" in result.warnings
     assert all("secret" not in w for w in result.warnings)
 
 
@@ -1231,7 +1231,7 @@ async def test_exhausted_mid_video_part_adds_warning_naming_the_range(tmp_path):
     ).run(video_id=VID)
     ranged = [w for w in result.warnings if "0:00–5:00" in w]
     assert len(ranged) == 1
-    assert "1:00" in ranged[0] and "оборван" not in ranged[0]
+    assert "1:00" in ranged[0] and "cut short" not in ranged[0]
     assert not any("5:00–10:00" in w or "10:00–15:00" in w for w in result.warnings)
 
 

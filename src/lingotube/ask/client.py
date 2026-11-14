@@ -38,7 +38,9 @@ USER_AGENT = (
 ACCEPT_LANGUAGE = "ru,en;q=0.8"  # as in the live-verified probe
 WEB_CLIENT_NAME_ID = "1"  # numeric id of the WEB innertube client
 
-_STALE_COOKIES = "YouTube не видит вход в аккаунт: cookies устарели или выгружены без входа."
+_STALE_COOKIES = (
+    "YouTube does not see a sign-in to the account: the cookies are stale or were exported without signing in."
+)
 
 
 class Pacer:
@@ -116,7 +118,7 @@ class AskClient(Protocol):
 
 def _ensure_youtube(url: httpx.URL) -> None:
     if url.scheme != "https" or url.host != ALLOWED_HOST or url.port not in (None, 443):
-        raise NetworkError(message="Отказ: запрос не к https://www.youtube.com не выполняется.")
+        raise NetworkError(message="Refused: requests are sent only to https://www.youtube.com.")
 
 
 MIN_SECRET_LENGTH = 4
@@ -264,11 +266,11 @@ class _Channel:
             status = resp.status_code
             if resp.history or 300 <= status < 400 or resp.url.host != ALLOWED_HOST:
                 raise NetworkError(
-                    message=f"{what}: YouTube ответил перенаправлением (HTTP {status}); переходы не выполняются."
+                    message=f"{what}: YouTube answered with a redirect (HTTP {status}); redirects are not followed."
                 )
             if status in (401, 403):
                 raise AuthError(
-                    message=f"{what}: YouTube отказал в доступе (HTTP {status}).",
+                    message=f"{what}: YouTube denied access (HTTP {status}).",
                     hint=EXPORT_HINT,
                 )
             if status == 429 or status >= 500:
@@ -277,7 +279,7 @@ class _Channel:
             if status >= 400:
                 raise NetworkError(message=f"{what}: HTTP {status}")
             return resp
-        raise NetworkError(message=self.redact(text=f"{last} (попыток: {attempts})")) from None
+        raise NetworkError(message=self.redact(text=f"{last} (attempts: {attempts})")) from None
 
     async def post_json(
         self,
@@ -295,12 +297,12 @@ class _Channel:
         try:
             data = resp.json()
         except ValueError:
-            raise NetworkError(message=f"{what}: YouTube вернул не JSON.") from None
+            raise NetworkError(message=f"{what}: YouTube returned no JSON.") from None
         if not isinstance(
             data,
             dict,
         ):
-            raise NetworkError(message=f"{what}: неожиданный формат ответа YouTube.")
+            raise NetworkError(message=f"{what}: unexpected response format from YouTube.")
         return data
 
 
@@ -464,7 +466,7 @@ class YouTubeAskClient(AskClient):
                     panel_only=False,
                 )
         if cmd is None:
-            raise ChatUnavailableError(message="Чат YouTube («Спросить») недоступен для этого видео.")
+            raise ChatUnavailableError(message="The YouTube chat ('Ask') is unavailable for this video.")
         return YouTubeAskSession(
             channel=ch,
             info=info,

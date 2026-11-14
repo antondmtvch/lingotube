@@ -45,7 +45,7 @@ class LoginProfileCookieSource:
         credentials = Credentials(cookies=saved.cookies)
         if not credentials.sapisid():
             raise AuthError(
-                message="В сохранённом входе lingotube нет SAPISID (вход в YouTube не найден).",
+                message="The saved lingotube sign-in has no SAPISID (no sign-in to YouTube found).",
                 hint=LOGIN_HINT,
             )
         return credentials

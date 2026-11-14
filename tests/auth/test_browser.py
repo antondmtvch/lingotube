@@ -92,7 +92,7 @@ async def test_default_chain_on_windows_keeps_chrome_edge_hint():
     )
     with pytest.raises(expected_exception=AuthError) as e:
         await chain.load()
-    assert "Chrome/Edge" in e.value.hint and "cookies-file" in e.value.hint
+    assert "Chrome and Edge on Windows" in e.value.hint and "cookies-file" in e.value.hint
 
 
 async def test_default_chain_elsewhere_has_only_export_hint():
@@ -112,4 +112,4 @@ async def test_default_chain_elsewhere_has_only_export_hint():
     )
     with pytest.raises(expected_exception=AuthError) as e:
         await chain.load()
-    assert "Chrome/Edge" not in e.value.hint and "cookies-file" in e.value.hint
+    assert "Chrome and Edge on Windows" not in e.value.hint and "cookies-file" in e.value.hint
