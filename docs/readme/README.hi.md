@@ -1,11 +1,12 @@
 # lingotube
 
 ![version](https://img.shields.io/badge/version-0.1.0-blue)
+![extension release](https://img.shields.io/github/v/release/antondmtvch/lingotube?filter=extension-v*&label=extension)
 ![python](https://img.shields.io/badge/python-%E2%89%A53.14-3776AB?logo=python&logoColor=white)
 ![coverage cli](https://img.shields.io/badge/coverage_cli-96%25-brightgreen)
 ![coverage extension](https://img.shields.io/badge/coverage_extension-99%25-brightgreen)
 
-[English](../../README.md) · [Русский](README.ru.md) · [简体中文](README.zh-Hans.md) · [繁體中文](README.zh-Hant.md) · **हिन्दी** · [Español](README.es.md) · [Français](README.fr.md) · [العربية](README.ar.md) · [বাংলা](README.bn.md) · [Português](README.pt.md) · [ไทย](README.th.md) · [日本語](README.ja.md) · [Tiếng Việt](README.vi.md) · [Deutsch](README.de.md)
+[English](/README.md) · [Русский](/docs/readme/README.ru.md) · [简体中文](/docs/readme/README.zh-Hans.md) · [繁體中文](/docs/readme/README.zh-Hant.md) · **हिन्दी** · [Español](/docs/readme/README.es.md) · [Français](/docs/readme/README.fr.md) · [العربية](/docs/readme/README.ar.md) · [বাংলা](/docs/readme/README.bn.md) · [Português](/docs/readme/README.pt.md) · [ไทย](/docs/readme/README.th.md) · [日本語](/docs/readme/README.ja.md) · [Tiếng Việt](/docs/readme/README.vi.md) · [Deutsch](/docs/readme/README.de.md)
 
 lingotube YouTube वीडियो के सबटाइटल, ट्रांसक्रिप्ट और सारांश प्राप्त करता है। प्रोजेक्ट के तीन हिस्से हैं: कमांड-लाइन टूल, AI एजेंट के लिए skill, और ब्राउज़र एक्सटेंशन (विकास में), जो प्लेयर के ऊपर अनूदित सबटाइटल दिखाता है।
 टेक्स्ट वीडियो पेज पर YouTube की अंतर्निहित चैट («पूछें», Gemini) से आता है।

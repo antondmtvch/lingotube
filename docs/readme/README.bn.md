@@ -1,11 +1,12 @@
 # lingotube
 
 ![version](https://img.shields.io/badge/version-0.1.0-blue)
+![extension release](https://img.shields.io/github/v/release/antondmtvch/lingotube?filter=extension-v*&label=extension)
 ![python](https://img.shields.io/badge/python-%E2%89%A53.14-3776AB?logo=python&logoColor=white)
 ![coverage cli](https://img.shields.io/badge/coverage_cli-96%25-brightgreen)
 ![coverage extension](https://img.shields.io/badge/coverage_extension-99%25-brightgreen)
 
-[English](../../README.md) · [Русский](README.ru.md) · [简体中文](README.zh-Hans.md) · [繁體中文](README.zh-Hant.md) · [हिन्दी](README.hi.md) · [Español](README.es.md) · [Français](README.fr.md) · [العربية](README.ar.md) · **বাংলা** · [Português](README.pt.md) · [ไทย](README.th.md) · [日本語](README.ja.md) · [Tiếng Việt](README.vi.md) · [Deutsch](README.de.md)
+[English](/README.md) · [Русский](/docs/readme/README.ru.md) · [简体中文](/docs/readme/README.zh-Hans.md) · [繁體中文](/docs/readme/README.zh-Hant.md) · [हिन्दी](/docs/readme/README.hi.md) · [Español](/docs/readme/README.es.md) · [Français](/docs/readme/README.fr.md) · [العربية](/docs/readme/README.ar.md) · **বাংলা** · [Português](/docs/readme/README.pt.md) · [ไทย](/docs/readme/README.th.md) · [日本語](/docs/readme/README.ja.md) · [Tiếng Việt](/docs/readme/README.vi.md) · [Deutsch](/docs/readme/README.de.md)
 
 lingotube YouTube ভিডিওর সাবটাইটেল, ট্রান্সক্রিপ্ট ও সারসংক্ষেপ সংগ্রহ করে। প্রকল্পটির তিনটি অংশ: কমান্ড-লাইন টুল, AI এজেন্টের জন্য skill, এবং ব্রাউজার এক্সটেনশন (উন্নয়নাধীন), যা প্লেয়ারের উপরে অনূদিত সাবটাইটেল দেখায়।
 টেক্সট আসে ভিডিও পেজে YouTube-এর বিল্ট-ইন চ্যাট («জিজ্ঞাসা করুন», Gemini) থেকে।
