@@ -67,13 +67,13 @@ Tudo nesta seção trata do comando `lingotube`. O skill e a extensão têm suas
 Você precisa do [uv](https://docs.astral.sh/uv/). O uv baixa por conta própria a versão certa do Python.
 
 ```sh
-uv tool install git+https://github.com/antondmtvch/lingotube
+uv tool install --python 3.14 git+https://github.com/antondmtvch/lingotube
 ```
 
 Ou a partir de uma cópia local do repositório:
 
 ```sh
-uv tool install .
+uv tool install --python 3.14 .
 ```
 
 Atualizar e desinstalar:

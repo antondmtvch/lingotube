@@ -66,13 +66,13 @@ lingotube ดึงคำบรรยาย คำถอดความ แล�
 คุณต้องมี [uv](https://docs.astral.sh/uv/) โดย uv จะดาวน์โหลด Python เวอร์ชันที่ถูกต้องให้เอง
 
 ```sh
-uv tool install git+https://github.com/antondmtvch/lingotube
+uv tool install --python 3.14 git+https://github.com/antondmtvch/lingotube
 ```
 
 หรือจากสำเนาในเครื่องของรีโพสิทอรี:
 
 ```sh
-uv tool install .
+uv tool install --python 3.14 .
 ```
 
 อัปเดตและถอนการติดตั้ง:
