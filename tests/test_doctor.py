@@ -1,3 +1,5 @@
+"""Tests of the doctor command: cookie sources, the chat check, exit codes and the table."""
+
 import io
 import json
 from pathlib import Path
@@ -30,19 +32,39 @@ SECRET_SID = "SID_VALUE_DOCTOR_456"
 
 
 class GoodSource:
+    """Cookie source that always loads valid credentials."""
+
     def __init__(self) -> None:
+        """Create the source with a counter of how many times it was loaded."""
         self.loads = 0
 
     async def load(self) -> Credentials:
+        """Return the fixed valid credentials and count the load.
+
+        Returns:
+            The credentials with SAPISID and SID cookies.
+        """
         self.loads += 1
         return Credentials(cookies={"SAPISID": SECRET_SAPISID, "SID": SECRET_SID})
 
 
 class BadSource:
+    """Cookie source that always fails with AuthError."""
+
     def __init__(self, message: str = "В браузере chrome нет входа в YouTube.") -> None:
+        """Create the source that fails with the given message.
+
+        Args:
+            message: Message of the AuthError that the source raises.
+        """
         self.message = message
 
     async def load(self) -> Credentials:
+        """Raise the AuthError of this source, with a fixed hint.
+
+        Raises:
+            AuthError: Always.
+        """
         raise AuthError(
             message=self.message,
             hint="выгрузите cookies.txt и запустите с --cookies-file",
@@ -50,7 +72,14 @@ class BadSource:
 
 
 class FakeSession:
+    """Chat session that returns a fixed answer."""
+
     def __init__(self, video_id: str) -> None:
+        """Create the session for a video.
+
+        Args:
+            video_id: YouTube video id of the session.
+        """
         self.info = VideoInfo(
             video_id=video_id,
             duration=60.0,
@@ -59,6 +88,14 @@ class FakeSession:
         )
 
     async def ask(self, prompt: str) -> str:  # doctor must never ask
+        """Fail if doctor sends a chat message, because doctor must never ask a question.
+
+        Args:
+            prompt: Prompt that must not be sent.
+
+        Raises:
+            AssertionError: Always.
+        """
         raise AssertionError("doctor must not send chat messages")
 
 
@@ -71,11 +108,26 @@ class FakeAsk:
         outcome,
         log: list,
     ) -> None:
+        """Create the fake chat client.
+
+        Args:
+            source: Cookie source that the client was created for.
+            outcome: Exception that ``open`` raises, or None if the chat opens.
+            log: List where the video ids of the opened chats are recorded.
+        """
         self.source = source
         self.outcome = outcome
         self.log = log
 
     async def open(self, video_id: str) -> FakeSession:
+        """Open the fake chat, or raise the configured outcome.
+
+        Args:
+            video_id: YouTube video id.
+
+        Returns:
+            A session on the fake chat.
+        """
         creds = await self.source.load()
         assert creds.sapisid() == SECRET_SAPISID
         self.log.append(video_id)
@@ -88,6 +140,15 @@ def ask_factory(
     outcome=None,
     log: list | None = None,
 ):
+    """Build a function that returns a fake chat client for a cookie source.
+
+    Args:
+        outcome: Exception that the clients raise on open, or None.
+        log: List where the opened video ids are recorded. A new list is used if None.
+
+    Returns:
+        A function that takes a cookie source and returns a fake chat client.
+    """
     log = log if log is not None else []
     return lambda source: FakeAsk(
         source=source,
@@ -100,10 +161,20 @@ def by_name(
     checks: list[Check],
     name: str,
 ) -> Check:
+    """Find the check with the given name.
+
+    Args:
+        checks: Check rows of a run.
+        name: Name of the check.
+
+    Returns:
+        The check with that name.
+    """
     return next(c for c in checks if c.name == name)
 
 
 async def test_file_ok_browser_fails_is_success():
+    """Check that a working file source is success even when a browser source fails."""
     opened: list[str] = []
     checks = await run_doctor(
         sources={"файл cookies": GoodSource(), "браузер chrome": BadSource()},
@@ -130,6 +201,7 @@ async def test_file_ok_browser_fails_is_success():
 
 
 async def test_all_sources_fail_is_exit_4_with_export_hint():
+    """Check that when every source fails the exit code is 4 and the export hint is shown."""
     checks = await run_doctor(
         sources={
             "файл cookies": BadSource(message="Файл cookies не задан."),
@@ -159,6 +231,7 @@ async def test_all_sources_fail_is_exit_4_with_export_hint():
 
 
 async def test_signed_in_but_chat_unavailable_is_exit_3():
+    """Check that signing in without a working chat gives exit code 3."""
     checks = await run_doctor(
         sources={"файл cookies": GoodSource()},
         make_ask=ask_factory(outcome=ChatUnavailableError(message="Чат недоступен для этого видео.")),
@@ -176,6 +249,8 @@ async def test_signed_in_but_chat_unavailable_is_exit_3():
 
 
 async def test_stale_first_source_falls_back_to_next():
+    """Check that a stale first source is skipped in favour of the next one."""
+
     class Stale:
         async def load(self) -> Credentials:
             return Credentials(cookies={"SAPISID": "STALE"})
@@ -216,6 +291,7 @@ async def test_stale_first_source_falls_back_to_next():
 
 
 async def test_all_loaded_sources_stale_is_exit_4():
+    """Check that when every loaded source is stale the exit code is 4."""
     checks = await run_doctor(
         sources={"файл cookies": GoodSource()},
         make_ask=ask_factory(outcome=AuthError(message="cookies устарели")),
@@ -229,6 +305,7 @@ async def test_all_loaded_sources_stale_is_exit_4():
 
 
 async def test_network_failure_is_exit_6():
+    """Check that a network failure gives exit code 6."""
     checks = await run_doctor(
         sources={"файл cookies": GoodSource()},
         make_ask=ask_factory(outcome=NetworkError(message="сеть")),
@@ -242,6 +319,7 @@ async def test_network_failure_is_exit_6():
 
 
 async def test_source_read_once():
+    """Check that each cookie source is read only once."""
     source = GoodSource()
     await run_doctor(
         sources={"файл cookies": source},
@@ -252,6 +330,7 @@ async def test_source_read_once():
 
 
 async def test_checks_never_contain_cookie_values():
+    """Check that the check rows never contain cookie values."""
     for outcome in (
         None,
         ChatUnavailableError(message="нет чата"),
@@ -271,6 +350,8 @@ async def test_checks_never_contain_cookie_values():
 
 
 class Harness:
+    """Test harness that runs the doctor command with fake sources and a fake chat."""
+
     def __init__(
         self,
         tmp_path: Path,
@@ -278,6 +359,14 @@ class Harness:
         outcome=None,
         settings: Settings | None = None,
     ) -> None:
+        """Create the harness with the given sources and chat outcome.
+
+        Args:
+            tmp_path: Temporary folder of the test.
+            sources: Cookie sources by name.
+            outcome: Exception that the fake chat raises on open, or None.
+            settings: Settings to use, or None for the defaults.
+        """
         self.tmp = tmp_path
         self.sources = sources
         self.opened: list[str] = []
@@ -290,6 +379,15 @@ class Harness:
         out,
         err,
     ) -> AppContext:
+        """Build the application context for one run with the fakes.
+
+        Args:
+            out: Stream for the result.
+            err: Stream for messages.
+
+        Returns:
+            The application context.
+        """
         container = build_container(
             settings=self.settings,
             env={},
@@ -319,6 +417,14 @@ class Harness:
         )
 
     def run(self, *argv: str) -> tuple[int, str, str]:
+        """Run the doctor command with the harness wiring.
+
+        Args:
+            *argv: Command-line arguments after ``doctor``.
+
+        Returns:
+            The exit code, the result text and the message text.
+        """
         out, err = io.StringIO(), io.StringIO()
         code = cli.run(
             argv=["doctor", *argv],
@@ -330,6 +436,7 @@ class Harness:
 
 
 def test_doctor_command_success_prints_table(tmp_path):
+    """Check that the doctor command prints the table when everything is ready."""
     h = Harness(
         tmp_path=tmp_path,
         sources={"файл cookies": GoodSource(), "браузер chrome": BadSource()},
@@ -342,6 +449,7 @@ def test_doctor_command_success_prints_table(tmp_path):
 
 
 def test_doctor_command_all_sources_fail_exit_4(tmp_path):
+    """Check that the doctor command exits with code 4 when all sources fail."""
     h = Harness(
         tmp_path=tmp_path,
         sources={
@@ -357,6 +465,7 @@ def test_doctor_command_all_sources_fail_exit_4(tmp_path):
 
 
 def test_doctor_command_chat_unavailable_exit_3(tmp_path):
+    """Check that the doctor command exits with code 3 when the chat is unavailable."""
     h = Harness(
         tmp_path=tmp_path,
         sources={"файл cookies": GoodSource()},
@@ -369,6 +478,7 @@ def test_doctor_command_chat_unavailable_exit_3(tmp_path):
 
 
 def test_doctor_command_json(tmp_path):
+    """Check the JSON output of the doctor command."""
     h = Harness(
         tmp_path=tmp_path,
         sources={"файл cookies": GoodSource()},
@@ -385,6 +495,7 @@ def test_doctor_command_json(tmp_path):
 
 
 def test_doctor_command_json_unexpected_source_row_is_neutral_for_exit(tmp_path):
+    """Check that an unexpected failure in one source does not change the exit code in JSON output."""
     h = Harness(
         tmp_path=tmp_path,
         sources={"файл cookies": CrashingSource(), "браузер chrome": GoodSource()},
@@ -406,6 +517,7 @@ def test_doctor_video_option(
     tmp_path,
     arg,
 ):
+    """Check that the video option chooses the video for the chat check."""
     h = Harness(
         tmp_path=tmp_path,
         sources={"файл cookies": GoodSource()},
@@ -419,6 +531,7 @@ def test_doctor_video_option(
 
 
 def test_doctor_bad_video_option_fails_before_network(tmp_path):
+    """Check that an invalid video option fails before any network request."""
     h = Harness(
         tmp_path=tmp_path,
         sources={"файл cookies": GoodSource()},
@@ -432,6 +545,8 @@ def test_doctor_bad_video_option_fails_before_network(tmp_path):
 
 
 async def test_container_doctor_sources(tmp_path):
+    """Check the cookie sources that the container gives to doctor."""
+
     def make(settings):
         return build_container(
             settings=settings,
@@ -478,6 +593,7 @@ async def test_container_doctor_sources(tmp_path):
 
 
 async def test_container_ask_factory_builds_youtube_clients(tmp_path):
+    """Check that the container's factory builds YouTube chat clients."""
     from lingotube.ask.client import YouTubeAskClient
 
     container = build_container(
@@ -505,6 +621,7 @@ async def test_container_ask_factory_builds_youtube_clients(tmp_path):
 
 
 def test_doctor_registered_in_cli():
+    """Check that the doctor command is registered in the CLI."""
     import typer.main
 
     app = cli.build_app(
@@ -515,6 +632,7 @@ def test_doctor_registered_in_cli():
 
 
 def test_table_lists_hints_of_failed_checks_once():
+    """Check that the table lists the hint of each failed check once."""
     from lingotube.doctor import render_table
 
     checks = [
@@ -556,6 +674,7 @@ def test_table_lists_hints_of_failed_checks_once():
 
 
 async def test_failed_browsers_are_not_critical_when_a_source_works():
+    """Check that failed browser checks are not critical when another source works."""
     from lingotube.doctor import render_table
 
     checks = await run_doctor(
@@ -580,6 +699,7 @@ async def test_failed_browsers_are_not_critical_when_a_source_works():
 
 
 async def test_stale_source_is_reported_as_not_accepted_not_as_unread():
+    """Check that a stale source is reported as not accepted, not as unread."""
     from lingotube.doctor import render_table
 
     class Stale:
@@ -606,6 +726,7 @@ async def test_stale_source_is_reported_as_not_accepted_not_as_unread():
 
 
 async def test_failed_sources_stay_critical_when_none_works():
+    """Check that failed sources stay critical when no source works."""
     from lingotube.doctor import doctor_error, render_table
 
     checks = await run_doctor(
@@ -623,6 +744,7 @@ async def test_failed_sources_stay_critical_when_none_works():
 
 
 async def test_network_error_does_not_claim_missing_login():
+    """Check that a network error does not claim the sign-in is missing."""
     from lingotube.doctor import NETWORK_HINT
 
     checks = await run_doctor(
@@ -648,11 +770,19 @@ async def test_network_error_does_not_claim_missing_login():
 
 
 class CrashingSource:
+    """Cookie source whose load raises an unexpected error."""
+
     async def load(self) -> Credentials:
+        """Raise an unexpected error.
+
+        Raises:
+            RuntimeError: Always.
+        """
         raise RuntimeError(f"boom {SECRET_SAPISID}")
 
 
 async def test_unexpected_error_in_source_keeps_row_failed_but_exit_0_when_another_works():
+    """Check that an unexpected error in a source keeps its row failed, but exit code is 0 when another source works."""
     checks = await run_doctor(
         sources={"файл cookies": CrashingSource(), "браузер chrome": GoodSource()},
         make_ask=ask_factory(),
@@ -676,6 +806,7 @@ async def test_unexpected_error_in_source_keeps_row_failed_but_exit_0_when_anoth
 
 
 async def test_unexpected_error_without_a_working_source_still_exits_1():
+    """Check that an unexpected error without a working source gives exit code 1."""
     checks = await run_doctor(
         sources={"файл cookies": CrashingSource()},
         make_ask=ask_factory(),
@@ -685,6 +816,7 @@ async def test_unexpected_error_without_a_working_source_still_exits_1():
 
 
 async def test_unexpected_error_in_chat_open_marks_row_failed_and_exit_1():
+    """Check that an unexpected error while opening the chat marks the row failed and gives exit code 1."""
     checks = await run_doctor(
         sources={"файл cookies": GoodSource()},
         make_ask=ask_factory(outcome=KeyError(SECRET_SID)),
@@ -700,6 +832,7 @@ async def test_unexpected_error_in_chat_open_marks_row_failed_and_exit_1():
 
 
 def test_doctor_command_unexpected_error_still_prints_table(tmp_path):
+    """Check that the table is still printed after an unexpected error."""
     h = Harness(
         tmp_path=tmp_path,
         sources={"файл cookies": CrashingSource(), "браузер chrome": GoodSource()},
@@ -711,6 +844,7 @@ def test_doctor_command_unexpected_error_still_prints_table(tmp_path):
 
 
 async def test_doctor_lists_login_profile_row_after_file(tmp_path):
+    """Check that the login profile row comes after the file row."""
     await LoginCookieStore(cookies_file=tmp_path / "login-cookies.json").write(
         saved=SavedLogin(browser="chrome", cookies={"SAPISID": SECRET_SAPISID})
     )
@@ -730,6 +864,7 @@ async def test_doctor_lists_login_profile_row_after_file(tmp_path):
 
 
 async def test_doctor_never_refreshes_the_login_profile(tmp_path, monkeypatch):
+    """Check that doctor never refreshes the login profile."""
     await LoginCookieStore(cookies_file=tmp_path / "login-cookies.json").write(
         saved=SavedLogin(browser="chrome", cookies={"SAPISID": SECRET_SAPISID})
     )
@@ -757,6 +892,7 @@ async def test_doctor_never_refreshes_the_login_profile(tmp_path, monkeypatch):
 
 
 async def test_doctor_login_profile_works_marks_others_non_critical():
+    """Check that when the login profile works, the other failed sources are not critical."""
     checks = await run_doctor(
         sources={
             "файл cookies": BadSource(),
@@ -773,6 +909,7 @@ async def test_doctor_login_profile_works_marks_others_non_critical():
 
 
 async def test_final_error_hint_starts_with_login_hint():
+    """Check that the hint of the final error starts with the login hint."""
     from lingotube.doctor import doctor_error
 
     checks = await run_doctor(

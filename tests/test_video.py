@@ -1,3 +1,5 @@
+"""Tests of the parsing of YouTube video ids and links."""
+
 import pytest
 
 from lingotube.errors import ValidationError
@@ -40,6 +42,7 @@ def test_ok(
     src,
     expected,
 ):
+    """Check that valid links and ids give the video id."""
     assert parse_video_id(value=src) == expected
 
 
@@ -48,6 +51,7 @@ def test_ok(
     argvalues=BAD,
 )
 def test_bad(src):
+    """Check that invalid links and ids are rejected."""
     with pytest.raises(expected_exception=ValidationError) as ei:
         parse_video_id(value=src)
     assert ei.value.exit_code == 7

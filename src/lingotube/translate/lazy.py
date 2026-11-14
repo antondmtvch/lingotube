@@ -18,11 +18,17 @@ class LazyTranslator:
         self,
         factory: Callable[[], Translator | Awaitable[Translator]],
     ) -> None:
+        """Create the lazy translator.
+
+        Args:
+            factory: Function that builds the real translator. It may return the translator
+                or an awaitable that gives it.
+        """
         self._factory = factory
         self._translator: Translator | None = None
 
     async def prepare(self) -> None:
-        """Builds the real translator now, so a missing key surfaces before any slow work."""
+        """Build the real translator now, so that a missing key fails before any slow work."""
         if self._translator is None:
             built = self._factory()
             if inspect.isawaitable(object=built):
@@ -34,6 +40,15 @@ class LazyTranslator:
         cues: Sequence[Cue],
         target_language: str,
     ) -> list[Cue]:
+        """Translate cues, building the real translator first if it is not built yet.
+
+        Args:
+            cues: Cues to translate.
+            target_language: Language code of the result.
+
+        Returns:
+            The translated cues.
+        """
         await self.prepare()
         assert self._translator is not None
         return await self._translator.translate(

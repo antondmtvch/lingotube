@@ -37,12 +37,25 @@ def _primary(language: str | None) -> str:
 
 
 class SubtitlesFeature:
+    """Get subtitles in one language.
+
+    The original transcript is always fetched first. If the translator is set and the
+    original is in another language, the text is translated.
+    """
+
     def __init__(
         self,
         transcripts: TranscriptFeature,
         translator: Translator | None,
         cache: Cache,
     ) -> None:
+        """Create the feature.
+
+        Args:
+            transcripts: Transcript feature that provides the original.
+            translator: Translator for other languages, or None for the chat mode.
+            cache: Cache of the results.
+        """
         self._transcripts = transcripts
         self._translator = translator
         self._cache = cache
@@ -54,6 +67,16 @@ class SubtitlesFeature:
         *,
         use_cache: bool = True,
     ) -> TranscriptResult:
+        """Get the subtitles of a video in one language.
+
+        Args:
+            video_id: YouTube video id.
+            language: Language code of the subtitles.
+            use_cache: Whether saved results may be used.
+
+        Returns:
+            The transcript in the requested language, with its completeness and warnings.
+        """
         if self._translator is None:
             return await self._transcripts.run(
                 video_id=video_id,
@@ -158,7 +181,12 @@ def register(
     app,
     get_context,
 ) -> None:
-    """Adds the `subs` command (CLI layer; imported lazily to keep the feature core light)."""
+    """Add the ``subs`` command to the CLI application.
+
+    Args:
+        app: Typer application.
+        get_context: Function that returns the shared context of the command.
+    """
     from lingotube import commands as c
     from lingotube.writers import render
 

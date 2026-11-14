@@ -1,3 +1,5 @@
+"""Tests of the transcript models and the transcript JSON format."""
+
 import pytest
 
 from lingotube.errors import (
@@ -12,6 +14,14 @@ from lingotube.models import Cue, Transcript
 
 
 def make() -> Transcript:
+    """Build a transcript with the given cues.
+
+    Args:
+        cues: Cues of the transcript.
+
+    Returns:
+        The transcript.
+    """
     return Transcript(
         video_id="dQw4w9WgXcQ",
         duration=750.0,
@@ -35,11 +45,13 @@ def make() -> Transcript:
 
 
 def test_roundtrip():
+    """Check that a transcript survives a round trip through its dict form."""
     t = make()
     assert Transcript.from_dict(d=t.to_dict()) == t
 
 
 def test_to_dict_keys():
+    """Check the keys of the transcript dict."""
     d = make().to_dict()
     assert set(d) == {"video_id", "duration", "language", "prompt_version", "cues"}
     assert d["cues"][0] == {"id": 1, "start": 2.0, "end": 4.0, "text": "Help!"}
@@ -69,6 +81,7 @@ def test_to_dict_keys():
     ],
 )
 def test_from_dict_invalid(bad):
+    """Check that invalid transcript data is rejected."""
     with pytest.raises(expected_exception=ValidationError):
         Transcript.from_dict(d=bad)
 
@@ -88,6 +101,7 @@ def test_errors(
     code,
     exit_code,
 ):
+    """Check the validation errors for invalid transcript data."""
     e = cls(
         message="boom",
         hint="try this",

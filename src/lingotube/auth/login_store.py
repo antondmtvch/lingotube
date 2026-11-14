@@ -17,10 +17,18 @@ _FORMAT_VERSION = 1
 
 @dataclass(frozen=True)
 class SavedLogin:
+    """A sign-in saved by ``lingotube login``.
+
+    Attributes:
+        browser: Browser the sign-in was made in.
+        cookies: Cookie names mapped to values.
+    """
+
     browser: str
     cookies: dict[str, str]
 
     def __repr__(self) -> str:
+        """Hide the cookie values in the representation."""
         return f"SavedLogin(browser={self.browser}, cookies=***)"
 
 
@@ -56,23 +64,55 @@ def _parse_saved_login(raw_text: str) -> SavedLogin:
 
 
 class LoginCookieStore:
+    """Stores the sign-in of ``lingotube login`` in one JSON file, written atomically."""
+
     def __init__(self, cookies_file: Path) -> None:
+        """Create the store.
+
+        Args:
+            cookies_file: JSON file where the sign-in is kept.
+        """
         self._cookies_file = cookies_file
 
     def exists(self) -> bool:
+        """Return True if the file with the saved sign-in exists.
+
+        Returns:
+            True if the file exists.
+        """
         return self._cookies_file.is_file()
 
     async def read(self) -> SavedLogin:
+        """Read the saved sign-in.
+
+        Returns:
+            The saved sign-in.
+
+        Raises:
+            AuthError: If the file is missing, unreadable or damaged.
+        """
         return await asyncio.to_thread(self._read_blocking)
 
     async def write(self, saved: SavedLogin) -> None:
+        """Save the sign-in, replacing the previous one.
+
+        Args:
+            saved: Sign-in to save.
+
+        Raises:
+            OSError: If the file cannot be written.
+        """
         await asyncio.to_thread(
             self._write_blocking,
             saved,
         )
 
     async def delete(self) -> bool:
-        """True if a file was removed."""
+        """Remove the saved sign-in file, if there is one.
+
+        Returns:
+            True if a file was removed.
+        """
         return await asyncio.to_thread(self._delete_blocking)
 
     def _read_blocking(self) -> SavedLogin:

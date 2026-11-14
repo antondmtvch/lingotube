@@ -1,3 +1,5 @@
+"""Tests of the file store of the saved sign-in."""
+
 import os
 import stat
 
@@ -10,6 +12,7 @@ from lingotube.errors import AuthError
 
 
 async def test_write_then_read_roundtrip(tmp_path):
+    """Check that a saved sign-in reads back unchanged."""
     store = LoginCookieStore(cookies_file=tmp_path / "sub" / "login-cookies.json")
     assert not store.exists()
     await store.write(saved=SavedLogin(browser="edge", cookies={"SAPISID": "abc"}))
@@ -20,6 +23,7 @@ async def test_write_then_read_roundtrip(tmp_path):
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX mode bits")
 async def test_written_file_is_owner_only(tmp_path):
+    """Check that the written file is readable by its owner only."""
     path = tmp_path / "login-cookies.json"
     await LoginCookieStore(cookies_file=path).write(saved=SavedLogin(browser="chrome", cookies={"a": "b"}))
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
@@ -38,6 +42,7 @@ async def test_written_file_is_owner_only(tmp_path):
     ],
 )
 async def test_corrupted_file_is_auth_error_without_content(tmp_path, content):
+    """Check that a damaged file raises AuthError without its content."""
     path = tmp_path / "login-cookies.json"
     path.write_text(content, encoding="utf-8")
     with pytest.raises(AuthError) as caught:
@@ -47,6 +52,7 @@ async def test_corrupted_file_is_auth_error_without_content(tmp_path, content):
 
 
 async def test_failed_write_leaves_no_temporary_file(tmp_path, monkeypatch):
+    """Check that a failed write leaves no temporary file behind."""
     path = tmp_path / "login-cookies.json"
 
     def failing_replace(src, dst):
@@ -59,6 +65,7 @@ async def test_failed_write_leaves_no_temporary_file(tmp_path, monkeypatch):
 
 
 async def test_write_replaces_existing_file_without_leftovers(tmp_path):
+    """Check that a write replaces the old file and leaves nothing behind."""
     path = tmp_path / "login-cookies.json"
     store = LoginCookieStore(cookies_file=path)
     await store.write(saved=SavedLogin(browser="chrome", cookies={"a": "old"}))
@@ -68,12 +75,14 @@ async def test_write_replaces_existing_file_without_leftovers(tmp_path):
 
 
 async def test_missing_file_is_auth_error(tmp_path):
+    """Check that a missing file raises AuthError."""
     with pytest.raises(AuthError) as caught:
         await LoginCookieStore(cookies_file=tmp_path / "none.json").read()
     assert caught.value.hint == LOGIN_HINT
 
 
 async def test_delete_reports_whether_file_existed(tmp_path):
+    """Check that delete reports whether a file was removed."""
     store = LoginCookieStore(cookies_file=tmp_path / "login-cookies.json")
     assert await store.delete() is False
     await store.write(saved=SavedLogin(browser="chrome", cookies={}))
@@ -82,5 +91,6 @@ async def test_delete_reports_whether_file_existed(tmp_path):
 
 
 def test_saved_login_repr_hides_values():
+    """Check that the representation of a saved sign-in hides the values."""
     text = repr(SavedLogin(browser="chrome", cookies={"SAPISID": "LEAKME"}))
     assert text == "SavedLogin(browser=chrome, cookies=***)"

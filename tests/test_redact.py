@@ -1,7 +1,10 @@
+"""Tests of the redaction of secrets in text."""
+
 from lingotube.redact import redact
 
 
 def test_redacts_all_occurrences():
+    """Check that every occurrence of a secret is hidden."""
     assert (
         redact(
             text="a SECRET b SECRET",
@@ -12,6 +15,7 @@ def test_redacts_all_occurrences():
 
 
 def test_empty_secret_ignored():
+    """Check that an empty secret is ignored."""
     assert (
         redact(
             text="abc",
@@ -22,6 +26,7 @@ def test_empty_secret_ignored():
 
 
 def test_multiple_secrets():
+    """Check that several secrets are hidden."""
     assert (
         redact(
             text="x A y B",
@@ -32,6 +37,7 @@ def test_multiple_secrets():
 
 
 def test_overlapping_secrets_fully_masked():
+    """Check that overlapping secrets are hidden as one mask."""
     assert (
         redact(
             text="xabcdefx",

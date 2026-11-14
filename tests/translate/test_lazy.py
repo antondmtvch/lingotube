@@ -1,3 +1,5 @@
+"""Tests of the lazy translator: the real translator is built only when it is needed."""
+
 import pytest
 
 from lingotube.models import Cue
@@ -14,11 +16,22 @@ CUES = [
 
 
 class Upper:
+    """Translator that makes the text upper case."""
+
     async def translate(
         self,
         cues,
         target_language,
     ):
+        """Return the cues with their text in upper case.
+
+        Args:
+            cues: Cues to translate.
+            target_language: Language to translate to. Not used.
+
+        Returns:
+            The translated cues.
+        """
         return [
             Cue(
                 id=c.id,
@@ -31,6 +44,7 @@ class Upper:
 
 
 async def test_factory_runs_only_on_translate():
+    """Check that the factory runs only when a translation is requested."""
     calls: list[int] = []
 
     def factory():
@@ -47,6 +61,8 @@ async def test_factory_runs_only_on_translate():
 
 
 async def test_awaitable_factory_is_supported():
+    """Check that a factory that returns an awaitable is supported."""
+
     async def factory():
         return Upper()
 
@@ -58,6 +74,7 @@ async def test_awaitable_factory_is_supported():
 
 
 async def test_prepare_builds_the_translator_once_and_surfaces_its_error():
+    """Check that prepare builds the translator once and passes on its error."""
     calls: list[int] = []
 
     def factory():

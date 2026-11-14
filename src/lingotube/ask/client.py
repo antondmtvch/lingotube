@@ -42,7 +42,7 @@ _STALE_COOKIES = "YouTube не видит вход в аккаунт: cookies у
 
 
 class Pacer:
-    """Guarantees at least `min_interval` seconds between the starts of consecutive requests."""
+    """Keep at least ``min_interval`` seconds between the starts of consecutive requests."""
 
     def __init__(
         self,
@@ -50,12 +50,23 @@ class Pacer:
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
+        """Create the pacer.
+
+        Args:
+            min_interval: Minimum number of seconds between the starts of two requests.
+            sleep: Coroutine function that waits; replaceable in tests.
+            clock: Monotonic clock in seconds; replaceable in tests.
+        """
         self._min_interval = min_interval
         self._sleep = sleep
         self._clock = clock
         self._last: float | None = None
 
     async def wait(self) -> None:
+        """Wait until the minimum interval since the previous request has passed.
+
+        The first call does not wait.
+        """
         if self._last is not None:
             delay = self._min_interval - (self._clock() - self._last)
             if delay > 0:
@@ -63,17 +74,44 @@ class Pacer:
         self._last = self._clock()
 
     def __repr__(self) -> str:
+        """Show the minimum interval."""
         return f"Pacer(min_interval={self._min_interval})"
 
 
 class AskSession(Protocol):
+    """One open Ask chat for one video, to which questions are sent in turn.
+
+    Attributes:
+        info: Facts about the video that the chat belongs to.
+    """
+
     info: VideoInfo
 
-    async def ask(self, prompt: str) -> str: ...
+    async def ask(self, prompt: str) -> str:
+        """Send a question to the chat and return the answer.
+
+        Args:
+            prompt: Question or instruction to send.
+
+        Returns:
+            The answer as plain text.
+        """
+        ...
 
 
 class AskClient(Protocol):
-    async def open(self, video_id: str) -> AskSession: ...
+    """Opens Ask chats for videos."""
+
+    async def open(self, video_id: str) -> AskSession:
+        """Open an Ask chat for a video.
+
+        Args:
+            video_id: YouTube video id.
+
+        Returns:
+            The open chat session.
+        """
+        ...
 
 
 def _ensure_youtube(url: httpx.URL) -> None:
@@ -275,12 +313,29 @@ class YouTubeAskSession(AskSession):
         info: VideoInfo,
         cmd: SendCommand,
     ) -> None:
+        """Create the session.
+
+        Args:
+            channel: Request channel of this chat.
+            info: Facts about the video.
+            cmd: Command that sends the next question.
+        """
         self._channel = channel
         self.info = info
         self._cmd = cmd
         channel.add_secrets(values=[cmd.continuation, cmd.click_tracking_params])
 
     async def ask(self, prompt: str) -> str:
+        """Send a question to the chat and return the answer.
+
+        The send command is refreshed from the response, so the next question can follow.
+
+        Args:
+            prompt: Question or instruction to send.
+
+        Returns:
+            The answer as plain text.
+        """
         now_ms = int(self._channel.wall_clock() * 1000)
         body = wire.build_ask_body(
             context=self._channel.context,
@@ -304,10 +359,16 @@ class YouTubeAskSession(AskSession):
         return answer
 
     def __repr__(self) -> str:
+        """Show the video id, never the request secrets."""
         return f"YouTubeAskSession(video_id={self.info.video_id!r})"
 
 
 class YouTubeAskClient(AskClient):
+    """Ask client for the real YouTube chat.
+
+    Requests run one at a time, paced by the pacer. Cookies are loaded again on every open.
+    """
+
     def __init__(
         self,
         http: httpx.AsyncClient,
@@ -318,6 +379,16 @@ class YouTubeAskClient(AskClient):
         wall_clock: Callable[[], float] = time.time,
         timeout: float = REQUEST_TIMEOUT,
     ) -> None:
+        """Create the client.
+
+        Args:
+            http: Shared HTTP client.
+            cookies: Source of the account cookies.
+            pacer: Pacer that spaces the requests.
+            max_retries: Number of retries after rate-limit and server errors.
+            wall_clock: Function that returns the current Unix time in seconds.
+            timeout: Seconds to wait for each request.
+        """
         self._http = http
         self._cookies = cookies
         self._pacer = pacer
@@ -327,6 +398,19 @@ class YouTubeAskClient(AskClient):
         self._lock = asyncio.Lock()
 
     async def open(self, video_id: str) -> YouTubeAskSession:
+        """Open an Ask chat for a video.
+
+        Args:
+            video_id: YouTube video id.
+
+        Returns:
+            The open chat session.
+
+        Raises:
+            AuthError: If the cookies are missing, stale or do not sign in to YouTube.
+            ChatUnavailableError: If the video has no Ask chat for this account.
+            NetworkError: If YouTube cannot be reached or refuses the request.
+        """
         creds = await self._cookies.load()
         creds.require_sapisid()
         ch = _Channel(
@@ -388,4 +472,5 @@ class YouTubeAskClient(AskClient):
         )
 
     def __repr__(self) -> str:
+        """Show the retry setting, never the cookies."""
         return f"YouTubeAskClient(max_retries={self._max_retries})"

@@ -1,3 +1,5 @@
+"""Tests of the versioned prompt texts and their variables."""
+
 from importlib import resources
 
 import pytest
@@ -10,10 +12,12 @@ NAMES = ("transcript", "transcript_translated", "summary", "translate_batch")
 
 
 def test_version():
+    """Check the version of the prompts."""
     assert PROMPT_VERSION == "1"
 
 
 def test_transcript_substitutes_range():
+    """Check that the transcript prompt gets the start and the end of the range."""
     text = load_prompt(
         name="transcript",
         start="0:00",
@@ -24,6 +28,7 @@ def test_transcript_substitutes_range():
 
 
 def test_transcript_hour_format_kept():
+    """Check that the hour format of a timecode is kept in the prompt."""
     assert "1:05:00" in load_prompt(
         name="transcript",
         start="1:05:00",
@@ -32,6 +37,7 @@ def test_transcript_hour_format_kept():
 
 
 def test_translated_mentions_language_and_forbids_original():
+    """Check that the translated prompt names the language and forbids the original text."""
     text = load_prompt(
         name="transcript_translated",
         start="0:00",
@@ -43,6 +49,7 @@ def test_translated_mentions_language_and_forbids_original():
 
 
 def test_summary_language():
+    """Check that the summary prompt gets the language."""
     text = load_prompt(
         name="summary",
         language="Russian",
@@ -51,6 +58,7 @@ def test_summary_language():
 
 
 def test_translate_batch_keeps_tab_and_language():
+    """Check that the batch translation prompt keeps the tab and gets the language."""
     text = load_prompt(
         name="translate_batch",
         language="German",
@@ -72,6 +80,7 @@ def test_missing_variable_raises_key_error(
     name,
     variables,
 ):
+    """Check that a missing variable raises KeyError."""
     with pytest.raises(expected_exception=KeyError):
         load_prompt(
             name=name,
@@ -80,6 +89,7 @@ def test_missing_variable_raises_key_error(
 
 
 def test_extra_variable_is_ignored():
+    """Check that an extra variable is ignored."""
     assert "{" not in load_prompt(
         name="summary",
         language="Russian",
@@ -88,6 +98,7 @@ def test_extra_variable_is_ignored():
 
 
 def test_substituted_value_with_braces_is_not_reprocessed():
+    """Check that a substituted value with braces is not substituted again."""
     text = load_prompt(
         name="summary",
         language="{start}",
@@ -96,6 +107,7 @@ def test_substituted_value_with_braces_is_not_reprocessed():
 
 
 def test_unknown_name_raises():
+    """Check that an unknown prompt name raises an error."""
     with pytest.raises(expected_exception=FileNotFoundError):
         load_prompt(name="nope")  # type: ignore[arg-type]
 
@@ -105,12 +117,14 @@ def test_unknown_name_raises():
     argvalues=NAMES,
 )
 def test_files_are_package_data(name):
+    """Check that the prompt files are shipped with the package."""
     path = resources.files("lingotube") / "prompts" / f"{name}.v1.txt"
     assert path.is_file()
     assert path.read_text(encoding="utf-8").strip()
 
 
 def test_format_doc_is_package_data():
+    """Check that the format document is shipped with the package."""
     assert (resources.files("lingotube") / "prompts" / "FORMAT.md").is_file()
 
 
@@ -119,7 +133,13 @@ def test_format_doc_is_package_data():
     argvalues=["transcript", "transcript_translated"],
 )
 def test_requested_timecode_format_parses(name):
-    """The sample answer follows the prompt: (м:сс) text, (ч:мм:сс) after one hour."""
+    """Check that the sample answer format of the prompts is parsed.
+
+    The sample answer uses ``m:ss`` timecodes, and ``h:mm:ss`` after one hour.
+
+    Args:
+        name: Prompt name, the transcript or the translated transcript.
+    """
     prompt = load_prompt(
         name=name,
         start="0:00",
@@ -148,6 +168,7 @@ def test_requested_timecode_format_parses(name):
 
 
 def test_translate_batch_requested_format_parses():
+    """Check that the format requested by the batch translation prompt is parsed."""
     prompt = load_prompt(
         name="translate_batch",
         language="German",

@@ -1,3 +1,5 @@
+"""Tests of the choice of the cookie source in the container."""
+
 import io
 
 from lingotube.auth.browser import BrowserCookieSource, ChainCookieSource
@@ -9,6 +11,15 @@ from lingotube.container import build_container
 
 
 def make_container(tmp_path, settings: Settings):
+    """Build the container for the given settings in a temporary folder.
+
+    Args:
+        tmp_path: Temporary folder of the test.
+        settings: Settings to use.
+
+    Returns:
+        The container.
+    """
     return build_container(
         settings=settings,
         env={},
@@ -22,6 +33,11 @@ def make_container(tmp_path, settings: Settings):
 
 
 async def save_login(tmp_path) -> None:
+    """Save a fake sign-in in the temporary folder.
+
+    Args:
+        tmp_path: Temporary folder of the test.
+    """
     await LoginCookieStore(cookies_file=tmp_path / "login-cookies.json").write(
         saved=SavedLogin(browser="chrome", cookies={"SAPISID": "s"})
     )
@@ -30,6 +46,7 @@ async def save_login(tmp_path) -> None:
 async def test_cookie_source_prefers_cookies_file_then_browser_then_login_profile(
     tmp_path,
 ):
+    """Check that the cookies file is preferred, then the browser, then the login profile."""
     await save_login(tmp_path=tmp_path)
     with_file = make_container(
         tmp_path=tmp_path,
@@ -43,11 +60,13 @@ async def test_cookie_source_prefers_cookies_file_then_browser_then_login_profil
 
 
 def test_cookie_source_falls_back_to_browser_chain_without_login(tmp_path):
+    """Check that without a saved sign-in the container falls back to the browser chain."""
     container = make_container(tmp_path=tmp_path, settings=Settings())
     assert isinstance(container.cookie_source(), ChainCookieSource)
 
 
 async def test_env_cookies_file_keeps_priority_over_a_saved_login(tmp_path):
+    """Check that the cookies file from the environment is used before a saved sign-in."""
     await save_login(tmp_path=tmp_path)
     settings = load_settings(path=None, env={"LINGOTUBE_COOKIES_FILE": str(tmp_path / "env.txt")})
     container = make_container(tmp_path=tmp_path, settings=settings)

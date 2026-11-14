@@ -1,4 +1,4 @@
-"""Agent mode: validate an externally translated transcript against the cached original and cache it."""
+"""Agent mode: check an external translation against the cached original and cache it."""
 
 from dataclasses import dataclass, replace
 from typing import Any
@@ -25,9 +25,20 @@ def validate_translation(
     translated: dict[str, Any],
     language: str,
 ) -> Transcript:
-    """Checks `translated` against `original`; original times always win.
+    """Check a translation against the original. The times of the original always win.
 
-    All problems are collected into one ValidationError listing the offending ids.
+    All problems are collected into one error that lists the ids concerned.
+
+    Args:
+        original: The original transcript.
+        translated: The translation in the transcript JSON format.
+        language: Language code of the translation.
+
+    Returns:
+        The transcript with the original times and the translated text.
+
+    Raises:
+        ValidationError: If the translation does not match the original.
     """
     parsed = Transcript.from_dict(d=translated)
     if parsed.video_id != original.video_id:
@@ -79,12 +90,26 @@ def validate_translation(
 
 @dataclass(frozen=True)
 class BuildResult:
+    """Result of the build command.
+
+    Attributes:
+        transcript: The validated transcript.
+        warnings: Warnings, for example about the cache.
+    """
+
     transcript: Transcript
     warnings: tuple[str, ...] = ()
 
 
 class BuildFeature:
+    """Check a translation made by an agent and cache it as subtitles."""
+
     def __init__(self, cache: Cache) -> None:
+        """Create the feature.
+
+        Args:
+            cache: Cache that holds the original transcript and the result.
+        """
         self._cache = cache
 
     async def run(
@@ -93,6 +118,19 @@ class BuildFeature:
         language: str,
         translated: dict[str, Any],
     ) -> BuildResult:
+        """Check the translation of a video against its cached original.
+
+        Args:
+            video_id: YouTube video id.
+            language: Language code of the translation.
+            translated: The translation in the transcript JSON format.
+
+        Returns:
+            The build result.
+
+        Raises:
+            ValidationError: If the original is not cached or the translation does not match it.
+        """
         original = await load_cached_transcript(
             cache=self._cache,
             video_id=video_id,
@@ -147,7 +185,12 @@ def register(
     app,
     get_context,
 ) -> None:
-    """Adds the `build` command: validates an agent's translation and writes subtitles."""
+    """Add the ``build`` command to the CLI application.
+
+    Args:
+        app: Typer application.
+        get_context: Function that returns the shared context of the command.
+    """
     import asyncio
     from pathlib import Path
     from typing import Annotated

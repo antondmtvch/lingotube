@@ -1,3 +1,5 @@
+"""Tests of the SRT, WebVTT and JSON output of transcripts."""
+
 import json
 
 import pytest
@@ -29,6 +31,7 @@ T = Transcript(
 
 
 def test_srt():
+    """Check the SRT output."""
     assert render(
         transcript=T,
         fmt="srt",
@@ -36,6 +39,7 @@ def test_srt():
 
 
 def test_vtt():
+    """Check the WebVTT output."""
     assert render(
         transcript=T,
         fmt="vtt",
@@ -43,6 +47,7 @@ def test_vtt():
 
 
 def test_json_roundtrip():
+    """Check that the JSON output reads back unchanged."""
     assert (
         Transcript.from_dict(
             d=json.loads(
@@ -57,6 +62,7 @@ def test_json_roundtrip():
 
 
 def test_offset_shifts_and_clamps_at_zero():
+    """Check that the offset shifts the times and that negative times are clamped at zero."""
     assert "00:00:02,500 --> 00:00:04,500" in render(
         transcript=T,
         fmt="srt",
@@ -70,6 +76,7 @@ def test_offset_shifts_and_clamps_at_zero():
 
 
 def test_offset_applies_to_json():
+    """Check that the offset also applies to the JSON output."""
     data = json.loads(
         s=render(
             transcript=T,
@@ -81,6 +88,7 @@ def test_offset_applies_to_json():
 
 
 def test_text_with_arrow_or_blank_line_is_sanitized():
+    """Check that arrows and blank lines in the text are cleaned."""
     t = Transcript(
         video_id="v",
         duration=10,
@@ -104,6 +112,7 @@ def test_text_with_arrow_or_blank_line_is_sanitized():
 
 
 def test_unknown_format_raises():
+    """Check that an unknown format raises ValidationError."""
     with pytest.raises(expected_exception=ValidationError):
         render(
             transcript=T,
@@ -112,6 +121,7 @@ def test_unknown_format_raises():
 
 
 def test_missing_end_raises():
+    """Check that a cue without an end time raises ValidationError."""
     t = Transcript(
         video_id="v",
         duration=10,
@@ -156,6 +166,7 @@ def _t(*texts):
     argvalues=["  ", "\n\n", "\r"],
 )
 def test_empty_text_cues_are_skipped_and_srt_renumbered(empty):
+    """Check that cues with empty text are skipped and the SRT cues are renumbered."""
     t = _t(
         "a",
         empty,
@@ -189,6 +200,7 @@ def test_empty_text_cues_are_skipped_and_srt_renumbered(empty):
     argvalues=["--->", "---->", "-->"],
 )
 def test_arrow_variants_neutralized(arrow):
+    """Check that the arrow variants in the text are neutralized."""
     for fmt in ("srt", "vtt"):
         assert (
             render(
@@ -200,6 +212,7 @@ def test_arrow_variants_neutralized(arrow):
 
 
 def test_lone_cr_is_a_line_break():
+    """Check that a lone carriage return is treated as a line break."""
     assert "a\nb\n" in render(
         transcript=_t("a\rb"),
         fmt="srt",
@@ -211,6 +224,7 @@ def test_lone_cr_is_a_line_break():
 
 
 def test_cue_entirely_before_negative_offset_is_dropped():
+    """Check that a cue entirely before a negative offset is dropped."""
     out = render(
         transcript=T,
         fmt="srt",
@@ -232,6 +246,7 @@ def test_cue_entirely_before_negative_offset_is_dropped():
     argvalues=[float("nan"), float("inf"), float("-inf")],
 )
 def test_non_finite_offset_is_rejected(offset):
+    """Check that a non-finite offset is rejected."""
     with pytest.raises(expected_exception=ValidationError) as ei:
         render(
             transcript=T,
@@ -242,6 +257,7 @@ def test_non_finite_offset_is_rejected(offset):
 
 
 def test_millisecond_rounding_carries_into_seconds():
+    """Check that rounding of milliseconds carries into the seconds."""
     t = Transcript(
         video_id="vid",
         duration=100.0,
@@ -263,6 +279,7 @@ def test_millisecond_rounding_carries_into_seconds():
 
 
 def test_hours_of_100_or_more_keep_all_digits():
+    """Check that hours of 100 or more keep all their digits."""
     t = Transcript(
         video_id="vid",
         duration=400000.0,

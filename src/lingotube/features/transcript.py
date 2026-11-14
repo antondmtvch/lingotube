@@ -1,14 +1,14 @@
-"""Capability «транскрипция»: full timed transcript from the YouTube chat, chunk by chunk.
+"""Transcript feature: a full timed transcript from the YouTube chat, range by range.
 
-Flow (spec §6, §7, §16):
+Flow:
 - a complete cached result is served without opening the chat;
-- otherwise one chat is opened per run and the video is asked in planned ranges;
-- a range whose answer stops early is re-asked from the last received timecode
-  (at most MAX_REREQUESTS times, and no further once a re-request brings nothing new);
-- every finished range is cached at once, so a failed or cancelled run resumes
-  from the first missing range; a range that stayed truncated is cached as such
-  and continued on the next run, unless the chat already had nothing more to add;
-- the final result is cached with a `complete` flag; an incomplete one is never
+- otherwise one chat is opened per run, and the video is asked in planned ranges;
+- a range whose answer stops early is asked again from the last timecode received
+  (at most MAX_REREQUESTS times, and not again once a repeat brings nothing new);
+- every finished range is cached at once, so a failed or cancelled run resumes from
+  the first missing range; a range that stayed truncated is cached as such and
+  continued on the next run, unless the chat already had nothing more to add;
+- the final result is cached with a ``complete`` flag; an incomplete one is never
   served as ready.
 """
 
@@ -43,6 +43,14 @@ KIND_FINAL = "transcript"
 
 @dataclass(frozen=True)
 class TranscriptResult:
+    """A transcript with its completeness and the warnings for the person.
+
+    Attributes:
+        transcript: The transcript.
+        completeness: Result of the completeness check.
+        warnings: Warnings that explain gaps or an incomplete result.
+    """
+
     transcript: Transcript
     completeness: Completeness
     warnings: tuple[str, ...]
@@ -60,7 +68,15 @@ def transcript_key(
     video_id: str,
     lang_key: str = "orig",
 ) -> CacheKey:
-    """Cache key of the final transcript (`lang_key` "orig" = original language)."""
+    """Return the cache key of the final transcript.
+
+    Args:
+        video_id: YouTube video id.
+        lang_key: Language code, or ``orig`` for the original language.
+
+    Returns:
+        The cache key.
+    """
     return CacheKey(
         video_id=video_id,
         kind=KIND_FINAL,
@@ -77,7 +93,17 @@ async def load_cached_transcript(
     *,
     require_complete: bool,
 ) -> Transcript | None:
-    """Cached final transcript, or None if absent/malformed (or incomplete when required)."""
+    """Load the cached final transcript.
+
+    Args:
+        cache: Cache to read from.
+        video_id: YouTube video id.
+        lang_key: Language code, or ``orig`` for the original language.
+        require_complete: If True, an incomplete transcript counts as missing.
+
+    Returns:
+        The transcript, or None if it is absent, malformed or (when required) incomplete.
+    """
     return _parse_final(
         data=await cache.get(
             key=transcript_key(
@@ -93,7 +119,15 @@ def _parse_final(
     data: dict | None,
     require_complete: bool,
 ) -> Transcript | None:
-    """The one place a cached final payload is parsed; malformed → None."""
+    """Parse a cached final result. Malformed data gives None.
+
+    Args:
+        data: Cached payload, or None.
+        require_complete: If True, an incomplete result counts as missing.
+
+    Returns:
+        The transcript, or None.
+    """
     if data is None or (require_complete and data.get("complete") is not True):
         return None
     try:
@@ -107,7 +141,15 @@ def format_time(
     *,
     ceil: bool = False,
 ) -> str:
-    """`m:ss` below one hour, `h:mm:ss` from one hour."""
+    """Format seconds as ``m:ss``, or as ``h:mm:ss`` from one hour.
+
+    Args:
+        seconds: Time in seconds.
+        ceil: If True, round up to a whole second; otherwise round down.
+
+    Returns:
+        The formatted time.
+    """
     total = math.ceil(seconds) if ceil else math.floor(seconds)
     hours, rest = divmod(
         max(
@@ -124,8 +166,17 @@ def format_time(
 
 
 def keep_second_of_identical(lines: Sequence[ParsedLine]) -> list[ParsedLine]:
-    """Chat translation sometimes interleaves original + translation under the same timecode:
-    of two consecutive lines with identical start and end only the second is kept."""
+    """Keep one line from each pair of identical timed lines.
+
+    The chat sometimes puts the original and the translation under the same timecode. Of
+    two consecutive lines with the same start and end, only the second one is kept.
+
+    Args:
+        lines: Parsed lines in order.
+
+    Returns:
+        The lines with the duplicates removed.
+    """
     out: list[ParsedLine] = []
     i = 0
     while i < len(lines):
@@ -142,6 +193,12 @@ def keep_second_of_identical(lines: Sequence[ParsedLine]) -> list[ParsedLine]:
 
 
 class TranscriptFeature:
+    """Get the full timed transcript of a video from the YouTube chat.
+
+    The video is asked range by range. Finished ranges are cached, so an interrupted run
+    resumes where it stopped.
+    """
+
     def __init__(
         self,
         ask: AskClient,
@@ -149,6 +206,14 @@ class TranscriptFeature:
         settings: Settings,
         progress: Callable[[int, int], None] = lambda done, total: None,
     ) -> None:
+        """Create the feature.
+
+        Args:
+            ask: Client of the YouTube chat.
+            cache: Cache of the results.
+            settings: Effective settings; the range length comes from them.
+            progress: Function that receives the number of ranges done and the total.
+        """
         self._ask = ask
         self._cache = cache
         self._settings = settings
@@ -162,14 +227,27 @@ class TranscriptFeature:
         use_cache: bool = True,
         on_opened: Callable[[VideoInfo], Awaitable[None]] | None = None,
     ) -> TranscriptResult:
-        """`language=None` → original language; otherwise the chat translates directly.
+        """Get the transcript of a video.
 
-        `on_opened` is awaited once the chat is open (so the video's language is known) and
-        before any question is asked; it is not called when a cached result is served.
-        An exception from it aborts the run before any chat request.
+        ``language=None`` means the original language. Otherwise the chat translates the text
+        directly.
 
-        `use_cache=False` neither reads nor serves cached parts/results, but fresh
-        parts and the fresh result are still written.
+        ``on_opened`` is awaited once the chat is open, so the language of the video is known,
+        and before any question is asked. It is not called when a cached result is served. An
+        exception from it stops the run before any chat request.
+
+        ``use_cache=False`` does not read or serve cached parts and results, but the fresh parts
+        and the fresh result are still written.
+
+        Args:
+            video_id: YouTube video id.
+            language: Language code of the translation, or None for the original language.
+            use_cache: Whether saved parts and results may be used.
+            on_opened: Optional coroutine function that is called with the video facts once the
+                chat is open.
+
+        Returns:
+            The transcript with its completeness and warnings.
         """
         lang_key = language or "orig"
         final_key = transcript_key(
@@ -585,7 +663,12 @@ def register(
     app,
     get_context,
 ) -> None:
-    """Adds the `transcript` command: the original-language transcript (JSON by default, spec §8)."""
+    """Add the ``transcript`` command to the CLI application.
+
+    Args:
+        app: Typer application.
+        get_context: Function that returns the shared context of the command.
+    """
     from lingotube import commands as c
     from lingotube.writers import render
 

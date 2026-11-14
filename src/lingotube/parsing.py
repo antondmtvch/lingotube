@@ -1,4 +1,4 @@
-"""Разбор текстового ответа чата YouTube в реплики с тайм-кодами."""
+"""Parse the text answer of the YouTube chat into timed lines."""
 
 import re
 from dataclasses import dataclass
@@ -19,13 +19,28 @@ _CUE = re.compile(
     slots=True,
 )
 class ParsedLine:
+    """One timed line parsed from a chat answer.
+
+    Attributes:
+        start: Start time in seconds.
+        end: End time in seconds, or None if the answer gave no end.
+        text: Text of the line.
+    """
+
     start: float
     end: float | None
     text: str
 
 
 def _seconds(stamp: str) -> float | None:
-    """Секунды из м:сс / ч:мм:сс; None, если части вне диапазона 0-59."""
+    """Convert a timecode in m:ss or h:mm:ss form to seconds.
+
+    Args:
+        stamp: Timecode text, for example ``1:05`` or ``1:02:03``.
+
+    Returns:
+        The number of seconds, or None if a part is outside 0-59.
+    """
     parts = [int(p) for p in stamp.split(":")]
     if any(p > 59 for p in parts[1:]) or (len(parts) == 3 and parts[0] > 99):
         return None
@@ -36,7 +51,16 @@ def _seconds(stamp: str) -> float | None:
 
 
 def parse_answer(text: str) -> list[ParsedLine]:
-    """Превращает ответ чата в реплики; без тайм-кодов возвращает []. Не бросает."""
+    """Turn the chat answer into timed lines.
+
+    Lines without a valid timecode are not used. The function never raises.
+
+    Args:
+        text: Text answer of the chat.
+
+    Returns:
+        The timed lines in order, or an empty list if the answer has no timecodes.
+    """
     cues: list[list] = []  # [start, end, text]
     gap = False  # после последней реплики встретилась пустая строка
     for raw in text.splitlines():

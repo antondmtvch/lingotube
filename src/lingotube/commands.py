@@ -35,6 +35,18 @@ INTERRUPTED = 130
 
 @dataclass
 class AppContext:
+    """Shared state of one command run: the container, the streams and the paths.
+
+    Attributes:
+        container: Dependency container of the run.
+        out: Stream for the result.
+        err: Stream for messages.
+        cwd: Folder where default output files go and relative paths are resolved.
+        settings_path: Settings file where ``--cookies-file`` is remembered, or None if
+            it is not remembered.
+        json_mode: True if the result is printed as one JSON document.
+    """
+
     container: Container
     out: TextIO
     err: TextIO
@@ -45,27 +57,62 @@ class AppContext:
 
     @property
     def settings(self) -> Settings:
+        """Return the effective settings of the run.
+
+        Returns:
+            The current settings.
+        """
         return self.container.settings()
 
     def use_settings(self, settings: Settings) -> None:
+        """Replace the settings of the run.
+
+        Args:
+            settings: Settings to use from now on.
+        """
         self.container.settings.override(provider=providers.Object(settings))
 
     async def provide(self, provider: Callable[[], Any]) -> Any:
-        """Resolves a provider; ones depending on async resources return awaitables."""
+        """Resolve a provider, and await the result if it is awaitable.
+
+        Args:
+            provider: Provider to call.
+
+        Returns:
+            The provided value.
+        """
         value = provider()
         return await value if inspect.isawaitable(object=value) else value
 
     async def close(self) -> None:
+        """Release the resources of the container, such as HTTP clients."""
         result = self.container.shutdown_resources()
         if inspect.isawaitable(object=result):
             await result
 
     def path(self, value: str | Path) -> Path:
+        """Resolve a path against the current folder.
+
+        Args:
+            value: Absolute or relative path.
+
+        Returns:
+            The path. A relative path is joined to the current folder; an absolute path is kept.
+        """
         return self.cwd / Path(value)
 
 
 @dataclass(frozen=True)
 class Common:
+    """Options shared by the commands.
+
+    Attributes:
+        json: True if the result is printed as one JSON document.
+        cookies_file: Cookies file given on the command line, or None.
+        browser: Browser given on the command line, or None.
+        no_cache: True if saved results must not be used.
+    """
+
     json: bool = False
     cookies_file: Path | None = None
     browser: str | None = None
@@ -73,11 +120,25 @@ class Common:
 
     @property
     def use_cache(self) -> bool:
+        """Return True unless the person asked not to use saved results.
+
+        Returns:
+            True if saved results may be used.
+        """
         return not self.no_cache
 
 
 @dataclass(frozen=True)
 class Outcome:
+    """What a command produced: the result, its text, the warnings and an optional error.
+
+    Attributes:
+        result: Data for the ``--json`` output.
+        text: Text for the normal output, or None.
+        warnings: Warnings to show to the person.
+        error: Problem with a result that was still delivered, or None.
+    """
+
     result: Any
     text: str | None = None  # what goes to `out` without --json
     warnings: tuple[str, ...] = ()
@@ -164,6 +225,17 @@ def execute(
     video: str | None,
     body: Body,
 ) -> None:
+    """Run the body of a command and print its outcome.
+
+    Args:
+        get_context: Function that builds the context of the run.
+        common: Options shared by the commands.
+        video: Video link or id, or None if the command takes no video.
+        body: Async function that does the work of the command.
+
+    Raises:
+        typer.Exit: Always, with the exit code of the run.
+    """
     ctx = get_context()
     ctx.json_mode = common.json
     try:
@@ -282,7 +354,20 @@ def report(
     warnings: tuple[str, ...] = (),
     error: LingotubeError | None = None,
 ) -> int:
-    """Writes the outcome (one JSON envelope with --json) and returns the exit code."""
+    """Write the outcome, as one JSON document with ``--json``, and return the exit code.
+
+    Args:
+        out: Stream for the result.
+        err: Stream for messages.
+        json_mode: True if the result is printed as one JSON document.
+        result: Data for the JSON output.
+        text: Text for the normal output.
+        warnings: Warnings to show.
+        error: Error to show, or None.
+
+    Returns:
+        The exit code: 0 if there is no error, otherwise the exit code of the error.
+    """
     if json_mode:
         envelope = {
             "ok": error is None,
@@ -318,6 +403,18 @@ def require_lang(
     lang: str | None,
     settings: Settings,
 ) -> str:
+    """Return the output language from the option or from the settings.
+
+    Args:
+        lang: Language code from the command line, or None.
+        settings: Effective settings.
+
+    Returns:
+        The language code.
+
+    Raises:
+        UsageError: If neither the option nor the settings give a language.
+    """
     value = (lang or "").strip() or (settings.lang or "").strip()
     if not value:
         raise UsageError(
@@ -332,6 +429,19 @@ def require_format(
     settings: Settings | None = None,
     default: str = "srt",
 ) -> str:
+    """Return a valid output format.
+
+    Args:
+        fmt: Format from the command line, or None.
+        settings: Settings that give the default format, if there are any.
+        default: Format used when there are no settings.
+
+    Returns:
+        The format name.
+
+    Raises:
+        UsageError: If the format is unknown.
+    """
     value = fmt if fmt is not None else (settings.format if settings is not None else default)
     if value not in FORMATS:
         raise UsageError(
@@ -342,6 +452,17 @@ def require_format(
 
 
 def require_offset(offset: float) -> float:
+    """Check that the offset is a finite number of seconds.
+
+    Args:
+        offset: Offset in seconds.
+
+    Returns:
+        The same offset.
+
+    Raises:
+        UsageError: If the offset is not finite.
+    """
     if not math.isfinite(offset):
         raise UsageError(message="--offset должен быть конечным числом секунд.")
     return offset
@@ -381,7 +502,20 @@ async def deliver(
     output: str | None,
     default_name: str,
 ) -> Path | None:
-    """Writes `text` to a file (UTF-8) and returns its path; `-o -` → None (the caller prints it)."""
+    """Write the text to a UTF-8 file and return the path.
+
+    Args:
+        ctx: Context of the run.
+        text: Text to write.
+        output: Path from ``-o``, or None to use the default name. ``-`` means standard output.
+        default_name: File name used when ``output`` is None.
+
+    Returns:
+        The path of the written file, or None if the text goes to standard output.
+
+    Raises:
+        LingotubeError: If the file cannot be written.
+    """
     if output == "-":
         return None
     path = ctx.path(value=output if output is not None else default_name)
@@ -407,9 +541,18 @@ async def transcript_outcome(
     output: str | None,
     warnings: tuple[str, ...] = (),
 ) -> Outcome:
-    """Delivers a rendered transcript; an incomplete one is still delivered, with exit code 5.
+    """Deliver a rendered transcript. An incomplete transcript is still delivered, with exit code 5.
 
-    `warnings` are added to those of a `TranscriptResult` (or stand alone for a bare Transcript).
+    Args:
+        ctx: Context of the run.
+        result: Transcript result or a bare transcript.
+        text: Rendered transcript text.
+        fmt: Output format, used in the default file name.
+        output: Path from ``-o``, or None to use the default name.
+        warnings: Extra warnings, added to those of the result.
+
+    Returns:
+        The outcome of the command.
     """
     if isinstance(
         result,

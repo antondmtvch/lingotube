@@ -1,3 +1,5 @@
+"""Tests of the login profile as a cookie source."""
+
 import pytest
 
 from lingotube.auth.base import LOGIN_HINT
@@ -8,6 +10,14 @@ from lingotube.errors import AuthError
 
 
 def make_paths(tmp_path) -> LoginPaths:
+    """Build the login paths inside a temporary folder.
+
+    Args:
+        tmp_path: Temporary folder of the test.
+
+    Returns:
+        The login paths.
+    """
     return LoginPaths(
         profile_dir=tmp_path / "login-profile",
         cookies_file=tmp_path / "login-cookies.json",
@@ -15,6 +25,7 @@ def make_paths(tmp_path) -> LoginPaths:
 
 
 async def test_login_source_loads_saved_cookies(tmp_path):
+    """Check that the source loads the saved cookies."""
     paths = make_paths(tmp_path=tmp_path)
     store = LoginCookieStore(cookies_file=paths.cookies_file)
     await store.write(saved=SavedLogin(browser="chrome", cookies={"SAPISID": "s1"}))
@@ -23,6 +34,7 @@ async def test_login_source_loads_saved_cookies(tmp_path):
 
 
 async def test_login_source_without_sapisid_is_auth_error_with_login_hint(tmp_path):
+    """Check that a saved sign-in without SAPISID raises AuthError with the login hint."""
     paths = make_paths(tmp_path=tmp_path)
     store = LoginCookieStore(cookies_file=paths.cookies_file)
     await store.write(saved=SavedLogin(browser="chrome", cookies={"SID": "LEAKME"}))
@@ -33,6 +45,7 @@ async def test_login_source_without_sapisid_is_auth_error_with_login_hint(tmp_pa
 
 
 async def test_refresh_from_profile_passes_paths_and_store(tmp_path):
+    """Check that the refresh receives the login paths and the store."""
     paths = make_paths(tmp_path=tmp_path)
     store = LoginCookieStore(cookies_file=paths.cookies_file)
     calls: list[dict] = []

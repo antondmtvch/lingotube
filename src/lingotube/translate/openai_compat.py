@@ -26,12 +26,24 @@ _LINE = re.compile(pattern=r"^\s*(\d+)(?:[\t ]+|[.):]\s*)(.*?)\s*$")
 
 
 class OpenAICompatTranslator:
+    """Translator over an OpenAI-compatible ``/chat/completions`` endpoint.
+
+    The API key is read before the object is created, so the object is ready at once.
+    """
+
     def __init__(
         self,
         http: httpx.AsyncClient,
         settings: TranslatorSettings,
         api_key: str,
     ) -> None:
+        """Create the translator.
+
+        Args:
+            http: HTTP client used only for the translation requests.
+            settings: Translator settings from the settings file.
+            api_key: API key. It is sent only in the Authorization header.
+        """
         self._http = http
         self._settings = settings
         self._api_key = api_key
@@ -44,6 +56,20 @@ class OpenAICompatTranslator:
         cues: Sequence[Cue],
         target_language: str,
     ) -> list[Cue]:
+        """Translate cues in batches, a few batches at a time.
+
+        Args:
+            cues: Cues to translate.
+            target_language: Language code of the result.
+
+        Returns:
+            The translated cues, in the original order.
+
+        Raises:
+            ValidationError: If the model returns a wrong set of numbered lines twice.
+            AuthError: If the model rejects the key.
+            NetworkError: If the model cannot be reached or answers with an error.
+        """
         size = self._settings.batch_size
         batches = [
             list(cues[i : i + size])

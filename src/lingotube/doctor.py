@@ -33,11 +33,31 @@ NETWORK_HINT = "Проверьте подключение к интернету 
 
 
 def browser_source_name(browser: str) -> str:
+    """Return the name of the cookie source for a browser.
+
+    Args:
+        browser: Browser name.
+
+    Returns:
+        The name shown in the doctor table.
+    """
     return f"браузер {browser}"
 
 
 @dataclass(frozen=True)
 class Check:
+    """One row of the doctor table.
+
+    Attributes:
+        name: Name of the check.
+        ok: True if the check passed.
+        detail: Short result text. It never contains secrets.
+        hint: Advice on how to fix a failure, or None.
+        critical: False if the check failed but another source works, so it is not an error.
+        unexpected: True if the check itself crashed. That is a bug, not a user problem.
+        soft_verdict: Word shown for a failure that is not critical.
+    """
+
     name: str
     ok: bool
     detail: str
@@ -64,6 +84,11 @@ class UnsetCookieFile:
     """The file source when no cookies file is configured."""
 
     async def load(self) -> Credentials:
+        """Fail, because no cookies file is configured.
+
+        Raises:
+            AuthError: Always.
+        """
         raise AuthError(
             message="Файл cookies не задан.",
             hint=EXPORT_HINT,
@@ -74,6 +99,11 @@ class UnsetLoginProfile:
     """The login-profile source when `lingotube login` was never run."""
 
     async def load(self) -> Credentials:
+        """Fail, because ``lingotube login`` was never run.
+
+        Raises:
+            AuthError: Always.
+        """
         raise AuthError(
             message="Вход через lingotube login не выполнялся.",
             hint=LOGIN_HINT,
@@ -84,9 +114,19 @@ class _Loaded:
     """Credentials already read: the chat check does not read the source again."""
 
     def __init__(self, creds: Credentials) -> None:
+        """Wrap credentials that were already read.
+
+        Args:
+            creds: Credentials to return.
+        """
         self._creds = creds
 
     async def load(self) -> Credentials:
+        """Return the stored credentials without reading the source again.
+
+        Returns:
+            The stored credentials.
+        """
         return self._creds
 
 
@@ -95,6 +135,20 @@ async def run_doctor(
     make_ask: Callable[[CookieSource], AskClient],
     test_video_id: str,
 ) -> list[Check]:
+    """Run every check and return the rows of the table.
+
+    Each source is loaded first. Then the chat is tried with the sources in turn, and the
+    first source that works is used. The chat check only opens the chat and never sends a
+    question.
+
+    Args:
+        sources: Cookie sources by check name.
+        make_ask: Function that builds a chat client for a cookie source.
+        test_video_id: Video used for the chat check.
+
+    Returns:
+        The check rows, in order.
+    """
     checks: list[Check] = []
     loaded: list[tuple[int, str, Credentials]] = []
     for name, source in sources.items():
@@ -251,7 +305,14 @@ def _passed(
 
 
 def doctor_error(checks: list[Check]) -> LingotubeError | None:
-    """None when ready; otherwise the error whose exit code `doctor` ends with."""
+    """Return the error that decides the exit code of ``doctor``.
+
+    Args:
+        checks: Check rows of the run.
+
+    Returns:
+        None if the chat works. Otherwise the error that the command ends with.
+    """
     if _passed(
         checks=checks,
         name=CHAT,
@@ -285,6 +346,14 @@ def doctor_error(checks: list[Check]) -> LingotubeError | None:
 
 
 def doctor_exit_code(checks: list[Check]) -> int:
+    """Return the process exit code for the check rows.
+
+    Args:
+        checks: Check rows of the run.
+
+    Returns:
+        0 if everything is ready, otherwise the exit code of the error.
+    """
     error = doctor_error(checks=checks)
     return 0 if error is None else error.exit_code
 
@@ -299,8 +368,17 @@ def render_table(
     checks: list[Check],
     error: LingotubeError | None = None,
 ) -> str:
-    """The checks as a table, then the distinct hints of failed checks (the final
-    error's own hint is printed with the error)."""
+    """Render the checks as a text table, followed by the hints of the failed checks.
+
+    The hint of the final error is left out, because the error prints it itself.
+
+    Args:
+        checks: Check rows of the run.
+        error: The final error, or None.
+
+    Returns:
+        The text of the report.
+    """
     rows = [("ПРОВЕРКА", "ИТОГ", "ПОДРОБНОСТИ")] + [(c.name, _verdict(check=c), c.detail) for c in checks]
     w0 = max(len(r[0]) for r in rows)
     w1 = max(len(r[1]) for r in rows)
@@ -324,7 +402,15 @@ def register(
     app,
     get_context,
 ) -> None:
-    """Adds the `doctor` command: a table of checks; exit 0 / 3 (chat) / 4 (cookies) / 6 (network)."""
+    """Add the ``doctor`` command to the CLI application.
+
+    The command prints a table of checks. Exit codes: 0 when ready, 3 for the chat,
+    4 for the cookies, 6 for the network.
+
+    Args:
+        app: Typer application.
+        get_context: Function that returns the shared context of the command.
+    """
     from typing import Annotated
 
     import typer

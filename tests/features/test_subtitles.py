@@ -1,3 +1,5 @@
+"""Tests of the subtitles feature: translation, language and caching."""
+
 from collections.abc import Sequence
 from dataclasses import replace
 
@@ -18,6 +20,14 @@ OK = Completeness(
 
 
 def make_transcript(language: str | None) -> Transcript:
+    """Build a short transcript in the given language.
+
+    Args:
+        language: Language code of the transcript, or None.
+
+    Returns:
+        The transcript.
+    """
     return Transcript(
         video_id=VID,
         duration=10.0,
@@ -41,11 +51,19 @@ def make_transcript(language: str | None) -> Transcript:
 
 
 class FakeTranscripts:
+    """Transcript feature that returns a fixed result and records its calls."""
+
     def __init__(
         self,
         original_language: str | None = "en",
         result: TranscriptResult | None = None,
     ):
+        """Create the fake transcript feature.
+
+        Args:
+            original_language: Language of the original transcript.
+            result: Fixed result to return, or None to build one from the language.
+        """
         self.calls: list[tuple[str, str | None]] = []
         self.original_language = original_language
         self.result = result
@@ -58,6 +76,17 @@ class FakeTranscripts:
         use_cache=True,
         on_opened=None,
     ):
+        """Record the call and return the result.
+
+        Args:
+            video_id: YouTube video id.
+            language: Requested language, or None for the original.
+            use_cache: Not used.
+            on_opened: Optional coroutine function called with the video facts.
+
+        Returns:
+            The transcript result.
+        """
         self.calls.append((video_id, language))
         if on_opened is not None:
             await on_opened(
@@ -79,12 +108,20 @@ class FakeTranscripts:
 
 
 class FakeTranslator:
+    """Translator that records the target languages it is asked for."""
+
     def __init__(self, prepare_error: Exception | None = None):
+        """Create the fake translator.
+
+        Args:
+            prepare_error: Exception raised by prepare, or None.
+        """
         self.calls: list[str] = []
         self.prepared = 0
         self._prepare_error = prepare_error
 
     async def prepare(self) -> None:
+        """Count the preparation, and raise the configured error if there is one."""
         self.prepared += 1
         if self._prepare_error is not None:
             raise self._prepare_error
@@ -94,6 +131,15 @@ class FakeTranslator:
         cues: Sequence[Cue],
         target_language: str,
     ) -> list[Cue]:
+        """Record the target language and return the cues with changed text.
+
+        Args:
+            cues: Cues to translate.
+            target_language: Language to translate to.
+
+        Returns:
+            The translated cues.
+        """
         self.calls.append(target_language)
         return [
             replace(
@@ -105,6 +151,7 @@ class FakeTranslator:
 
 
 async def test_chat_mode_requests_translated_transcript(tmp_path):
+    """Check that the chat mode asks the chat for a translated transcript."""
     tr = FakeTranscripts()
     res = await SubtitlesFeature(
         transcripts=tr,
@@ -119,6 +166,7 @@ async def test_chat_mode_requests_translated_transcript(tmp_path):
 
 
 async def test_own_model_mode_requests_original_then_translates(tmp_path):
+    """Check that the own-model mode asks for the original and then translates it."""
     tr, tl = FakeTranscripts(), FakeTranslator()
     res = await SubtitlesFeature(
         transcripts=tr,
@@ -140,6 +188,7 @@ async def test_own_model_mode_requests_original_then_translates(tmp_path):
 
 
 async def test_same_language_skips_translation(tmp_path):
+    """Check that no translation happens when the language is the same."""
     tr, tl = FakeTranscripts(original_language="ru-RU"), FakeTranslator()
     res = await SubtitlesFeature(
         transcripts=tr,
@@ -156,6 +205,7 @@ async def test_same_language_skips_translation(tmp_path):
 
 async def test_second_language_reuses_cached_original(tmp_path):
     # the original is cached by TranscriptFeature itself; both languages ask only for it
+    """Check that a second language reuses the cached original."""
     tr, tl = FakeTranscripts(), FakeTranslator()
     feature = SubtitlesFeature(
         transcripts=tr,
@@ -175,6 +225,7 @@ async def test_second_language_reuses_cached_original(tmp_path):
 
 
 async def test_translation_cached_per_language_and_mode(tmp_path):
+    """Check that translations are cached separately for each language and mode."""
     tr, tl = FakeTranscripts(), FakeTranslator()
     feature = SubtitlesFeature(
         transcripts=tr,
@@ -205,6 +256,7 @@ async def test_translation_cached_per_language_and_mode(tmp_path):
 
 
 async def test_incomplete_original_propagates_completeness(tmp_path):
+    """Check that the completeness of an incomplete original is kept."""
     incomplete = Completeness(
         complete=False,
         last_end=5.0,
@@ -240,6 +292,7 @@ async def test_incomplete_original_propagates_completeness(tmp_path):
 
 
 async def test_unknown_original_language_is_translated(tmp_path):
+    """Check that an original of unknown language is still translated."""
     tr, tl = FakeTranscripts(original_language=None), FakeTranslator()
     res = await SubtitlesFeature(
         transcripts=tr,
@@ -254,6 +307,8 @@ async def test_unknown_original_language_is_translated(tmp_path):
 
 
 async def test_cache_write_failure_keeps_result_and_warns(tmp_path):
+    """Check that a failed cache write keeps the result and adds a warning."""
+
     class FailingWriteCache(Cache):
         async def put(
             self,
@@ -277,6 +332,8 @@ async def test_cache_write_failure_keeps_result_and_warns(tmp_path):
 async def test_same_cache_warning_from_original_and_subtitles_is_reported_once(
     tmp_path,
 ):
+    """Check that the same cache warning is reported only once."""
+
     class FailingWriteCache(Cache):
         async def put(
             self,
@@ -306,6 +363,7 @@ async def test_same_cache_warning_from_original_and_subtitles_is_reported_once(
 
 
 async def test_missing_key_fails_after_open_before_chat_requests(tmp_path):
+    """Check that a missing key fails after the chat opens and before any question is asked."""
     tr = FakeTranscripts(original_language="en")
     tl = FakeTranslator(prepare_error=RuntimeError("no key"))
     with pytest.raises(expected_exception=RuntimeError):
@@ -321,6 +379,7 @@ async def test_missing_key_fails_after_open_before_chat_requests(tmp_path):
 
 
 async def test_own_language_needs_no_translator_key(tmp_path):
+    """Check that the original language needs no translator key."""
     tr = FakeTranscripts(original_language="en")
     tl = FakeTranslator(prepare_error=RuntimeError("no key"))
     res = await SubtitlesFeature(

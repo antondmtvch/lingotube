@@ -29,16 +29,33 @@ class DevToolsConnectionClosed(DevToolsError):
 
 @dataclass(frozen=True)
 class BrowserCookie:
+    """One cookie read from the browser through DevTools.
+
+    Attributes:
+        name: Cookie name.
+        value: Cookie value. It is never printed.
+        domain: Domain the cookie belongs to.
+    """
+
     name: str
     value: str
     domain: str
 
     def __repr__(self) -> str:
+        """Show the name and the domain, never the value."""
         return f"BrowserCookie(name={self.name}, domain={self.domain}, value=***)"
 
 
 class DevToolsConnection:
+    """An open DevTools session that sends commands and waits for their replies."""
+
     def __init__(self, websocket: ClientConnection, timeout: float) -> None:
+        """Wrap an open WebSocket.
+
+        Args:
+            websocket: Connected WebSocket to the browser.
+            timeout: Seconds to wait for each reply.
+        """
         self._websocket = websocket
         self._timeout = timeout
         self._message_ids = itertools.count(1)
@@ -77,6 +94,21 @@ def _require_loopback_websocket_url(websocket_url: str) -> None:
 
 @asynccontextmanager
 async def connect_to_browser_devtools(websocket_url: str, timeout: float = 10.0) -> AsyncIterator[DevToolsConnection]:
+    """Open a DevTools connection to a local browser.
+
+    Only ws://127.0.0.1 endpoints are accepted.
+
+    Args:
+        websocket_url: WebSocket URL of the DevTools endpoint.
+        timeout: Seconds to wait for the connection.
+
+    Yields:
+        An open connection, which is closed when the block ends.
+
+    Raises:
+        ValueError: If the URL is not a loopback ws:// address.
+        DevToolsError: If the connection cannot be opened.
+    """
     _require_loopback_websocket_url(websocket_url)
     async with AsyncExitStack() as stack:
         try:
@@ -94,6 +126,17 @@ async def connect_to_browser_devtools(websocket_url: str, timeout: float = 10.0)
 
 
 async def read_all_cookies(connection: DevToolsConnection) -> list[BrowserCookie]:
+    """Read every cookie that the browser holds.
+
+    Args:
+        connection: Open DevTools connection.
+
+    Returns:
+        The cookies, in the order the browser returned them.
+
+    Raises:
+        DevToolsError: If the reply has a malformed cookie entry.
+    """
     result = await connection.send_command("Storage.getCookies")
     try:
         return [BrowserCookie(name=c["name"], value=c["value"], domain=c["domain"]) for c in result.get("cookies", [])]
@@ -103,5 +146,12 @@ async def read_all_cookies(connection: DevToolsConnection) -> list[BrowserCookie
 
 
 async def close_browser(connection: DevToolsConnection) -> None:
+    """Ask the browser to close.
+
+    A connection that is already closed is not an error.
+
+    Args:
+        connection: Open DevTools connection.
+    """
     with suppress(DevToolsConnectionClosed):
         await connection.send_command("Browser.close")

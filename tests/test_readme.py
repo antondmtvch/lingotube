@@ -1,4 +1,4 @@
-"""Checks that every README explains how to install the browser extension."""
+"""Checks that every README explains the browser extension and keeps the same header."""
 
 import re
 from pathlib import Path
@@ -37,39 +37,53 @@ def extension_section(text: str) -> str:
 
 
 def read_readme(readme_path: Path) -> str:
+    """Read a README file as UTF-8 text.
+
+    Args:
+        readme_path: Path of the README.
+
+    Returns:
+        The text of the file.
+    """
     return readme_path.read_text(encoding="utf-8")
 
 
 @pytest.mark.parametrize("readme_path", README_PATHS, ids=lambda path: path.name)
 @pytest.mark.parametrize("artifact", [r"chromium\.zip", r"firefox\.xpi"])
 def test_readme_names_the_extension_download_file(readme_path: Path, artifact: str) -> None:
+    """Check that every README names the extension download files."""
     assert re.search(rf"lingotube-<version>-{artifact}", read_readme(readme_path))
 
 
 @pytest.mark.parametrize("readme_path", README_PATHS, ids=lambda path: path.name)
 @pytest.mark.parametrize("page", EXTENSION_PAGES)
 def test_readme_mentions_browser_extension_page(readme_path: Path, page: str) -> None:
+    """Check that every README names the extension page of each browser."""
     assert page in read_readme(readme_path)
 
 
 @pytest.mark.parametrize("readme_path", README_PATHS, ids=lambda path: path.name)
 def test_readme_states_minimum_firefox_version(readme_path: Path) -> None:
+    """Check that every README states the minimum Firefox version."""
     assert "140" in extension_section(read_readme(readme_path))
 
 
 @pytest.mark.parametrize("readme_path", README_PATHS, ids=lambda path: path.name)
 def test_readme_links_to_releases_page(readme_path: Path) -> None:
+    """Check that every README links to the releases page."""
     assert RELEASES_URL in read_readme(readme_path)
 
 
 @pytest.mark.parametrize("readme_path", README_PATHS, ids=lambda path: path.name)
 @pytest.mark.parametrize("browser", UNTESTED_BROWSERS)
 def test_readme_notes_browser_is_untested(readme_path: Path, browser: str) -> None:
+    """Check that every README says which browsers are not tested."""
     assert browser in extension_section(read_readme(readme_path))
 
 
 @pytest.mark.parametrize("readme_path", README_PATHS, ids=lambda path: path.name)
 def test_every_readme_keeps_its_six_top_level_headings(readme_path: Path) -> None:
+    """Check that every README keeps the six top-level headings."""
     text = readme_path.read_text(encoding="utf-8")
     assert count_top_level_headings(text) == EXPECTED_TOP_LEVEL_HEADINGS
 
@@ -91,11 +105,13 @@ def repository_path(readme_path: Path) -> str:
 
 @pytest.mark.parametrize("readme_path", README_PATHS, ids=lambda path: path.name)
 def test_header_badges_match_root_readme(readme_path: Path) -> None:
+    """Check that the header badges of every README match the root README."""
     assert badge_lines(read_readme(readme_path)) == badge_lines(read_readme(README_PATHS[0]))
 
 
 @pytest.mark.parametrize("readme_path", README_PATHS, ids=lambda path: path.name)
 def test_language_selector_links_to_every_other_readme(readme_path: Path) -> None:
+    """Check that the language selector links to every other README."""
     selector = language_selector(read_readme(readme_path))
     links = set(re.findall(r"\]\(([^)]+)\)", selector))
     expected = {repository_path(path) for path in README_PATHS if path != readme_path}

@@ -1,3 +1,5 @@
+"""Tests of the Ask chat client: sessions, retries, pacing, errors and secrets."""
+
 import json
 from pathlib import Path
 
@@ -21,38 +23,50 @@ VIDEO = "-n5MqamatXE"
 
 
 def fixture_json(name: str) -> dict:
+    """Read a JSON fixture file as a dict."""
     return json.loads(s=(FIX / name).read_text(encoding="utf-8"))
 
 
 def page_html() -> str:
+    """Read the saved watch page fixture."""
     return (FIX / "watch_page.html").read_text(encoding="utf-8")
 
 
 class FakeCookies:
+    """Cookie source that returns fixed credentials."""
+
     async def load(self) -> Credentials:
+        """Return fixed credentials with a SAPISID cookie."""
         return Credentials(cookies={"SAPISID": SAPISID, "SID": SID})
 
 
 class FakeTime:
+    """Fake clock and sleep that advance time without waiting."""
+
     def __init__(self) -> None:
+        """Start the fake clock at zero."""
         self.now = 0.0
         self.sleeps: list[float] = []
 
     def clock(self) -> float:
+        """Return the fake current time."""
         return self.now
 
     async def sleep(self, seconds: float) -> None:
+        """Advance the fake time and remember the length of the sleep."""
         self.sleeps.append(seconds)
         self.now += seconds
 
 
 @pytest.fixture
 def ftime() -> FakeTime:
+    """Provide a fresh fake clock."""
     return FakeTime()
 
 
 @pytest.fixture
 def mock():
+    """Provide a respx router that fails on any request it does not know."""
     with respx.mock(
         assert_all_mocked=True,
         assert_all_called=False,
@@ -62,6 +76,7 @@ def mock():
 
 @pytest.fixture
 async def http():
+    """Provide an HTTP client that does not follow redirects."""
     async with httpx.AsyncClient(follow_redirects=False) as client:
         yield client
 
@@ -71,6 +86,7 @@ def make_client(
     ftime: FakeTime,
     min_interval: float = 5.0,
 ) -> YouTubeAskClient:
+    """Build a chat client that uses the fake clock and the fake cookies."""
     pacer = Pacer(
         min_interval=min_interval,
         sleep=ftime.sleep,
@@ -89,6 +105,7 @@ def route_page(
     mock,
     nxt: str = "next_eligible.json",
 ) -> None:
+    """Route the watch page and the next request to the saved fixtures."""
     mock.get(url=WATCH).mock(
         return_value=httpx.Response(
             status_code=200,
@@ -104,6 +121,7 @@ def route_page(
 
 
 def answer_response() -> httpx.Response:
+    """Build a get_panel response that holds an answer."""
     return httpx.Response(
         status_code=200,
         json=fixture_json(name="get_panel_answer.json"),
@@ -115,6 +133,7 @@ async def test_open_and_ask_happy_path(
     http,
     ftime,
 ):
+    """Check that a chat opens and an answer is returned."""
     route_page(mock=mock)
     panel = mock.post(url=PANEL).mock(return_value=answer_response())
     session = await make_client(
@@ -149,6 +168,7 @@ async def test_fresh_send_command_used_for_next_ask(
     http,
     ftime,
 ):
+    """Check that the send command from the last answer is used for the next question."""
     route_page(mock=mock)
     fresh = fixture_json(name="get_panel_answer.json")
     fresh["extra"] = {
@@ -184,6 +204,7 @@ async def test_command_reused_when_answer_has_none(
     http,
     ftime,
 ):
+    """Check that the previous send command is reused when the answer has none."""
     route_page(mock=mock)
     panel = mock.post(url=PANEL).mock(return_value=answer_response())
     session = await make_client(
@@ -200,6 +221,7 @@ async def test_empty_initial_get_panel_fallback(
     http,
     ftime,
 ):
+    """Check that the chat panel is requested again when the first get_panel is empty."""
     nxt = fixture_json(name="next_no_chat.json")
     nxt["engagementPanels"] = [
         {
@@ -255,6 +277,7 @@ async def test_signed_out_is_auth_error(
     http,
     ftime,
 ):
+    """Check that a signed-out next response raises AuthError."""
     route_page(
         mock=mock,
         nxt="next_signed_out.json",
@@ -273,6 +296,7 @@ async def test_signed_out_watch_page_is_auth_error(
     http,
     ftime,
 ):
+    """Check that a signed-out watch page raises AuthError."""
     mock.get(url=WATCH).mock(
         return_value=httpx.Response(
             status_code=200,
@@ -301,6 +325,7 @@ async def test_no_panel_is_chat_unavailable(
     http,
     ftime,
 ):
+    """Check that a missing chat panel raises ChatUnavailableError."""
     route_page(
         mock=mock,
         nxt="next_no_chat.json",
@@ -318,6 +343,7 @@ async def test_requests_only_go_to_youtube(
     http,
     ftime,
 ):
+    """Check that every request goes to youtube.com."""
     route_page(mock=mock)
     mock.post(url=PANEL).mock(return_value=answer_response())
     session = await make_client(
@@ -336,6 +362,7 @@ async def test_redirect_off_site_not_followed(
     http,
     ftime,
 ):
+    """Check that a redirect to another site is not followed."""
     mock.get(url=WATCH).mock(
         return_value=httpx.Response(
             status_code=302,
@@ -362,6 +389,7 @@ async def test_redirect_not_followed_even_if_client_follows(
     mock,
     ftime,
 ):
+    """Check that redirects are not followed even if the HTTP client would follow them."""
     mock.get(url=WATCH).mock(
         return_value=httpx.Response(
             status_code=302,
@@ -388,6 +416,7 @@ async def test_retries_then_network_error(
     http,
     ftime,
 ):
+    """Check that repeated server errors are retried and then raise NetworkError."""
     route_page(mock=mock)
     panel = mock.post(url=PANEL).mock(return_value=httpx.Response(status_code=500))
     session = await make_client(
@@ -405,6 +434,7 @@ async def test_transport_error_retried_then_network_error(
     http,
     ftime,
 ):
+    """Check that transport errors are retried and then raise NetworkError."""
     route_page(mock=mock)
     panel = mock.post(url=PANEL).mock(side_effect=httpx.ReadTimeout(message="slow"))
     session = await make_client(
@@ -423,6 +453,7 @@ async def test_retry_succeeds_second_time(
     http,
     ftime,
 ):
+    """Check that a request that succeeds on the second try is accepted."""
     route_page(mock=mock)
     mock.post(url=PANEL).mock(side_effect=[httpx.Response(status_code=500), answer_response()])
     session = await make_client(
@@ -437,6 +468,7 @@ async def test_pacer_called_before_each_ask(
     http,
     ftime,
 ):
+    """Check that the pacer is consulted before every question."""
     route_page(mock=mock)
     starts: list[float] = []
 
@@ -462,6 +494,7 @@ async def test_pacer_spaces_every_request(
     http,
     ftime,
 ):
+    """Check that consecutive requests are spaced by the minimum interval."""
     starts: list[float] = []
 
     def stamp(response: httpx.Response):
@@ -506,6 +539,7 @@ async def test_pacer_spaces_every_request(
 
 
 async def test_pacer_no_wait_after_long_gap():
+    """Check that no wait happens after a gap longer than the minimum interval."""
     ft = FakeTime()
     pacer = Pacer(
         min_interval=5.0,
@@ -525,6 +559,7 @@ async def test_error_message_has_no_secrets(
     http,
     ftime,
 ):
+    """Check that error messages never contain the cookies or tokens."""
     route_page(mock=mock)
     header = sapisidhash(
         sapisid=SAPISID,
@@ -564,6 +599,7 @@ async def test_http_401_is_auth_error(
     http,
     ftime,
 ):
+    """Check that HTTP 401 raises AuthError."""
     mock.get(url=WATCH).mock(
         return_value=httpx.Response(
             status_code=200,
@@ -585,6 +621,7 @@ async def test_other_4xx_is_network_error_without_retry(
     http,
     ftime,
 ):
+    """Check that other client errors raise NetworkError without a retry."""
     route_page(mock=mock)
     panel = mock.post(url=PANEL).mock(return_value=httpx.Response(status_code=400))
     session = await make_client(
@@ -601,6 +638,7 @@ async def test_non_json_next_is_network_error(
     http,
     ftime,
 ):
+    """Check that a non-JSON next response raises NetworkError."""
     mock.get(url=WATCH).mock(
         return_value=httpx.Response(
             status_code=200,
@@ -625,6 +663,7 @@ async def test_reprs_hide_secrets(
     http,
     ftime,
 ):
+    """Check that the representations of the client and session hide the secrets."""
     route_page(mock=mock)
     client = make_client(
         http=http,
@@ -641,6 +680,8 @@ async def test_short_cookie_values_are_not_masked(
     http,
     ftime,
 ):
+    """Check that very short cookie values are not masked, so that the text stays readable."""
+
     class ShortCookies:
         async def load(self) -> Credentials:
             return Credentials(
@@ -677,6 +718,7 @@ async def test_exhausted_retries_error_has_no_chained_cause(
     http,
     ftime,
 ):
+    """Check that the error after exhausted retries has no chained exception."""
     route_page(mock=mock)
     mock.post(url=PANEL).mock(return_value=httpx.Response(status_code=500))
     session = await make_client(
@@ -693,6 +735,7 @@ async def test_non_transport_http_error_has_no_chained_cause(
     http,
     ftime,
 ):
+    """Check that a non-transport HTTP error has no chained exception."""
     route_page(mock=mock)
     mock.post(url=PANEL).mock(side_effect=httpx.TooManyRedirects(message=f"loop {SAPISID}"))
     session = await make_client(
@@ -710,6 +753,7 @@ async def test_http_403_is_auth_error_and_leaks_nothing(
     http,
     ftime,
 ):
+    """Check that HTTP 403 raises AuthError and leaks no secret."""
     route_page(mock=mock)
     panel = mock.post(url=PANEL).mock(
         return_value=httpx.Response(
@@ -736,6 +780,7 @@ async def test_http_429_is_retried_paced_and_leaks_nothing(
     http,
     ftime,
 ):
+    """Check that HTTP 429 is retried with pacing and leaks no secret."""
     route_page(mock=mock)
     starts: list[float] = []
 

@@ -1,3 +1,5 @@
+"""Tests of the transcript feature: ranges, re-requests, gaps, caching and resuming."""
+
 import asyncio
 import re
 
@@ -21,6 +23,14 @@ _RANGE = re.compile(pattern=r"с (\d+(?::\d\d)+) по (\d+(?::\d\d)+)")
 
 
 def secs(stamp: str) -> int:
+    """Convert a timecode in m:ss or h:mm:ss form to seconds.
+
+    Args:
+        stamp: Timecode text.
+
+    Returns:
+        The number of seconds.
+    """
     total = 0
     for part in stamp.split(":"):
         total = total * 60 + int(part)
@@ -28,6 +38,14 @@ def secs(stamp: str) -> int:
 
 
 def stamp(t: int) -> str:
+    """Format a number of seconds as a timecode.
+
+    Args:
+        t: Time in seconds.
+
+    Returns:
+        The timecode, as m:ss or h:mm:ss.
+    """
     h, rest = divmod(
         t,
         3600,
@@ -40,6 +58,14 @@ def stamp(t: int) -> str:
 
 
 def requested(prompt: str) -> tuple[int, int]:
+    """Read the range that a prompt asks for.
+
+    Args:
+        prompt: Prompt text.
+
+    Returns:
+        The start and the end of the range, in seconds.
+    """
     match = _RANGE.search(string=prompt)
     assert match, prompt
     return secs(stamp=match.group(1)), secs(stamp=match.group(2))
@@ -50,7 +76,16 @@ def body(
     end: int,
     step: int = 10,
 ) -> str:
-    """Только строки реплик каждые step секунд в [start, end)."""
+    """Build the timed lines of a chat answer, one every ``step`` seconds.
+
+    Args:
+        start: Start of the range in seconds.
+        end: End of the range in seconds, not included.
+        step: Distance between the lines in seconds.
+
+    Returns:
+        The timed lines, one per line of text.
+    """
     return "\n".join(
         f"({stamp(t=t)}) реплика {t}"
         for t in range(
@@ -66,7 +101,16 @@ def lines(
     end: int,
     step: int = 10,
 ) -> str:
-    """Чат-ответ: вступление, реплики каждые step секунд в [start, end), заключение."""
+    """Build a full chat answer: an introduction, the timed lines and a closing sentence.
+
+    Args:
+        start: Start of the range in seconds.
+        end: End of the range in seconds, not included.
+        step: Distance between the lines in seconds.
+
+    Returns:
+        The chat answer text.
+    """
     text = body(
         start=start,
         end=end,
@@ -76,6 +120,14 @@ def lines(
 
 
 def full(prompt: str) -> str:
+    """Answer a prompt with the complete range that it asks for.
+
+    Args:
+        prompt: Prompt text.
+
+    Returns:
+        The chat answer text.
+    """
     return lines(*requested(prompt=prompt))
 
 
@@ -83,6 +135,15 @@ def info(
     duration: float,
     language: str | None = "ru",
 ) -> VideoInfo:
+    """Build the facts about the test video.
+
+    Args:
+        duration: Length of the video in seconds.
+        language: Language code of the captions, or None.
+
+    Returns:
+        The video facts.
+    """
     return VideoInfo(
         video_id=VID,
         duration=duration,
@@ -97,6 +158,17 @@ def feature(
     chunk: int = 300,
     progress=None,
 ) -> TranscriptFeature:
+    """Build a transcript feature with a temporary cache.
+
+    Args:
+        client: Fake chat client.
+        tmp_path: Temporary folder of the test.
+        chunk: Length of one range in seconds.
+        progress: Optional progress function.
+
+    Returns:
+        The transcript feature.
+    """
     settings = Settings(chunk_seconds=chunk)
     if progress is None:
         return TranscriptFeature(
@@ -113,6 +185,7 @@ def feature(
 
 
 async def test_short_video_single_request(tmp_path):
+    """Check that a short video takes a single chat request."""
     client = FakeAskClient(
         info=info(duration=300),
         answer=full,
@@ -144,6 +217,7 @@ async def test_short_video_single_request(tmp_path):
 
 
 async def test_long_video_requests_each_range_in_order(tmp_path):
+    """Check that a long video is asked range by range, in order."""
     client = FakeAskClient(
         info=info(duration=1500),
         answer=full,
@@ -169,6 +243,7 @@ async def test_long_video_requests_each_range_in_order(tmp_path):
 
 
 async def test_hour_long_video_uses_hour_format(tmp_path):
+    """Check that timecodes of an hour-long video use the h:mm:ss format."""
     client = FakeAskClient(
         info=info(duration=3900),
         answer=full,
@@ -182,6 +257,7 @@ async def test_hour_long_video_uses_hour_format(tmp_path):
 
 
 async def test_progress_reported(tmp_path):
+    """Check that the progress function is called for every range."""
     calls = []
     client = FakeAskClient(
         info=info(duration=1500),
@@ -197,6 +273,8 @@ async def test_progress_reported(tmp_path):
 
 
 async def test_truncated_range_is_requested_again_from_last_timecode(tmp_path):
+    """Check that a truncated range is asked again from the last timecode received."""
+
     def answer(prompt: str) -> str:
         start, end = requested(prompt=prompt)
         return (
@@ -236,7 +314,16 @@ async def test_truncated_range_is_requested_again_from_last_timecode(tmp_path):
 
 
 def creeping(prompt: str) -> str:
-    """Чат всегда обрывает: первый ответ до 1:00, каждый дозапрос продвигается лишь на 30 с."""
+    """Answer a prompt the way a chat that always stops early does.
+
+    The first answer ends at one minute, and every re-request moves the end by only 30 seconds.
+
+    Args:
+        prompt: Prompt text.
+
+    Returns:
+        The chat answer text.
+    """
     start, _ = requested(prompt=prompt)
     return (
         lines(
@@ -252,6 +339,7 @@ def creeping(prompt: str) -> str:
 
 
 async def test_truncation_retry_is_bounded(tmp_path):
+    """Check that the number of re-requests for a truncated range is limited."""
     client = FakeAskClient(
         info=info(duration=300),
         answer=creeping,
@@ -269,6 +357,7 @@ async def test_truncation_retry_is_bounded(tmp_path):
 
 
 async def test_rerequest_without_progress_stops_and_part_is_not_reasked(tmp_path):
+    """Check that a re-request without progress stops, and the part is not asked again."""
     client = FakeAskClient(
         info=info(duration=300),
         answer=lambda p: lines(
@@ -298,6 +387,8 @@ async def test_rerequest_without_progress_stops_and_part_is_not_reasked(tmp_path
 
 
 async def test_cut_line_replaced_and_lines_before_resume_ignored(tmp_path):
+    """Check that a line cut at the resume point is replaced, and earlier lines are ignored."""
+
     def answer(prompt: str) -> str:
         start, end = requested(prompt=prompt)
         if start == 0:
@@ -335,6 +426,8 @@ async def test_cut_line_replaced_and_lines_before_resume_ignored(tmp_path):
 
 
 async def test_cut_line_replacement_keeps_earlier_lines_at_same_timecode(tmp_path):
+    """Check that replacing a cut line keeps the earlier lines with the same timecode."""
+
     def answer(prompt: str) -> str:
         start, end = requested(prompt=prompt)
         if start == 0:
@@ -364,6 +457,7 @@ async def test_cut_line_replacement_keeps_earlier_lines_at_same_timecode(tmp_pat
 
 
 async def test_no_timecodes_is_error_not_empty_file(tmp_path):
+    """Check that an answer without timecodes is an error, not an empty transcript."""
     client = FakeAskClient(
         info=info(duration=300),
         answer=lambda p: "Извините, не могу помочь с этим.",
@@ -385,6 +479,7 @@ async def test_no_timecodes_is_error_not_empty_file(tmp_path):
 
 
 async def test_empty_continuation_stops_rerequests(tmp_path):
+    """Check that an empty continuation stops the re-requests."""
     client = FakeAskClient(
         info=info(duration=300),
         answer=lambda p: (
@@ -405,6 +500,8 @@ async def test_empty_continuation_stops_rerequests(tmp_path):
 
 
 async def test_parts_cached_and_resume_after_failure(tmp_path):
+    """Check that finished parts are cached and a run resumes after a failure."""
+
     def failing(prompt: str) -> str | Exception:
         return NetworkError(message="сеть упала") if requested(prompt=prompt)[0] == 300 else full(prompt=prompt)
 
@@ -439,6 +536,7 @@ async def test_parts_cached_and_resume_after_failure(tmp_path):
 
 
 async def test_resume_counts_cached_parts_in_progress(tmp_path):
+    """Check that cached parts are counted in the progress of a resumed run."""
     first = FakeAskClient(
         info=info(duration=900),
         answer=lambda p: NetworkError(message="x") if "с 5:00" in p else full(prompt=p),
@@ -462,6 +560,7 @@ async def test_resume_counts_cached_parts_in_progress(tmp_path):
 
 
 async def test_complete_result_served_from_cache(tmp_path):
+    """Check that a complete result is served from the cache without a chat request."""
     first = FakeAskClient(
         info=info(duration=600),
         answer=full,
@@ -486,6 +585,7 @@ async def test_complete_result_served_from_cache(tmp_path):
 
 
 async def test_incomplete_result_not_served_as_ready(tmp_path):
+    """Check that an incomplete result is not served from the cache as ready."""
     first = FakeAskClient(
         info=info(duration=300),
         answer=creeping,
@@ -526,6 +626,7 @@ async def test_incomplete_result_not_served_as_ready(tmp_path):
 
 
 async def test_use_cache_false_ignores_cache(tmp_path):
+    """Check that ``use_cache=False`` ignores the cached results."""
     first = FakeAskClient(
         info=info(duration=600),
         answer=full,
@@ -551,6 +652,8 @@ async def test_use_cache_false_ignores_cache(tmp_path):
 
 
 async def test_cancelled_run_leaves_cache_readable(tmp_path):
+    """Check that a cancelled run leaves the cache readable."""
+
     def cancelling(prompt: str) -> str | BaseException:
         return asyncio.CancelledError() if requested(prompt=prompt)[0] == 300 else full(prompt=prompt)
 
@@ -584,6 +687,7 @@ async def test_cancelled_run_leaves_cache_readable(tmp_path):
 
 
 async def test_language_set_uses_translated_prompt_and_tags_language(tmp_path):
+    """Check that a language uses the translation prompt and is stored with the transcript."""
     client = FakeAskClient(
         info=info(
             duration=300,
@@ -638,6 +742,7 @@ async def test_language_set_uses_translated_prompt_and_tags_language(tmp_path):
 
 
 async def test_original_language_may_be_unknown(tmp_path):
+    """Check that the transcript may have no language when the original language is unknown."""
     client = FakeAskClient(
         info=info(
             duration=300,
@@ -654,6 +759,7 @@ async def test_original_language_may_be_unknown(tmp_path):
 
 
 async def test_translated_mode_keeps_second_of_identical_timecodes(tmp_path):
+    """Check that the translated mode keeps the second of two lines with identical timecodes."""
     answer = "(0:05) Hello\n(0:05) Привет\n(0:09) World\n(0:09) Мир"
     client = FakeAskClient(
         info=info(duration=12),
@@ -670,6 +776,7 @@ async def test_translated_mode_keeps_second_of_identical_timecodes(tmp_path):
 
 
 async def test_original_mode_keeps_lines_with_identical_timecodes(tmp_path):
+    """Check that the original mode keeps all lines with identical timecodes."""
     client = FakeAskClient(
         info=info(duration=12),
         answer=lambda p: "(0:05) Hello\n(0:05) Привет",
@@ -682,6 +789,8 @@ async def test_original_mode_keeps_lines_with_identical_timecodes(tmp_path):
 
 
 async def test_overshoot_past_chunk_end_is_dropped(tmp_path):
+    """Check that lines that run past the end of their range are dropped."""
+
     def answer(prompt: str) -> str:
         start, end = requested(prompt=prompt)
         body = lines(
@@ -715,6 +824,8 @@ async def test_overshoot_past_chunk_end_is_dropped(tmp_path):
 
 
 async def test_gaps_reported_as_warnings(tmp_path):
+    """Check that long gaps are reported as warnings."""
+
     def answer(prompt: str) -> str:
         start, end = requested(prompt=prompt)
         return (
@@ -746,6 +857,7 @@ async def test_gaps_reported_as_warnings(tmp_path):
 
 
 async def test_ends_fixed_and_ids_sequential(tmp_path):
+    """Check that the end times are fixed and the cue ids are sequential."""
     client = FakeAskClient(
         info=info(duration=900),
         answer=full,
@@ -774,7 +886,15 @@ def holey(
     gaps: list[tuple[int, int]],
     reply=None,
 ):
-    """Первый запрос — реплики 0..300 кроме пустот; запросы пустот — `reply(start, end)`."""
+    """Answer the first request with lines that skip the gaps, and the gap requests with a reply.
+
+    Args:
+        gaps: Ranges that the first answer leaves out.
+        reply: Function that answers the gap requests, or None.
+
+    Returns:
+        The answer function for the fake chat.
+    """
 
     def answer(prompt: str) -> str:
         start, end = requested(prompt=prompt)
@@ -797,6 +917,7 @@ def holey(
 
 
 async def test_inner_gap_is_asked_again_with_gap_bounds(tmp_path):
+    """Check that a long gap inside a range is asked again with the bounds of the gap."""
     client = FakeAskClient(
         info=info(duration=300),
         answer=holey(
@@ -822,6 +943,7 @@ async def test_inner_gap_is_asked_again_with_gap_bounds(tmp_path):
 
 
 async def test_inner_gap_stays_when_second_request_brings_nothing(tmp_path):
+    """Check that a gap stays open when the repeated request brings nothing new."""
     client = FakeAskClient(
         info=info(duration=300),
         answer=holey(
@@ -838,6 +960,7 @@ async def test_inner_gap_stays_when_second_request_brings_nothing(tmp_path):
 
 
 async def test_gap_requests_are_limited_per_range(tmp_path):
+    """Check that the number of gap requests is limited per range."""
     gaps = [(a, a + 50) for a in range(10, 290, 60)]  # 5 пустот по 60 с
     client = FakeAskClient(
         info=info(duration=300),
@@ -855,6 +978,7 @@ async def test_gap_requests_are_limited_per_range(tmp_path):
 
 
 async def test_small_gap_is_not_asked_again(tmp_path):
+    """Check that a short gap is not asked again."""
     client = FakeAskClient(
         info=info(duration=300),
         answer=holey(
@@ -870,6 +994,11 @@ async def test_small_gap_is_not_asked_again(tmp_path):
 
 
 def part_key() -> CacheKey:
+    """Return the cache key of the test part.
+
+    Returns:
+        The cache key.
+    """
     return CacheKey(
         video_id=VID,
         kind="transcript-part",
@@ -884,6 +1013,12 @@ async def cached_part(
     tmp_path,
     checked: bool | None,
 ) -> None:
+    """Store a cached part with three lines, optionally marked as checked for gaps.
+
+    Args:
+        tmp_path: Temporary folder of the test.
+        checked: Value of the ``gaps_checked`` flag, or None to leave it out.
+    """
     data = {
         "truncated": False,
         "exhausted": False,
@@ -898,6 +1033,7 @@ async def cached_part(
 
 
 async def test_cached_part_without_gaps_checked_is_filled_once(tmp_path):
+    """Check that a cached part without the gap check is filled once."""
     await cached_part(
         tmp_path=tmp_path,
         checked=None,
@@ -928,6 +1064,7 @@ async def test_cached_part_without_gaps_checked_is_filled_once(tmp_path):
 
 
 async def test_cached_part_with_gaps_checked_is_not_asked(tmp_path):
+    """Check that a cached part with the gap check done is not asked again."""
     await cached_part(
         tmp_path=tmp_path,
         checked=True,
@@ -955,6 +1092,7 @@ async def test_remaining_gap_over_60s_is_reported(
     resume,
     gaps,
 ):
+    """Check that a gap longer than 60 seconds that remains is reported."""
     starts = [*range(0, 101, 10), *range(resume, 300, 10)]
 
     def answer(prompt: str) -> str:
@@ -974,6 +1112,7 @@ async def test_remaining_gap_over_60s_is_reported(
 
 
 async def test_largest_gaps_are_chosen_when_over_the_limit(tmp_path):
+    """Check that the largest gaps are chosen when there are more gaps than the limit."""
     starts = [0, 50, 110, 180, 260, 350, *range(360, 600, 10)]
     # gaps 50, 60, 70, 80, 90: all above GAP_REREQUEST, the smallest is (0, 50)
 
@@ -997,6 +1136,7 @@ async def test_largest_gaps_are_chosen_when_over_the_limit(tmp_path):
 
 
 async def test_fill_gaps_dedupes_found_lines_by_start_and_text(tmp_path):
+    """Check that the lines found in gaps are removed as duplicates by start and text."""
     client = FakeAskClient(
         info=info(duration=300),
         answer=lambda p: "(0:50) a\n(0:50) a\n(0:50) b",
@@ -1031,15 +1171,27 @@ async def test_fill_gaps_dedupes_found_lines_by_start_and_text(tmp_path):
 
 
 class FailingWriteCache(Cache):
+    """Cache whose writes always fail."""
+
     async def put(
         self,
         key,
         value,
     ) -> None:
+        """Fail the write with an OS error.
+
+        Args:
+            key: Key to store the value under. Not used.
+            value: Value to store. Not used.
+
+        Raises:
+            OSError: Always.
+        """
         raise PermissionError("denied: /secret/path")
 
 
 async def test_cache_write_failure_keeps_result_and_warns(tmp_path):
+    """Check that a failed cache write keeps the result and adds a warning."""
     client = FakeAskClient(
         info=info(duration=300),
         answer=full,
@@ -1055,6 +1207,8 @@ async def test_cache_write_failure_keeps_result_and_warns(tmp_path):
 
 
 async def test_exhausted_mid_video_part_adds_warning_naming_the_range(tmp_path):
+    """Check that an exhausted part in the middle of the video adds a warning that names the range."""
+
     def answer(prompt: str) -> str:
         start, end = requested(prompt=prompt)
         if start < 300:
@@ -1082,6 +1236,7 @@ async def test_exhausted_mid_video_part_adds_warning_naming_the_range(tmp_path):
 
 
 async def test_on_opened_runs_after_open_before_any_chat_request(tmp_path):
+    """Check that the on-opened callback runs after the chat opens and before any question."""
     client = FakeAskClient(
         info=info(duration=300),
         answer=full,
@@ -1103,6 +1258,7 @@ async def test_on_opened_runs_after_open_before_any_chat_request(tmp_path):
 
 
 async def test_on_opened_error_stops_before_any_chat_request(tmp_path):
+    """Check that an error in the on-opened callback stops the run before any question."""
     client = FakeAskClient(
         info=info(duration=300),
         answer=full,
@@ -1123,6 +1279,7 @@ async def test_on_opened_error_stops_before_any_chat_request(tmp_path):
 
 
 async def test_on_opened_not_called_when_result_is_cached(tmp_path):
+    """Check that the on-opened callback is not called when the result is cached."""
     client = FakeAskClient(
         info=info(duration=300),
         answer=full,

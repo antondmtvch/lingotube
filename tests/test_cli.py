@@ -1,3 +1,5 @@
+"""Tests of the command-line interface: commands, options, exit codes and the JSON output."""
+
 import io
 import json
 import re
@@ -82,11 +84,26 @@ def cut_answer(prompt: str) -> str:
 
 
 class FakeSession(AskSession):
+    """Chat session that returns scripted answers."""
+
     def __init__(self, client: FakeAsk) -> None:
+        """Create the session on top of a fake client.
+
+        Args:
+            client: Fake chat client.
+        """
         self.info = client.info
         self._client = client
 
     async def ask(self, prompt: str) -> str:
+        """Record the prompt and return the scripted answer, or raise it.
+
+        Args:
+            prompt: Prompt sent to the chat.
+
+        Returns:
+            The answer text.
+        """
         self._client.prompts.append(prompt)
         result = self._client.answer(prompt)
         if isinstance(
@@ -98,11 +115,19 @@ class FakeSession(AskSession):
 
 
 class FakeAsk(AskClient):
+    """Fake chat client that records the prompts and the opened videos."""
+
     def __init__(
         self,
         duration: float,
         answer,
     ) -> None:
+        """Create the fake chat client.
+
+        Args:
+            duration: Length of the fake video in seconds.
+            answer: Function that returns the answer to a prompt.
+        """
         self.duration = duration
         self.answer = answer
         self.prompts: list[str] = []
@@ -115,6 +140,14 @@ class FakeAsk(AskClient):
         )
 
     async def open(self, video_id: str) -> AskSession:
+        """Record the video id and return a session on this client.
+
+        Args:
+            video_id: YouTube video id.
+
+        Returns:
+            The chat session.
+        """
         self.opened.append(video_id)
         self.info = VideoInfo(
             video_id=video_id,
@@ -126,11 +159,20 @@ class FakeAsk(AskClient):
 
 
 class FakeCookies:
+    """Cookie source that returns fixed credentials."""
+
     async def load(self) -> Credentials:
+        """Return fixed credentials with a SAPISID cookie.
+
+        Returns:
+            The credentials.
+        """
         return Credentials(cookies={"SAPISID": "x"})
 
 
 class Harness:
+    """Test harness that runs the CLI with a fake chat and a temporary folder."""
+
     def __init__(
         self,
         tmp_path: Path,
@@ -140,6 +182,15 @@ class Harness:
         answer=full_answer,
         env: dict[str, str] | None = None,
     ) -> None:
+        """Create the harness.
+
+        Args:
+            tmp_path: Temporary folder of the test.
+            settings: Settings to use, or None for the defaults.
+            duration: Length of the fake video in seconds.
+            answer: Function that returns the answer to a prompt.
+            env: Environment variables to use.
+        """
         self.tmp = tmp_path
         self.settings = settings or Settings()
         self.env = env or {}
@@ -152,6 +203,11 @@ class Harness:
         self.overrides: dict[str, providers.Provider] = {}
 
     def make_ask(self) -> FakeAsk:
+        """Count the chat client request and return the fake client.
+
+        Returns:
+            The fake chat client.
+        """
         self.asks_made += 1
         return self.ask
 
@@ -160,6 +216,15 @@ class Harness:
         out,
         err,
     ) -> AppContext:
+        """Build the application context for one run with the fakes.
+
+        Args:
+            out: Stream for the result.
+            err: Stream for messages.
+
+        Returns:
+            The application context.
+        """
         container = build_container(
             settings=self.settings,
             env=self.env,
@@ -191,6 +256,15 @@ class Harness:
         *argv: str,
         out=None,
     ) -> tuple[int, str, str]:
+        """Run the CLI with the given arguments.
+
+        Args:
+            argv: Command-line arguments.
+            out: Stream for the result, or None for a new one.
+
+        Returns:
+            The exit code, the result text and the message text.
+        """
         out = out if out is not None else io.StringIO()
         err = io.StringIO()
         code = cli.run(
@@ -214,6 +288,7 @@ class Harness:
 
 
 def test_subs_writes_srt_file_default_name(tmp_path):
+    """Check that subs writes an SRT file with the default name."""
     h = Harness(tmp_path=tmp_path)
     code, out, err = h.run(
         "subs",
@@ -231,6 +306,7 @@ def test_subs_writes_srt_file_default_name(tmp_path):
 
 
 def test_subs_stdout_with_dash_o(tmp_path):
+    """Check that subs writes to standard output with ``-o -``."""
     h = Harness(
         tmp_path=tmp_path,
         settings=Settings(chunk_seconds=10),
@@ -251,6 +327,7 @@ def test_subs_stdout_with_dash_o(tmp_path):
 
 
 def test_subs_incomplete_writes_file_and_exits_5(tmp_path):
+    """Check that an incomplete subtitle file is written and the command exits with 5."""
     h = Harness(
         tmp_path=tmp_path,
         duration=600.0,
@@ -270,6 +347,7 @@ def test_subs_incomplete_writes_file_and_exits_5(tmp_path):
 
 
 def test_offset_and_format_flags(tmp_path):
+    """Check that the offset and format options are applied."""
     h = Harness(tmp_path=tmp_path)
     code, _, err = h.run(
         "subs",
@@ -311,6 +389,7 @@ def test_offset_and_format_flags(tmp_path):
 
 
 def test_lang_from_settings_when_flag_absent(tmp_path):
+    """Check that the language is taken from the settings when the option is absent."""
     h = Harness(
         tmp_path=tmp_path,
         settings=Settings(
@@ -328,6 +407,7 @@ def test_lang_from_settings_when_flag_absent(tmp_path):
 
 
 def test_lang_missing_everywhere_is_usage_error(tmp_path):
+    """Check that a missing language everywhere is a usage error."""
     h = Harness(tmp_path=tmp_path)
     code, out, err = h.run(
         "subs",
@@ -339,6 +419,7 @@ def test_lang_missing_everywhere_is_usage_error(tmp_path):
 
 
 def test_transcript_outputs_json_format(tmp_path):
+    """Check that the transcript command outputs JSON by default."""
     h = Harness(tmp_path=tmp_path)
     code, out, err = h.run(
         "transcript",
@@ -360,6 +441,7 @@ def test_transcript_outputs_json_format(tmp_path):
 
 
 def test_build_reads_file_and_validates(tmp_path):
+    """Check that build reads the translation file and validates it."""
     h = Harness(tmp_path=tmp_path)
     assert (
         h.run(
@@ -440,6 +522,7 @@ def test_build_reads_file_and_validates(tmp_path):
 
 
 def test_summary_prints_text(tmp_path):
+    """Check that the summary command prints the text."""
     h = Harness(tmp_path=tmp_path)
     code, out, err = h.run(
         "summary",
@@ -465,6 +548,7 @@ def test_exit_codes(
     exc,
     code,
 ):
+    """Check the exit codes of the main error kinds."""
     h = Harness(
         tmp_path=tmp_path,
         answer=lambda prompt: exc(
@@ -484,6 +568,7 @@ def test_exit_codes(
 
 
 def test_unexpected_error_is_generic_exit_1(tmp_path):
+    """Check that an unexpected error gives a generic message and exit code 1."""
     h = Harness(
         tmp_path=tmp_path,
         answer=lambda prompt: RuntimeError("secret-token-123"),
@@ -502,6 +587,7 @@ def test_unexpected_error_is_generic_exit_1(tmp_path):
 
 
 def test_json_envelope_success_and_error(tmp_path):
+    """Check the JSON envelope for a success and for an error."""
     h = Harness(tmp_path=tmp_path)
     code, out, err = h.run(
         "summary",
@@ -560,6 +646,7 @@ def test_json_envelope_success_and_error(tmp_path):
 
 
 def test_json_envelope_incomplete(tmp_path):
+    """Check the JSON envelope for an incomplete result."""
     h = Harness(
         tmp_path=tmp_path,
         duration=600.0,
@@ -581,6 +668,7 @@ def test_json_envelope_incomplete(tmp_path):
 
 
 def test_bad_url_fails_before_any_network(tmp_path):
+    """Check that an invalid link fails before any network request."""
     h = Harness(tmp_path=tmp_path)
     code, _, err = h.run(
         "subs",
@@ -594,6 +682,7 @@ def test_bad_url_fails_before_any_network(tmp_path):
 
 
 def test_no_cache_flag_passes_use_cache_false(tmp_path):
+    """Check that the no-cache option turns off the cache."""
     calls: list[bool] = []
 
     class Spy:
@@ -626,6 +715,7 @@ def test_no_cache_flag_passes_use_cache_false(tmp_path):
 
 
 def test_cyrillic_to_cp1251_stream_does_not_crash(tmp_path):
+    """Check that Cyrillic text does not crash a cp1251 output stream."""
     raw = io.BytesIO()
     out = io.TextIOWrapper(
         buffer=raw,
@@ -646,6 +736,8 @@ def test_cyrillic_to_cp1251_stream_does_not_crash(tmp_path):
 
 
 def test_stream_without_reconfigure_falls_back_to_replace(tmp_path):
+    """Check that a stream without reconfigure falls back to replacing bad characters."""
+
     class Strict(io.TextIOBase):
         encoding = "cp1251"
 
@@ -670,6 +762,7 @@ def test_stream_without_reconfigure_falls_back_to_replace(tmp_path):
 
 
 def test_cookies_file_flag_is_remembered_in_settings(tmp_path):
+    """Check that the cookies file option is remembered in the settings."""
     cookies = tmp_path / "my.cookies.txt"
     cookies.write_text(
         data="# Netscape HTTP Cookie File\n",
@@ -699,6 +792,7 @@ def test_cookies_file_flag_is_remembered_in_settings(tmp_path):
 
 
 def test_cookies_file_and_browser_together_is_usage_error(tmp_path):
+    """Check that giving both a cookies file and a browser is a usage error."""
     h = Harness(tmp_path=tmp_path)
     code, _, err = h.run(
         "summary",
@@ -723,6 +817,7 @@ def test_cookies_file_and_browser_together_is_usage_error(tmp_path):
 
 
 def test_leading_dash_video_id_and_url(tmp_path):
+    """Check that a video id starting with a dash works both as an id and in a link."""
     h = Harness(tmp_path=tmp_path)
     code, _, err = h.run(
         "subs",
@@ -760,6 +855,7 @@ def test_leading_dash_video_id_and_url(tmp_path):
 
 
 def test_negative_offset_value_is_not_taken_for_an_id(tmp_path):
+    """Check that a negative offset value is not taken for a video id."""
     h = Harness(tmp_path=tmp_path)
     code, out, err = h.run(
         "subs",
@@ -778,6 +874,7 @@ def test_negative_offset_value_is_not_taken_for_an_id(tmp_path):
 
 
 def test_translator_key_missing_is_auth_error(tmp_path):
+    """Check that a missing translator key is an auth error."""
     settings = Settings(
         translator=TranslatorSettings(
             base_url="http://127.0.0.1:9/v1",
@@ -800,6 +897,7 @@ def test_translator_key_missing_is_auth_error(tmp_path):
 
 
 def test_translator_key_not_needed_when_no_translation_is_requested(tmp_path):
+    """Check that the translator key is not needed when no translation is requested."""
     settings = Settings(
         translator=TranslatorSettings(
             base_url="http://127.0.0.1:9/v1",
@@ -864,6 +962,7 @@ async def _shutdown(container):
 
 
 async def test_container_builds_all_features(tmp_path):
+    """Check that the container builds every feature."""
     container = _container(tmp_path=tmp_path)
     try:
         assert isinstance(
@@ -893,6 +992,7 @@ async def test_container_builds_all_features(tmp_path):
 
 
 async def test_youtube_client_never_stores_set_cookie(tmp_path):
+    """Check that the YouTube client never stores cookies sent by the server."""
     container = _container(tmp_path=tmp_path)
     try:
         http = await _get(provider=container.http)
@@ -911,6 +1011,7 @@ async def test_youtube_client_never_stores_set_cookie(tmp_path):
 
 
 def test_http_resource_closed_after_command(tmp_path):
+    """Check that the HTTP client is closed after the command."""
     seen: list[httpx.AsyncClient] = []
     h = Harness(tmp_path=tmp_path)
 
@@ -960,6 +1061,7 @@ def test_http_resource_closed_after_command(tmp_path):
 
 
 async def test_translator_selected_only_when_configured(tmp_path):
+    """Check that the translator is selected only when it is configured."""
     plain = _container(tmp_path=tmp_path)
     assert await _get(provider=plain.translator) is None
     await _shutdown(container=plain)  # nothing initialized: shutdown is synchronous
@@ -1023,6 +1125,7 @@ def _broken_settings_factory(tmp_path):
 
 
 def test_broken_settings_do_not_break_help(tmp_path):
+    """Check that broken settings do not break the help output."""
     factory, calls = _broken_settings_factory(tmp_path=tmp_path)
     out, err = io.StringIO(), io.StringIO()
     assert (
@@ -1047,6 +1150,7 @@ def test_broken_settings_do_not_break_help(tmp_path):
 
 
 def test_broken_settings_fail_the_command_with_exit_7(tmp_path):
+    """Check that broken settings make the command fail with exit code 7."""
     factory, calls = _broken_settings_factory(tmp_path=tmp_path)
     out, err = io.StringIO(), io.StringIO()
     assert (
@@ -1077,6 +1181,7 @@ def test_broken_settings_fail_the_command_with_exit_7(tmp_path):
 
 
 def test_context_built_once_per_invocation(tmp_path):
+    """Check that the context is built once per invocation."""
     h = Harness(tmp_path=tmp_path)
     assert (
         h.run(
@@ -1091,6 +1196,8 @@ def test_context_built_once_per_invocation(tmp_path):
 
 
 def test_unexpected_failure_outside_command_body_is_generic_exit_1(tmp_path):
+    """Check that an unexpected failure outside the command body gives a generic message and exit code 1."""
+
     def factory(
         out,
         err,
@@ -1128,6 +1235,7 @@ def test_failed_write_keeps_previous_file(
     tmp_path,
     monkeypatch,
 ):
+    """Check that a failed write keeps the previous output file."""
     import lingotube.commands as commands_module
 
     h = Harness(tmp_path=tmp_path)

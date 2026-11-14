@@ -17,6 +17,16 @@ _WIN_HINT = "Chrome/Edge на Windows обычно нельзя прочитат
 
 
 def default_loader(browser: str) -> Mapping[str, str]:
+    """Read YouTube and Google cookies from a browser with browser-cookie3.
+
+    The package is imported only when a browser is actually read.
+
+    Args:
+        browser: Browser name, one of BROWSERS.
+
+    Returns:
+        Cookie names mapped to values, for the allowed domains only.
+    """
     import browser_cookie3  # lazy: optional at runtime, never needed in tests
 
     func = getattr(
@@ -32,12 +42,24 @@ def default_loader(browser: str) -> Mapping[str, str]:
 
 
 class BrowserCookieSource:
+    """Load cookies from one browser, or from the first browser with a YouTube sign-in."""
+
     def __init__(
         self,
         browser: str | None = None,
         loader: Callable[[str], Mapping[str, str]] | None = None,
         platform: str = sys.platform,
     ) -> None:
+        """Create the source.
+
+        Args:
+            browser: Browser to read, or None to try each known browser in turn.
+            loader: Function that reads the cookies of a browser. Defaults to default_loader.
+            platform: Platform name. On Windows the hint text is different.
+
+        Raises:
+            ValueError: If browser is not one of the known browsers.
+        """
         if browser is not None and browser not in BROWSERS:
             raise ValueError(f"unknown browser: {browser}")
         self._browser = browser
@@ -79,14 +101,37 @@ class BrowserCookieSource:
         )
 
     async def load(self) -> Credentials:
+        """Load the credentials from the browser, in a worker thread.
+
+        Returns:
+            The loaded credentials.
+
+        Raises:
+            AuthError: If the browser cannot be read or has no YouTube sign-in.
+        """
         return await asyncio.to_thread(self._load_all)
 
 
 class ChainCookieSource:
+    """Try several cookie sources in order and use the first one that works."""
+
     def __init__(self, sources: Sequence[CookieSource]) -> None:
+        """Create the chain.
+
+        Args:
+            sources: Sources to try, in order.
+        """
         self._sources = list(sources)
 
     async def load(self) -> Credentials:
+        """Return the credentials of the first source that succeeds.
+
+        Returns:
+            The credentials of the first working source.
+
+        Raises:
+            AuthError: If every source fails. The hint comes from the last failing source.
+        """
         hint = EXPORT_HINT
         for source in self._sources:
             try:

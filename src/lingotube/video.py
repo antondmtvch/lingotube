@@ -19,6 +19,20 @@ def _bad(value: str) -> ValidationError:
 
 
 def parse_video_id(value: str) -> str:
+    """Get the YouTube video id from a link or from the id itself.
+
+    Accepts an 11-character id, youtube.com (watch, shorts and embed links) and youtu.be
+    links.
+
+    Args:
+        value: A video link or an 11-character video id.
+
+    Returns:
+        The 11-character video id.
+
+    Raises:
+        ValidationError: If the value is not a YouTube link or id.
+    """
     raw = value.strip()
     if _ID.fullmatch(string=raw):
         return raw

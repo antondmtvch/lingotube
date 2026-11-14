@@ -1,3 +1,5 @@
+"""Tests of the settings: the TOML file, environment overrides and remembered cookies."""
+
 import json
 from pathlib import Path
 
@@ -16,6 +18,7 @@ from lingotube.errors import ValidationError
 
 
 def test_load_settings_defaults():
+    """Check the default settings."""
     assert (
         load_settings(
             path=None,
@@ -33,6 +36,7 @@ def test_load_settings_defaults():
 
 
 def test_missing_file_gives_defaults(tmp_path):
+    """Check that a missing settings file gives the defaults."""
     assert (
         load_settings(
             path=tmp_path / "none.toml",
@@ -43,6 +47,7 @@ def test_missing_file_gives_defaults(tmp_path):
 
 
 def test_load_settings_from_toml_and_env(tmp_path):
+    """Check that settings are read from the TOML file and the environment."""
     f = tmp_path / "s.toml"
     f.write_text(
         data='lang = "ru"\nformat = "vtt"\ncookies_file = "/a/c.txt"\nmin_interval = 7\n'
@@ -68,6 +73,7 @@ def test_load_settings_from_toml_and_env(tmp_path):
 
 
 def test_unknown_key_in_toml_is_validation_error(tmp_path):
+    """Check that an unknown key in the TOML file is a validation error."""
     f = tmp_path / "s.toml"
     f.write_text(
         data="bogus = 1\n",
@@ -96,6 +102,7 @@ def test_unknown_key_in_toml_is_validation_error(tmp_path):
 
 
 def test_wrong_types_and_bad_toml(tmp_path):
+    """Check that wrong types and broken TOML are validation errors."""
     f = tmp_path / "s.toml"
     for text in [
         'chunk_seconds = "x"\n',
@@ -116,6 +123,7 @@ def test_wrong_types_and_bad_toml(tmp_path):
 
 
 def test_api_key_never_in_settings_repr():
+    """Check that the API key is never in the representation of the settings."""
     t = TranslatorSettings(
         base_url="http://x",
         model="m",
@@ -133,6 +141,7 @@ def test_api_key_never_in_settings_repr():
 
 
 async def test_remember_cookies_file_creates_and_preserves(tmp_path):
+    """Check that remembering the cookies file creates the file and keeps the other settings."""
     sp = tmp_path / "sub" / "settings.toml"
     cookies = tmp_path / "c.txt"
     await remember_cookies_file(
@@ -168,6 +177,7 @@ async def test_remember_cookies_file_creates_and_preserves(tmp_path):
 
 
 def test_default_paths_creates_nothing():
+    """Check that the default paths are computed without creating anything."""
     settings, cache = default_paths()
     assert settings.name == "settings.toml" and "lingotube" in str(settings).lower()
     assert "lingotube" in str(cache).lower()
@@ -202,6 +212,7 @@ def test_out_of_range_values_rejected(
     key,
     phrase,
 ):
+    """Check that values out of range are rejected."""
     f = tmp_path / "s.toml"
     f.write_text(
         data=text + "\n",
@@ -219,6 +230,7 @@ def test_out_of_range_values_rejected(
 
 
 def test_relative_cookies_file_is_resolved_against_settings_dir(tmp_path):
+    """Check that a relative cookies file is resolved against the settings folder."""
     f = tmp_path / "conf" / "s.toml"
     f.parent.mkdir()
     f.write_text(
@@ -233,6 +245,7 @@ def test_relative_cookies_file_is_resolved_against_settings_dir(tmp_path):
 
 
 def test_absolute_cookies_file_and_env_value_are_kept(tmp_path):
+    """Check that an absolute cookies file path and an environment value are kept as given."""
     f = tmp_path / "s.toml"
     absolute = tmp_path / "abs.txt"
     f.write_text(
@@ -254,6 +267,7 @@ def test_absolute_cookies_file_and_env_value_are_kept(tmp_path):
 
 
 def test_boundary_values_and_formats_accepted(tmp_path):
+    """Check that boundary values and allowed formats are accepted."""
     f = tmp_path / "s.toml"
     f.write_text(
         data="chunk_seconds = 1\nmin_interval = 0\nmax_retries = 0\nformat = 'json'\n",
@@ -284,6 +298,7 @@ def test_boundary_values_and_formats_accepted(tmp_path):
 
 
 def test_empty_env_values_are_unset(tmp_path):
+    """Check that empty environment values count as unset."""
     f = tmp_path / "s.toml"
     f.write_text(
         data='lang = "ru"\ncookies_file = "/a/c.txt"\n',
@@ -302,6 +317,7 @@ def test_empty_env_values_are_unset(tmp_path):
 
 
 async def test_remember_same_value_does_not_rewrite_file(tmp_path):
+    """Check that remembering the same value does not rewrite the file."""
     sp = tmp_path / "settings.toml"
     cookies = tmp_path / "c.txt"
     original = f'# my comment\nlang = "ru"\ncookies_file = {json.dumps(obj=str(cookies.resolve()))}\n'
@@ -314,6 +330,7 @@ async def test_remember_same_value_does_not_rewrite_file(tmp_path):
 
 
 async def test_forget_removes_cookies_file_and_browser(tmp_path):
+    """Check that forgetting removes the remembered cookies file and browser."""
     settings_path = tmp_path / "settings.toml"
     settings_path.write_text(
         'lang = "ru"\ncookies_file = "x"\nbrowser = "edge"\n',
@@ -331,6 +348,7 @@ async def test_forget_removes_cookies_file_and_browser(tmp_path):
 
 
 async def test_forget_without_keys_leaves_file_untouched(tmp_path):
+    """Check that forgetting without these keys leaves the file untouched."""
     settings_path = tmp_path / "settings.toml"
     original = b'# my comment\nlang   =   "ru"\n'
     settings_path.write_bytes(original)
@@ -340,11 +358,13 @@ async def test_forget_without_keys_leaves_file_untouched(tmp_path):
 
 
 async def test_forget_missing_file_returns_empty(tmp_path):
+    """Check that forgetting in a missing file returns an empty list."""
     removed = await forget_remembered_cookie_sources(settings_path=tmp_path / "settings.toml")
     assert removed == []
 
 
 def test_default_login_paths_under_user_data_dir():
+    """Check that the default login paths are in the user data folder."""
     paths = default_login_paths()
     assert paths.profile_dir.name == "login-profile"
     assert paths.cookies_file.name == "login-cookies.json"

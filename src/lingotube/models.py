@@ -12,6 +12,15 @@ from lingotube.errors import ValidationError
     slots=True,
 )
 class Cue:
+    """One timed line of a transcript.
+
+    Attributes:
+        id: Sequence number of the line.
+        start: Start time in seconds from the beginning of the video.
+        end: End time in seconds, or None if unknown.
+        text: Text of the line.
+    """
+
     id: int
     start: float
     end: float | None
@@ -23,6 +32,15 @@ class Cue:
     slots=True,
 )
 class VideoInfo:
+    """Basic facts about a video, read from its YouTube page.
+
+    Attributes:
+        video_id: YouTube video id.
+        duration: Length of the video in seconds.
+        title: Title of the video.
+        language: Language code of the automatic captions, or None.
+    """
+
     video_id: str
     duration: float
     title: str
@@ -62,6 +80,16 @@ def _fail(what: str) -> ValidationError:
     slots=True,
 )
 class Transcript:
+    """Transcript of one video, in the original or a translated language.
+
+    Attributes:
+        video_id: YouTube video id.
+        duration: Length of the video in seconds.
+        language: Language code of the text, or None if unknown.
+        prompt_version: Version of the prompts that produced the text.
+        cues: Timed lines, in order.
+    """
+
     video_id: str
     duration: float
     language: str | None
@@ -69,6 +97,11 @@ class Transcript:
     cues: tuple[Cue, ...]
 
     def to_dict(self) -> dict[str, Any]:
+        """Return the transcript as a JSON-serializable dict.
+
+        Returns:
+            A dict in the transcript JSON format.
+        """
         return {
             "video_id": self.video_id,
             "duration": self.duration,
@@ -79,6 +112,17 @@ class Transcript:
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> Transcript:
+        """Build a transcript from parsed JSON, checking every field.
+
+        Args:
+            d: Parsed JSON object in the transcript format.
+
+        Returns:
+            The validated transcript.
+
+        Raises:
+            ValidationError: If the data does not match the transcript format.
+        """
         if not isinstance(
             d,
             dict,

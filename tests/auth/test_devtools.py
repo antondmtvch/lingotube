@@ -1,3 +1,5 @@
+"""Tests of the DevTools client: commands, replies, errors and cookie reading."""
+
 import asyncio
 import http
 import json
@@ -33,6 +35,15 @@ async def cdp_server():
 
 
 def replying(result: dict) -> Handler:
+    """Build a fake DevTools server handler that answers each command with the given result.
+
+    Args:
+        result: Result to send back for every command.
+
+    Returns:
+        The handler for the fake WebSocket server.
+    """
+
     async def handler(websocket: ServerConnection) -> None:
         async for raw in websocket:
             message = json.loads(raw)
@@ -42,6 +53,8 @@ def replying(result: dict) -> Handler:
 
 
 async def test_send_command_returns_result_and_skips_events(cdp_server):
+    """Check that a command returns its result and events are skipped."""
+
     async def handler(websocket: ServerConnection) -> None:
         await websocket.recv()
         await websocket.send(json.dumps({"method": "Target.targetCreated", "params": {}}))
@@ -54,6 +67,8 @@ async def test_send_command_returns_result_and_skips_events(cdp_server):
 
 
 async def test_command_error_raises_without_payload_text(cdp_server):
+    """Check that a failed command raises DevToolsError without the browser text."""
+
     async def handler(websocket: ServerConnection) -> None:
         await websocket.recv()
         await websocket.send(json.dumps({"id": 1, "error": {"message": "LEAKME"}}))
@@ -66,6 +81,8 @@ async def test_command_error_raises_without_payload_text(cdp_server):
 
 
 async def test_closed_connection_raises_connection_closed(cdp_server):
+    """Check that a closed connection raises DevToolsConnectionClosed."""
+
     async def handler(websocket: ServerConnection) -> None:
         await websocket.close()
 
@@ -76,6 +93,8 @@ async def test_closed_connection_raises_connection_closed(cdp_server):
 
 
 async def test_command_timeout_raises_devtools_error(cdp_server):
+    """Check that a command without a reply times out with DevToolsError."""
+
     async def handler(websocket: ServerConnection) -> None:
         await websocket.wait_closed()
 
@@ -87,6 +106,8 @@ async def test_command_timeout_raises_devtools_error(cdp_server):
 
 
 async def test_non_object_reply_raises_devtools_error(cdp_server):
+    """Check that a reply that is not a JSON object raises DevToolsError."""
+
     async def handler(websocket: ServerConnection) -> None:
         await websocket.recv()
         await websocket.send(json.dumps(["LEAKME"]))
@@ -108,6 +129,8 @@ async def test_non_object_reply_raises_devtools_error(cdp_server):
     ],
 )
 def test_non_loopback_url_is_rejected(url):
+    """Check that a DevTools URL that is not on the loopback address is rejected."""
+
     async def connect() -> None:
         async with connect_to_browser_devtools(url):
             pass
@@ -117,6 +140,7 @@ def test_non_loopback_url_is_rejected(url):
 
 
 async def test_read_all_cookies_maps_fields(cdp_server):
+    """Check that the cookie fields are read from the reply."""
     cookie = {"name": "SAPISID", "value": "v", "domain": ".youtube.com", "path": "/"}
     url = await cdp_server(replying({"cookies": [cookie]}))
     async with connect_to_browser_devtools(url) as connection:
@@ -133,6 +157,7 @@ async def test_read_all_cookies_maps_fields(cdp_server):
     ],
 )
 async def test_cookie_missing_a_field_raises_devtools_error(cdp_server, cookie):
+    """Check that a cookie without a required field raises DevToolsError."""
     url = await cdp_server(replying({"cookies": [cookie]}))
     async with connect_to_browser_devtools(url) as connection:
         with pytest.raises(DevToolsError) as error:
@@ -141,10 +166,13 @@ async def test_cookie_missing_a_field_raises_devtools_error(cdp_server, cookie):
 
 
 def test_browser_cookie_repr_hides_value():
+    """Check that the representation of a cookie hides its value."""
     assert "secret" not in repr(BrowserCookie("SAPISID", "secret", ".youtube.com"))
 
 
 async def test_close_browser_tolerates_connection_drop(cdp_server):
+    """Check that closing the browser tolerates a dropped connection."""
+
     async def handler(websocket: ServerConnection) -> None:
         await websocket.recv()
         await websocket.close()
@@ -155,6 +183,7 @@ async def test_close_browser_tolerates_connection_drop(cdp_server):
 
 
 async def test_os_error_from_caller_body_propagates_unchanged(cdp_server):
+    """Check that an OS error raised by the caller's code propagates unchanged."""
     url = await cdp_server(replying({}))
     with pytest.raises(OSError, match="from the body"):
         async with connect_to_browser_devtools(url):
@@ -162,6 +191,8 @@ async def test_os_error_from_caller_body_propagates_unchanged(cdp_server):
 
 
 async def test_rejected_handshake_raises_devtools_error_without_server_text():
+    """Check that a rejected handshake raises DevToolsError without the server text."""
+
     def reject(connection, request):
         return connection.respond(http.HTTPStatus.FORBIDDEN, "LEAKME")
 

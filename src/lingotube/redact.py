@@ -7,6 +7,15 @@ def redact(
     text: str,
     secrets: Iterable[str],
 ) -> str:
+    """Replace every occurrence of the secrets in a text with ``***``.
+
+    Args:
+        text: Text that may contain secrets.
+        secrets: Secret values to hide. Empty values are ignored.
+
+    Returns:
+        The text with the secrets masked. Overlapping secrets become one mask.
+    """
     spans: list[tuple[int, int]] = []
     for secret in {s for s in secrets if s}:
         start = text.find(secret)

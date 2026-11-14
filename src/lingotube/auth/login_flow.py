@@ -52,10 +52,16 @@ _SAPISID_COOKIE_NAMES = ("SAPISID", "__Secure-3PAPISID")
 
 
 def youtube_cookies_only(cookies: Iterable[BrowserCookie]) -> dict[str, str]:
-    """Name -> value of the cookies on youtube.com/google.com domains only.
+    """Return the cookies of the YouTube and Google domains, as name to value.
 
-    Same-named cookies on both sites are merged with youtube.com winning, whatever
+    If a cookie with the same name is on both sites, the youtube.com one wins, whatever
     the order the browser returned them in.
+
+    Args:
+        cookies: Cookies read from the browser.
+
+    Returns:
+        Cookie names mapped to values.
     """
     allowed = [cookie for cookie in cookies if is_allowed_domain(cookie.domain)]
     ordered = sorted(allowed, key=lambda cookie: _is_youtube_domain(cookie.domain))
@@ -105,8 +111,30 @@ async def sign_in_with_login_browser(
     sleep: Sleep = asyncio.sleep,
     clock: Clock = time.monotonic,
 ) -> SavedLogin:
-    """Open a sign-in window without a debugging port, wait until the person closes
-    it, then read the cookies of the login profile in a headless launch."""
+    """Sign in to YouTube in the login profile and save the cookies.
+
+    Opens a sign-in window without a debugging port, waits until the person closes it,
+    then reads the cookies of the profile in a headless launch.
+
+    Args:
+        browser: Browser name.
+        executable: Browser executable.
+        paths: Locations of the login profile.
+        store: Store where the cookies are saved.
+        notify: Function that shows the person a message.
+        launch_window: Function that opens the sign-in window.
+        launch: Function that starts the login browser.
+        connect: Function that opens a DevTools connection.
+        sleep: Coroutine function that waits.
+        clock: Monotonic clock in seconds.
+
+    Returns:
+        The saved sign-in.
+
+    Raises:
+        AuthError: If the window is closed before the sign-in, the sign-in does not
+            finish within ten minutes, or the cookies cannot be read or saved.
+    """
     window = await launch_window(executable, paths.profile_dir, LOGIN_PAGE_URL)
     try:
         notify("Войдите в YouTube в открывшемся окне и закройте окно браузера; жду до 10 минут.")
@@ -137,7 +165,16 @@ async def sign_in_with_login_browser(
 
 
 async def wait_for_sign_in_window_to_close(window: SignInWindow, sleep: Sleep, clock: Clock) -> None:
-    """Poll our own window process until it exits; AuthError after LOGIN_WAIT_SECONDS."""
+    """Wait until the sign-in window process exits.
+
+    Args:
+        window: Sign-in window to watch.
+        sleep: Coroutine function that waits between checks.
+        clock: Monotonic clock in seconds.
+
+    Raises:
+        AuthError: If the window is still open after ten minutes.
+    """
     deadline = clock() + LOGIN_WAIT_SECONDS
     while not window.has_exited:
         if clock() >= deadline:
@@ -157,10 +194,22 @@ async def read_cookies_from_login_profile(
     launch: LaunchLoginBrowser = launch_login_browser,
     connect: ConnectToBrowser = connect_to_browser_devtools,
 ) -> list[BrowserCookie]:
-    """Start the login profile with a debugging port, read cookies, shut it down.
+    """Start the login profile with a debugging port, read the cookies and shut it down.
 
-    `read_from_connection` is an async callable taking the DevTools connection and
-    returning the cookies. The browser started here never outlives this call.
+    The browser started here never outlives this call.
+
+    Args:
+        executable: Browser executable.
+        profile_dir: Login profile folder.
+        mode: ``headless`` or ``offscreen``.
+        start_url: Page to open first.
+        read_from_connection: Coroutine function that takes the DevTools connection and
+            returns the cookies.
+        launch: Function that starts the login browser.
+        connect: Function that opens a DevTools connection.
+
+    Returns:
+        The cookies прочитаны from the browser.
     """
     running = await launch(executable, profile_dir, mode, start_url)
     connection: DevToolsConnection | None = None
@@ -178,6 +227,13 @@ async def read_cookies_from_login_profile(
 
 @dataclass(frozen=True)
 class RefreshResult:
+    """Result of a cookie refresh from the login profile.
+
+    Attributes:
+        saved: The refreshed sign-in.
+        rotated: True if the rotating cookie changed during the refresh.
+    """
+
     saved: SavedLogin
     rotated: bool
 
@@ -192,7 +248,25 @@ async def refresh_cookies_from_login_profile(
     sleep: Sleep = asyncio.sleep,
     clock: Clock = time.monotonic,
 ) -> RefreshResult:
-    """Start the login profile briefly so the browser rotates cookies, then save them."""
+    """Start the login profile briefly so that the browser rotates the cookies, then save them.
+
+    Args:
+        paths: Locations of the login profile.
+        store: Store of the saved sign-in.
+        mode: ``headless`` or ``offscreen``.
+        find_executable: Function that finds the executable of a browser by name.
+        launch: Function that starts the login browser.
+        connect: Function that opens a DevTools connection.
+        sleep: Coroutine function that waits.
+        clock: Monotonic clock in seconds.
+
+    Returns:
+        The refreshed sign-in and whether the rotating cookie changed.
+
+    Raises:
+        AuthError: If the browser is not found, the profile is busy, or the sign-in
+            is no longer valid.
+    """
     saved = await store.read()
     executable = find_executable(saved.browser)
     if executable is None:

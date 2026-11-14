@@ -53,7 +53,18 @@ def find_browser_executable(
     is_file: Callable[[Path], bool] = Path.is_file,
     which: Callable[[str], str | None] = shutil.which,
 ) -> Path | None:
-    """Return the installed executable of `browser` ("chrome" or "edge"), or None."""
+    """Find the installed executable of a browser.
+
+    Args:
+        browser: ``chrome`` or ``edge``.
+        platform: Platform name, as in ``sys.platform``.
+        env: Environment variables, used to find the Windows install folders.
+        is_file: Function that checks whether a path is a file.
+        which: Function that finds a command on the PATH (Linux).
+
+    Returns:
+        The path of the executable, or None if the browser is not installed.
+    """
     if platform == "win32":
         for env_name in _WINDOWS_ENV_ROOTS:
             root = env.get(env_name)
@@ -82,7 +93,17 @@ def find_first_installed_browser(
     is_file: Callable[[Path], bool] = Path.is_file,
     which: Callable[[str], str | None] = shutil.which,
 ) -> tuple[str, Path] | None:
-    """Return (name, executable) of the first installed browser: chrome, then edge."""
+    """Find the first installed login browser: Chrome, then Edge.
+
+    Args:
+        platform: Platform name, as in ``sys.platform``.
+        env: Environment variables, used to find the Windows install folders.
+        is_file: Function that checks whether a path is a file.
+        which: Function that finds a command on the PATH (Linux).
+
+    Returns:
+        The browser name and its executable, or None if neither is installed.
+    """
     for browser in LOGIN_BROWSERS:
         executable = find_browser_executable(browser, platform=platform, env=env, is_file=is_file, which=which)
         if executable is not None:
@@ -91,7 +112,19 @@ def find_first_installed_browser(
 
 
 def browser_command_line(executable: Path, profile_dir: Path, mode: LaunchMode, start_url: str) -> list[str]:
-    """Argument list (no shell) for the login browser; no automation flags."""
+    """Build the argument list that starts the login browser.
+
+    No shell is used and no automation flags are set.
+
+    Args:
+        executable: Browser executable.
+        profile_dir: Login profile folder.
+        mode: ``headless`` or ``offscreen``.
+        start_url: Page to open first.
+
+    Returns:
+        The arguments, the executable first.
+    """
     return [
         str(executable),
         f"--user-data-dir={profile_dir}",
@@ -104,10 +137,18 @@ def browser_command_line(executable: Path, profile_dir: Path, mode: LaunchMode, 
 
 
 def sign_in_window_command_line(executable: Path, profile_dir: Path, login_url: str) -> list[str]:
-    """Argument list (no shell) for the sign-in window.
+    """Build the argument list that opens the sign-in window.
 
-    No `--remote-debugging-*` and no automation flags: a browser with a debugging
-    port has navigator.webdriver set, and Google then refuses the sign-in.
+    There is no ``--remote-debugging-*`` flag and no automation flag. A browser with a
+    debugging port has ``navigator.webdriver`` set, and Google then refuses the sign-in.
+
+    Args:
+        executable: Browser executable.
+        profile_dir: Login profile folder.
+        login_url: Sign-in page to open.
+
+    Returns:
+        The arguments, the executable first.
     """
     return [
         str(executable),
@@ -120,7 +161,18 @@ def sign_in_window_command_line(executable: Path, profile_dir: Path, login_url: 
 
 
 def is_login_profile_in_use(profile_dir: Path, platform: str = sys.platform) -> bool:
-    """True when a live browser holds the lock of the login profile."""
+    """Check whether a live browser holds the lock of the login profile.
+
+    On Windows a lock file that can be removed is treated as stale and is deleted, so this
+    check can remove a file.
+
+    Args:
+        profile_dir: Login profile folder.
+        platform: Platform name, as in ``sys.platform``.
+
+    Returns:
+        True if a live browser uses the profile, otherwise False.
+    """
     if platform == "win32":
         lockfile = profile_dir / "lockfile"
         if not lockfile.exists():
@@ -152,7 +204,11 @@ def is_login_profile_in_use(profile_dir: Path, platform: str = sys.platform) -> 
 
 
 class RunningLoginBrowser:
-    """A browser process started by lingotube, with its DevTools websocket URL."""
+    """A browser process started by lingotube, with the URL of its DevTools WebSocket.
+
+    Attributes:
+        websocket_url: WebSocket URL of the DevTools endpoint.
+    """
 
     def __init__(
         self,
@@ -161,6 +217,14 @@ class RunningLoginBrowser:
         close_wait: float = BROWSER_CLOSE_WAIT,
         terminate_wait: float = BROWSER_TERMINATE_WAIT,
     ) -> None:
+        """Wrap a started browser process.
+
+        Args:
+            websocket_url: WebSocket URL of the DevTools endpoint.
+            process: The browser process.
+            close_wait: Seconds to wait after ``Browser.close`` before terminating.
+            terminate_wait: Seconds to wait after terminating before killing.
+        """
         self.websocket_url = websocket_url
         self._process = process
         self._close_wait = close_wait
@@ -168,6 +232,11 @@ class RunningLoginBrowser:
 
     @property
     def has_exited(self) -> bool:
+        """Return True once the browser process has exited.
+
+        Returns:
+            True if the process has exited.
+        """
         return self._process.returncode is not None
 
     async def _wait_for_exit(self, timeout: float) -> bool:
@@ -178,7 +247,11 @@ class RunningLoginBrowser:
         return True
 
     async def shut_down(self, connection: DevToolsConnection | None) -> None:
-        """Close the spawned browser: Browser.close, then terminate, then kill."""
+        """Close the browser that lingotube started: ``Browser.close``, then terminate, then kill.
+
+        Args:
+            connection: Open DevTools connection, or None to skip ``Browser.close``.
+        """
         if self.has_exited:
             return
         if connection is not None:
@@ -207,11 +280,22 @@ def _read_websocket_url(port_file: Path) -> str | None:
 
 
 def profile_busy_error() -> ProfileBusyError:
+    """Return the error for a login profile that is open in another window.
+
+    Returns:
+        The ProfileBusyError with its message and hint.
+    """
     return ProfileBusyError(message=PROFILE_BUSY_MESSAGE, hint=PROFILE_BUSY_HINT)
 
 
 async def shut_down_spawned_process(process: asyncio.subprocess.Process) -> None:
-    """Terminate, then kill, a browser process lingotube spawned (no DevTools needed)."""
+    """Terminate, then kill, a browser process that lingotube started.
+
+    No DevTools connection is needed.
+
+    Args:
+        process: The browser process.
+    """
     await RunningLoginBrowser(websocket_url="", process=process).shut_down(None)
 
 
@@ -223,7 +307,23 @@ async def launch_login_browser(
     spawn: Callable[..., Awaitable[asyncio.subprocess.Process]] = asyncio.create_subprocess_exec,
     port_file_timeout: float = 30.0,
 ) -> RunningLoginBrowser:
-    """Start the browser in the login profile and wait for its DevTools endpoint."""
+    """Start the browser in the login profile and wait for its DevTools endpoint.
+
+    Args:
+        executable: Browser executable.
+        profile_dir: Login profile folder.
+        mode: ``headless`` or ``offscreen``.
+        start_url: Page to open first.
+        spawn: Function that starts the process.
+        port_file_timeout: Seconds to wait for the DevTools port file.
+
+    Returns:
+        The running browser.
+
+    Raises:
+        ProfileBusyError: If the profile is already in use.
+        AuthError: If the browser does not start or does not answer in time.
+    """
     if is_login_profile_in_use(profile_dir):
         raise profile_busy_error()
     port_file = profile_dir / _DEVTOOLS_PORT_FILE_NAME
@@ -270,17 +370,27 @@ async def launch_login_browser(
 
 
 class SignInWindow:
-    """A visible browser process started by lingotube for the person to sign in."""
+    """A visible browser process that lingotube started for the person to sign in."""
 
     def __init__(self, process: asyncio.subprocess.Process) -> None:
+        """Wrap the sign-in window process.
+
+        Args:
+            process: The browser process.
+        """
         self._process = process
 
     @property
     def has_exited(self) -> bool:
+        """Return True once the sign-in window has been closed.
+
+        Returns:
+            True if the process has exited.
+        """
         return self._process.returncode is not None
 
     async def close(self) -> None:
-        """Terminate, then kill, our own process; no-op once it has exited."""
+        """Terminate, then kill, the sign-in window process. Does nothing once it has exited."""
         await shut_down_spawned_process(self._process)
 
 
@@ -290,7 +400,21 @@ async def launch_sign_in_window(
     login_url: str,
     spawn: Callable[..., Awaitable[asyncio.subprocess.Process]] = asyncio.create_subprocess_exec,
 ) -> SignInWindow:
-    """Wipe the login profile, then open the sign-in window without a debugging port."""
+    """Clear the login profile and open the sign-in window without a debugging port.
+
+    Args:
+        executable: Browser executable.
+        profile_dir: Login profile folder. It is emptied first.
+        login_url: Sign-in page to open.
+        spawn: Function that starts the process.
+
+    Returns:
+        The sign-in window.
+
+    Raises:
+        ProfileBusyError: If the profile is already in use or cannot be removed.
+        AuthError: If the profile cannot be prepared or the browser does not start.
+    """
     if is_login_profile_in_use(profile_dir):
         raise profile_busy_error()
     try:

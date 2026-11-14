@@ -1,4 +1,4 @@
-"""Capability «summary»: one chat request for a video summary in the given language, cached."""
+"""Summary feature: one chat request for a video summary in the given language, cached."""
 
 from collections.abc import Callable
 
@@ -12,12 +12,21 @@ KIND = "summary"
 
 
 class SummaryFeature:
+    """Get a summary of a video from the YouTube chat."""
+
     def __init__(
         self,
         ask: AskClient,
         cache: Cache,
         warn: Callable[[str], None] = lambda message: None,
     ) -> None:
+        """Create the feature.
+
+        Args:
+            ask: Client of the YouTube chat.
+            cache: Cache of the results.
+            warn: Function that receives warnings, for example about the cache.
+        """
         self._ask = ask
         self._cache = cache
         self._warn = warn
@@ -29,6 +38,19 @@ class SummaryFeature:
         *,
         use_cache: bool = True,
     ) -> str:
+        """Get the summary of a video.
+
+        Args:
+            video_id: YouTube video id.
+            language: Language code of the summary.
+            use_cache: Whether a saved summary may be used.
+
+        Returns:
+            The summary text.
+
+        Raises:
+            ChatUnavailableError: If the chat returns an empty answer.
+        """
         key = CacheKey(
             video_id=video_id,
             kind=KIND,
@@ -75,7 +97,12 @@ def register(
     app,
     get_context,
 ) -> None:
-    """Adds the `summary` command: text to stdout, or to a file with -o."""
+    """Add the ``summary`` command to the CLI application.
+
+    Args:
+        app: Typer application.
+        get_context: Function that returns the shared context of the command.
+    """
     from lingotube import commands as c
 
     @app.command(
