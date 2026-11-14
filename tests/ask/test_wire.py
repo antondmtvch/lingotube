@@ -218,3 +218,14 @@ def test_send_command_repr_hides_token():
             click_tracking_params="CTP",
         )
     )
+
+
+def test_extract_page_unplayable_video_stays_chat_unavailable():
+    """Check that a removed or private video stays exit 3 and is not reported as a YouTube change."""
+    html = (
+        '<script>"INNERTUBE_CONTEXT": {"client": {"clientName": "WEB"}}</script>'
+        '<script>var ytInitialPlayerResponse = {"playabilityStatus": {"status": "ERROR", '
+        '"reason": "Video unavailable"}};</script>'
+    )
+    with pytest.raises(expected_exception=ChatUnavailableError):
+        extract_page(html=html)

@@ -10,17 +10,13 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any
 
-from lingotube.errors import ChatUnavailableError, YouTubeChangedError
+from lingotube.errors import YOUTUBE_CHANGED_HINT, ChatUnavailableError, YouTubeChangedError
 from lingotube.models import VideoInfo
 
 CHAT_PANEL_ID = "PAyouchat"
 
 _CONTEXT_MARKER = '"INNERTUBE_CONTEXT":'
 _PLAYER_MARKER = re.compile(pattern=r"var ytInitialPlayerResponse\s*=\s*")
-_YOUTUBE_CHANGED_HINT = (
-    "YouTube changed the format lingotube reads. Update lingotube: see the Installation section "
-    "of the README. If the update does not help, report it in the issues."
-)
 _LOGGED_IN = re.compile(pattern=r'"LOGGED_IN"\s*:\s*(true|false)')
 
 
@@ -250,7 +246,7 @@ def extract_answer(get_panel_response: dict[str, Any]) -> str:
     if not any("youChatItemViewModel" in d for d in _walk(obj=get_panel_response)):
         raise YouTubeChangedError(
             message="The YouTube chat response has an unexpected shape.",
-            hint=_YOUTUBE_CHANGED_HINT,
+            hint=YOUTUBE_CHANGED_HINT,
         )
     parts: list[str] = []
     for d in _walk(obj=get_panel_response):
@@ -328,7 +324,7 @@ def extract_page(html: str) -> tuple[dict[str, Any], VideoInfo]:
     """
     unavailable = YouTubeChangedError(
         message="Could not read the YouTube watch page.",
-        hint=_YOUTUBE_CHANGED_HINT,
+        hint=YOUTUBE_CHANGED_HINT,
     )
     i = html.find(_CONTEXT_MARKER)
     m = _PLAYER_MARKER.search(string=html)
@@ -353,6 +349,9 @@ def extract_page(html: str) -> tuple[dict[str, Any], VideoInfo]:
         )
         else None
     )
+    status = player.get("playabilityStatus") if isinstance(player, dict) else None
+    if not isinstance(details, dict) and isinstance(status, dict) and status.get("status") not in (None, "OK"):
+        raise ChatUnavailableError(message="The YouTube video is unavailable (removed, private or mistyped).")
     if not isinstance(
         context,
         dict,
