@@ -239,7 +239,7 @@ Elle n'est pas encore dans une boutique. Téléchargez les fichiers pour votre n
 
 - Chrome : téléchargez `lingotube-<version>-chromium.zip` et décompressez-le dans un dossier que vous conserverez. Ouvrez `chrome://extensions`, activez le « Mode développeur », cliquez sur « Charger l'extension non empaquetée » et choisissez ce dossier. Au démarrage, Chrome vous rappelle les extensions en mode développeur. Pour mettre à jour, remplacez les fichiers du dossier et cliquez sur le bouton de rechargement de la carte de l'extension.
 - Edge : utilisez la même archive. Ouvrez `edge://extensions`, activez le « Mode développeur », cliquez sur « Charger l'extension décompressée » et choisissez le dossier.
-- Firefox 128 ou plus récent : téléchargez `lingotube-<version>-firefox.xpi`, glissez le fichier dans la fenêtre de Firefox (ou ouvrez `about:addons`, cliquez sur l'icône en forme de roue dentée et choisissez « Installer un module depuis un fichier… ») et confirmez l'installation.
+- Firefox 140 ou plus récent : téléchargez `lingotube-<version>-firefox.xpi`, glissez le fichier dans la fenêtre de Firefox (ou ouvrez `about:addons`, cliquez sur l'icône en forme de roue dentée et choisissez « Installer un module depuis un fichier… ») et confirmez l'installation.
 
 Brave, Opera et Vivaldi n'ont pas été testés.
 

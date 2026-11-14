@@ -239,7 +239,7 @@ It is not in a web store yet. Download the files for your browser from the [rele
 
 - Chrome: download `lingotube-<version>-chromium.zip` and unzip it into a folder you will keep. Open `chrome://extensions`, turn on "Developer mode", click "Load unpacked" and choose that folder. Chrome reminds you about extensions in developer mode at startup. To update, replace the files in the folder and click the reload button on the extension's card.
 - Edge: use the same archive. Open `edge://extensions`, turn on "Developer mode", click "Load unpacked" and choose the folder.
-- Firefox 128 or newer: download `lingotube-<version>-firefox.xpi`, drag the file into the Firefox window (or open `about:addons`, click the gear icon and choose "Install Add-on From File...") and confirm the installation.
+- Firefox 140 or newer: download `lingotube-<version>-firefox.xpi`, drag the file into the Firefox window (or open `about:addons`, click the gear icon and choose "Install Add-on From File...") and confirm the installation.
 
 Brave, Opera and Vivaldi have not been tested.
 

@@ -54,7 +54,7 @@ def test_readme_mentions_browser_extension_page(readme_path: Path, page: str) ->
 
 @pytest.mark.parametrize("readme_path", README_PATHS, ids=lambda path: path.name)
 def test_readme_states_minimum_firefox_version(readme_path: Path) -> None:
-    assert "128" in extension_section(read_readme(readme_path))
+    assert "140" in extension_section(read_readme(readme_path))
 
 
 @pytest.mark.parametrize("readme_path", README_PATHS, ids=lambda path: path.name)
