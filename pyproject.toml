@@ -32,6 +32,7 @@ lingotube = "lingotube.cli:main"
 
 [dependency-groups]
 dev = [
+    "pdoc>=16.0.0",
     "pytest",
     "pytest-asyncio",
     "respx",
