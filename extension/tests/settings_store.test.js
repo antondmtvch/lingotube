@@ -16,8 +16,47 @@ function fakeStorage(initial = {}) {
 test('defaults are as documented', () => {
   assert.deepEqual(DEFAULT_SETTINGS, {
     enabled: false, language: { code: 'ru', name: 'Russian' }, customLanguageNames: [], textScale: 1, overlayPosition: null,
-    waitForSubtitles: true,
+    waitForSubtitles: true, textColor: 'white', backgroundOpacity: 0.75, outline: false, hintSeen: false,
   });
+});
+
+test('settings appearance: old settings without the new fields load with the defaults', async () => {
+  const loaded = await new SettingsStore(fakeStorage({ settings: { enabled: true } })).load();
+  assert.equal(loaded.textColor, 'white');
+  assert.equal(loaded.backgroundOpacity, 0.75);
+  assert.equal(loaded.outline, false);
+  assert.equal(loaded.hintSeen, false);
+});
+
+test('settings appearance: backgroundOpacity must be a number in 0..1, otherwise the default 0.75', async () => {
+  const load = (value) => new SettingsStore(fakeStorage({ settings: { backgroundOpacity: value } })).load();
+  assert.equal((await load(0.4)).backgroundOpacity, 0.4);
+  assert.equal((await load(1.7)).backgroundOpacity, 1);
+  assert.equal((await load(-0.2)).backgroundOpacity, 0);
+  assert.equal((await load('0.4')).backgroundOpacity, 0.75);
+  assert.equal((await load(Number.NaN)).backgroundOpacity, 0.75);
+});
+
+test('settings appearance: an unknown textColor falls back to white, known ones are kept', async () => {
+  const load = (value) => new SettingsStore(fakeStorage({ settings: { textColor: value } })).load();
+  assert.equal((await load('red')).textColor, 'white');
+  assert.equal((await load('yellow')).textColor, 'yellow');
+  assert.equal((await load('cyan')).textColor, 'cyan');
+});
+
+test('settings appearance: outline and hintSeen keep stored booleans only', async () => {
+  const loaded = await new SettingsStore(fakeStorage({ settings: { outline: 'yes', hintSeen: true } })).load();
+  assert.equal(loaded.outline, false);
+  assert.equal(loaded.hintSeen, true);
+});
+
+test('settings saver: saving hintSeen keeps the values another tab stored meanwhile', async () => {
+  const storage = fakeStorage({ settings: { ...DEFAULT_SETTINGS, textColor: 'yellow' } });
+  const store = new SettingsStore(storage);
+  await createSettingsSaver(store)({ hintSeen: true });
+  const stored = (await store.load());
+  assert.equal(stored.hintSeen, true);
+  assert.equal(stored.textColor, 'yellow');
 });
 
 test('settings: waitForSubtitles defaults to true', async () => {

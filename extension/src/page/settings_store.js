@@ -5,11 +5,15 @@ const SETTINGS_STORAGE_KEY = 'settings';
 const MIN_TEXT_SCALE = 0.6;
 const MAX_TEXT_SCALE = 2.0;
 const MAX_CUSTOM_LANGUAGE_NAMES = 5;
+const DEFAULT_BACKGROUND_OPACITY = 0.75;
+
+export const TEXT_COLORS = Object.freeze(['white', 'yellow', 'cyan']);
 
 /**
  * @typedef {{enabled: boolean, language: import('../shared/language_choices.js').TargetLanguage,
  *   customLanguageNames: string[], textScale: number, overlayPosition: {centerXFraction: number, bottomYFraction: number}|null,
- *   waitForSubtitles: boolean}} Settings
+ *   waitForSubtitles: boolean, textColor: 'white'|'yellow'|'cyan', backgroundOpacity: number, outline: boolean,
+ *   hintSeen: boolean}} Settings
  */
 
 /** @type {Settings} */
@@ -20,6 +24,10 @@ export const DEFAULT_SETTINGS = Object.freeze({
   textScale: 1,
   overlayPosition: null,
   waitForSubtitles: true,
+  textColor: 'white',
+  backgroundOpacity: DEFAULT_BACKGROUND_OPACITY,
+  outline: false,
+  hintSeen: false,
 });
 
 function isPlainObject(value) {
@@ -56,6 +64,16 @@ function normalizeTextScale(value) {
   return Math.min(MAX_TEXT_SCALE, Math.max(MIN_TEXT_SCALE, value));
 }
 
+function normalizeTextColor(value) {
+  return TEXT_COLORS.includes(value) ? value : DEFAULT_SETTINGS.textColor;
+}
+
+/** A non-number (a string too) is not a usable opacity: the default applies, not a clamped value. */
+function normalizeBackgroundOpacity(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return DEFAULT_BACKGROUND_OPACITY;
+  return Math.min(1, Math.max(0, value));
+}
+
 function isFractionOfPlayer(value) {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1;
 }
@@ -77,6 +95,10 @@ function normalizeSettings(raw) {
     textScale: normalizeTextScale(source.textScale),
     overlayPosition: normalizeOverlayPosition(source.overlayPosition),
     waitForSubtitles: typeof source.waitForSubtitles === 'boolean' ? source.waitForSubtitles : DEFAULT_SETTINGS.waitForSubtitles,
+    textColor: normalizeTextColor(source.textColor),
+    backgroundOpacity: normalizeBackgroundOpacity(source.backgroundOpacity),
+    outline: typeof source.outline === 'boolean' ? source.outline : DEFAULT_SETTINGS.outline,
+    hintSeen: typeof source.hintSeen === 'boolean' ? source.hintSeen : DEFAULT_SETTINGS.hintSeen,
   };
 }
 
