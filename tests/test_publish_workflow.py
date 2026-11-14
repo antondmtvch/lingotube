@@ -30,3 +30,17 @@ def test_workflow_has_no_password_or_token() -> None:
     text = WORKFLOW.read_text(encoding="utf-8")
     assert "password" not in text.lower()
     assert "PYPI_TOKEN" not in text
+
+
+def test_workflow_checks_tag_against_package_version() -> None:
+    """Check that the workflow refuses a tag whose version differs from pyproject.toml."""
+    text = WORKFLOW.read_text(encoding="utf-8")
+    assert "GITHUB_REF_NAME" in text
+    assert "pyproject.toml" in text
+
+
+def test_workflow_runs_tests_before_publishing() -> None:
+    """Check that the test suite runs before the publish step."""
+    text = WORKFLOW.read_text(encoding="utf-8")
+    assert "uv run pytest" in text
+    assert text.index("uv run pytest") < text.index("uv publish")
