@@ -240,7 +240,7 @@ npx skills add antondmtvch/lingotube
 
 - Chrome: نزّل `lingotube-<version>-chromium.zip` وفُكّ ضغطه في مجلد ستحتفظ به. افتح `chrome://extensions`، وفعّل «وضع المطوّر»، واضغط «تحميل إضافة غير مُحزّمة»، واختر ذلك المجلد. ينبّهك Chrome عند التشغيل إلى الإضافات العاملة في وضع المطوّر. وللتحديث استبدل الملفات في المجلد واضغط زر إعادة التحميل في بطاقة الإضافة.
 - Edge: استخدم الأرشيف نفسه. افتح `edge://extensions`، وفعّل «وضع المطوّر»، واضغط «Load unpacked»، واختر المجلد.
-- Firefox 128 أو أحدث: نزّل `lingotube-<version>-firefox.xpi`، واسحب الملف إلى نافذة Firefox (أو افتح `about:addons`، واضغط أيقونة الترس، واختر «Install Add-on From File...») ثم أكّد التثبيت.
+- Firefox 140 أو أحدث: نزّل `lingotube-<version>-firefox.xpi`، واسحب الملف إلى نافذة Firefox (أو افتح `about:addons`، واضغط أيقونة الترس، واختر «Install Add-on From File...») ثم أكّد التثبيت.
 
 لم تُختبر الإضافة في Brave وOpera وVivaldi.
 

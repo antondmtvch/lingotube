@@ -238,7 +238,7 @@ Chrome, Edge ও Firefox-এর জন্য একটি Manifest V3 এক্�
 
 - Chrome: `lingotube-<version>-chromium.zip` ডাউনলোড করে এমন একটি ফোল্ডারে আনজিপ করুন যেটি আপনি রেখে দেবেন। `chrome://extensions` খুলুন, «Developer mode» চালু করুন, «Load unpacked» চাপুন এবং সেই ফোল্ডার বেছে নিন। Chrome চালু হওয়ার সময় ডেভেলপার মোডের এক্সটেনশন নিয়ে মনে করিয়ে দেয়। আপডেট করতে ফোল্ডারের ফাইলগুলো বদলে দিন এবং এক্সটেনশনের কার্ডে রিলোড বোতাম চাপুন।
 - Edge: একই আর্কাইভ ব্যবহার করুন। `edge://extensions` খুলুন, «Developer mode» চালু করুন, «Load unpacked» চাপুন এবং ফোল্ডার বেছে নিন।
-- Firefox 128 বা নতুন: `lingotube-<version>-firefox.xpi` ডাউনলোড করুন, ফাইলটি Firefox-এর উইন্ডোতে টেনে আনুন (অথবা `about:addons` খুলুন, গিয়ার আইকনে ক্লিক করে «Install Add-on From File...» বেছে নিন) এবং ইনস্টলেশন নিশ্চিত করুন।
+- Firefox 140 বা নতুন: `lingotube-<version>-firefox.xpi` ডাউনলোড করুন, ফাইলটি Firefox-এর উইন্ডোতে টেনে আনুন (অথবা `about:addons` খুলুন, গিয়ার আইকনে ক্লিক করে «Install Add-on From File...» বেছে নিন) এবং ইনস্টলেশন নিশ্চিত করুন।
 
 Brave, Opera ও Vivaldi-তে পরীক্ষা করা হয়নি।
 

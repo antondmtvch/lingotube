@@ -238,7 +238,7 @@ Chrome、Edge、Firefox 向けの Manifest V3 拡張機能で、YouTube プレ�
 
 - Chrome：`lingotube-<version>-chromium.zip` をダウンロードし、保管しておくフォルダに展開します。`chrome://extensions` を開き、「デベロッパーモード」をオンにして「パッケージ化されていない拡張機能を読み込む」を押し、そのフォルダを選びます。Chrome は起動時に、デベロッパーモードの拡張機能について通知します。更新するには、フォルダ内のファイルを置き換え、拡張機能のカードにある再読み込みボタンを押します。
 - Edge：同じアーカイブを使います。`edge://extensions` を開き、「開発者モード」をオンにして「展開して読み込み」を押し、フォルダを選びます。
-- Firefox 128 以降：`lingotube-<version>-firefox.xpi` をダウンロードし、ファイルを Firefox のウィンドウにドラッグします（または `about:addons` を開き、歯車アイコンから「ファイルからアドオンをインストール」を選びます）。その後、インストールを確認します。
+- Firefox 140 以降：`lingotube-<version>-firefox.xpi` をダウンロードし、ファイルを Firefox のウィンドウにドラッグします（または `about:addons` を開き、歯車アイコンから「ファイルからアドオンをインストール」を選びます）。その後、インストールを確認します。
 
 Brave、Opera、Vivaldi では動作を確認していません。
 

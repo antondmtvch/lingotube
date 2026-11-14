@@ -236,7 +236,7 @@ npx skills add antondmtvch/lingotube
 
 - Chrome：下载 `lingotube-<version>-chromium.zip`，解压到一个你会长期保留的文件夹。打开 `chrome://extensions`，开启“开发者模式”，点击“加载已解压的扩展程序”，然后选择该文件夹。Chrome 在启动时会提醒你有处于开发者模式的扩展。要更新，请替换文件夹中的文件，并点击扩展卡片上的重新加载按钮。
 - Edge：使用同一个压缩包。打开 `edge://extensions`，开启“开发人员模式”，点击“加载解压缩的扩展”，然后选择该文件夹。
-- Firefox 128 或更高版本：下载 `lingotube-<version>-firefox.xpi`，把文件拖进 Firefox 窗口（或打开 `about:addons`，点击齿轮图标，选择“从文件安装附加组件…”），然后确认安装。
+- Firefox 140 或更高版本：下载 `lingotube-<version>-firefox.xpi`，把文件拖进 Firefox 窗口（或打开 `about:addons`，点击齿轮图标，选择“从文件安装附加组件…”），然后确认安装。
 
 尚未在 Brave、Opera 和 Vivaldi 中测试过。
 

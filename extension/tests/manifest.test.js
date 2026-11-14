@@ -40,7 +40,7 @@ test('manifest version is X.Y.Z', () => {
 
 test('manifest sets browser minimums', () => {
   assert.equal(manifest.minimum_chrome_version, '111');
-  assert.equal(manifest.browser_specific_settings.gecko.strict_min_version, '128.0');
+  assert.equal(manifest.browser_specific_settings.gecko.strict_min_version, '140.0');
 });
 
 test('manifest declares no data collection', () => {
