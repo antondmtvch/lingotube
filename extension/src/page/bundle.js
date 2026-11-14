@@ -3568,12 +3568,15 @@ class SubtitleSession {
   #pauseVideo;
   #playVideo;
   #isWaitForSubtitlesEnabled;
+  #hadRecentUserInput;
   #texts;
   #statusTextByStopReason;
 
   #isStarted = false;
   #isStopped = false;
   #isAdPlaying = false;
+  /** From start() until the cues (or the fallback) are ready; the box says "Перевожу…" meanwhile. */
+  #isLoading = false;
   #timerHandle = null;
   /** Caption mode: the cues and their translations. */
   #track = null;
@@ -3627,6 +3630,7 @@ class SubtitleSession {
    *   pauseVideo?: () => void,
    *   playVideo?: () => void,
    *   isWaitForSubtitlesEnabled?: () => boolean,
+   *   hadRecentUserInput?: () => boolean,
    *   texts?: Record<string, any>,
    * }} options
    */
@@ -3650,6 +3654,7 @@ class SubtitleSession {
     pauseVideo = () => {},
     playVideo = () => {},
     isWaitForSubtitlesEnabled = () => false,
+    hadRecentUserInput = () => true,
     texts = uiTexts('ru'),
   }) {
     this.#videoId = videoId;
@@ -3672,6 +3677,7 @@ class SubtitleSession {
     this.#pauseVideo = pauseVideo;
     this.#playVideo = playVideo;
     this.#isWaitForSubtitlesEnabled = isWaitForSubtitlesEnabled;
+    this.#hadRecentUserInput = hadRecentUserInput;
     this.#texts = texts;
     this.#statusTextByStopReason = {
       'not-signed-in': texts.notSignedIn,
@@ -3686,6 +3692,9 @@ class SubtitleSession {
     if (this.#isStarted || this.#isStopped) return;
     this.#isStarted = true;
     if (!this.#isAdPlaying) this.#overlayView.showStatus(this.#texts.translating);
+    // The timer runs from the start: while the cues load, the wait setting already holds the video.
+    this.#isLoading = true;
+    this.#startTimer();
 
     let loaded = null;
     let hasCaptionTracks = true;
@@ -3733,7 +3742,7 @@ class SubtitleSession {
       cues: loaded.cues.length,
       cachedTranslations: Object.keys(this.#track.translationsByCueId()).length,
     });
-    this.#startTimer();
+    this.#finishLoading();
   }
 
   /**
@@ -3746,6 +3755,12 @@ class SubtitleSession {
     // Infinity is a live stream: it has no end, so the transcript cannot be chunked.
     const durationMs = Number.isFinite(rawDurationMs) && rawDurationMs > 0 ? rawDurationMs : 0;
     if (durationMs <= 0) {
+      // Nothing will be shown, so nothing is awaited: give the video back and stop ticking.
+      this.#isLoading = false;
+      this.#releaseOurPause();
+      this.#resetWait();
+      if (this.#timerHandle !== null) this.#clearTimer(this.#timerHandle);
+      this.#timerHandle = null;
       this.#overlayView.clear();
       this.#onStatusChanged(this.#texts.captionsNotFetched, { canRetry: false });
       return;
@@ -3779,12 +3794,19 @@ class SubtitleSession {
       chunks: this.#chunkStore.chunkCount,
       cachedChunks,
     });
-    this.#startTimer();
+    this.#finishLoading();
   }
 
   #startTimer() {
     this.#lastRenderedKey = null;
     this.#timerHandle = this.#setTimer(() => this.#tick(), TICK_INTERVAL_MS);
+    this.#tick();
+  }
+
+  /** The cues or the fallback are ready; the timer already runs, so this tick shows them. */
+  #finishLoading() {
+    this.#isLoading = false;
+    this.#lastRenderedKey = null;
     this.#tick();
   }
 
@@ -3827,7 +3849,12 @@ class SubtitleSession {
   }
 
   #tick() {
-    if (this.#isStopped || this.#isAdPlaying || !this.#pump) return;
+    if (this.#isStopped || this.#isAdPlaying) return;
+    if (!this.#pump) {
+      // Still loading: the box already says "Перевожу…", so the video waits like for any cue.
+      if (this.#isLoading) this.#applyWaitDecision(this.#getPositionMs(), true);
+      return;
+    }
     this.#resumeWhenRateLimitPassed();
     if (this.#isStopped) return;
     const positionMs = this.#getPositionMs();
@@ -3857,13 +3884,17 @@ class SubtitleSession {
 
     const durationMs = Number(this.#getDurationMs());
     const isVideoPaused = this.#isPaused();
-    if (isWaiting && this.#pausedByUs && !isVideoPaused) this.#isWaitDismissedByUser = true;
+    if (isWaiting && this.#pausedByUs && !isVideoPaused) {
+      // Only a real user action dismisses the wait. Without one it was the page itself (the player
+      // starting up after a reload calls play), so our pause goes on again with the next tick.
+      if (this.#hadRecentUserInput()) this.#isWaitDismissedByUser = true;
+    }
     if (!isWaiting) this.#isWaitDismissedByUser = false;
     const decision = decideWaitAction({
       isEnabled: this.#isWaitForSubtitlesEnabled(),
       isWaiting,
       isAdPlaying: this.#isAdPlaying,
-      isPumpStopped: this.#pump.stopReason !== null,
+      isPumpStopped: (this.#pump?.stopReason ?? null) !== null,
       isAtVideoEnd: Number.isFinite(durationMs) && durationMs > 0 && positionMs >= durationMs,
       isVideoPaused,
       pausedByUs: this.#pausedByUs,
@@ -4481,6 +4512,24 @@ async function loadYouTubeCues({ window, playerElement, videoId, captureSerially
   return { cues: buildCues(words, DEFAULT_CUE_RULES), sourceKey: captionSourceKey(track) };
 }
 
+const USER_INPUT_WINDOW_MS = 1000;
+
+/**
+ * Remembers when the user last pressed something on the page. Only trusted events count: the
+ * player's own play() and our synthetic clicks on the subtitles button produce none.
+ * @returns {() => boolean} true when a user action happened within the last second
+ */
+function trackRecentUserInput(document) {
+  let lastUserInputMs = -Infinity;
+  const remember = (event) => {
+    if (event.isTrusted) lastUserInputMs = Date.now();
+  };
+  // Capture phase: the overlay panel stops its key events from bubbling to the player.
+  document.addEventListener('pointerdown', remember, true);
+  document.addEventListener('keydown', remember, true);
+  return () => Date.now() - lastUserInputMs <= USER_INPUT_WINDOW_MS;
+}
+
 /** Builds the page-lifetime components and reacts to navigation, ads and the player panel. */
 function startLingotubePage({ window, document }) {
   const uiLanguage = pickUiLanguage(window.navigator?.language);
@@ -4491,6 +4540,7 @@ function startLingotubePage({ window, document }) {
   // One cache and one gate for the page lifetime, shared by every session.
   const translationCache = new TranslationCache(extensionStorage);
   const chatRequestGate = createChatRequestGate({ window, document });
+  const hadRecentUserInput = trackRecentUserInput(document);
   const settingsLoading = loadSettingsWithRetries(settingsStore, { sleep });
   const saveSettingsChange = createSettingsSaver(settingsStore);
   // One capture at a time on the page: a stale capture of the previous video must finish
@@ -4624,6 +4674,7 @@ function startLingotubePage({ window, document }) {
       pauseVideo: videoPlayback.pause,
       playVideo: videoPlayback.play,
       isWaitForSubtitlesEnabled: () => settings.waitForSubtitles !== false,
+      hadRecentUserInput,
       setTimer: (callback, intervalMs) => setInterval(callback, intervalMs),
       clearTimer: (handle) => clearInterval(handle),
       onStatusChanged: (statusText, { canRetry }) => showSessionStatus(statusText, canRetry),

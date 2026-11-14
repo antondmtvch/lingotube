@@ -98,6 +98,24 @@ async function loadYouTubeCues({ window, playerElement, videoId, captureSerially
   return { cues: buildCues(words, DEFAULT_CUE_RULES), sourceKey: captionSourceKey(track) };
 }
 
+const USER_INPUT_WINDOW_MS = 1000;
+
+/**
+ * Remembers when the user last pressed something on the page. Only trusted events count: the
+ * player's own play() and our synthetic clicks on the subtitles button produce none.
+ * @returns {() => boolean} true when a user action happened within the last second
+ */
+function trackRecentUserInput(document) {
+  let lastUserInputMs = -Infinity;
+  const remember = (event) => {
+    if (event.isTrusted) lastUserInputMs = Date.now();
+  };
+  // Capture phase: the overlay panel stops its key events from bubbling to the player.
+  document.addEventListener('pointerdown', remember, true);
+  document.addEventListener('keydown', remember, true);
+  return () => Date.now() - lastUserInputMs <= USER_INPUT_WINDOW_MS;
+}
+
 /** Builds the page-lifetime components and reacts to navigation, ads and the player panel. */
 function startLingotubePage({ window, document }) {
   const uiLanguage = pickUiLanguage(window.navigator?.language);
@@ -108,6 +126,7 @@ function startLingotubePage({ window, document }) {
   // One cache and one gate for the page lifetime, shared by every session.
   const translationCache = new TranslationCache(extensionStorage);
   const chatRequestGate = createChatRequestGate({ window, document });
+  const hadRecentUserInput = trackRecentUserInput(document);
   const settingsLoading = loadSettingsWithRetries(settingsStore, { sleep });
   const saveSettingsChange = createSettingsSaver(settingsStore);
   // One capture at a time on the page: a stale capture of the previous video must finish
@@ -241,6 +260,7 @@ function startLingotubePage({ window, document }) {
       pauseVideo: videoPlayback.pause,
       playVideo: videoPlayback.play,
       isWaitForSubtitlesEnabled: () => settings.waitForSubtitles !== false,
+      hadRecentUserInput,
       setTimer: (callback, intervalMs) => setInterval(callback, intervalMs),
       clearTimer: (handle) => clearInterval(handle),
       onStatusChanged: (statusText, { canRetry }) => showSessionStatus(statusText, canRetry),

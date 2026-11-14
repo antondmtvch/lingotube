@@ -198,7 +198,7 @@ test('after stop() a late translator reply never reaches the view or the cache',
   assert.equal(harness.cacheCalls.saves.length, 0);
 });
 
-test('stop() during loadCues: the session does not start its timer', async () => {
+test('stop() during loadCues: the timer is cleared and nothing else happens', async () => {
   let finishLoading;
   const harness = sessionHarness({
     overrides: {
@@ -211,13 +211,14 @@ test('stop() during loadCues: the session does not start its timer', async () =>
   harness.session.stop();
   finishLoading({ cues: cuesOf(3), sourceKey: 'en.asr' });
   await starting;
-  assert.equal(harness.timer.setCount, 0);
+  // The timer runs from start() (the loading phase holds the video); stop() clears it.
+  assert.equal(harness.timer.isCleared, true);
   assert.deepEqual(harness.cacheCalls.loads, []);
   assert.deepEqual(harness.statuses, []);
   assert.deepEqual(harness.infoLogs, []);
 });
 
-test('stop() during the cache load: the session does not start its timer', async () => {
+test('stop() during the cache load: the timer is cleared', async () => {
   let finishCacheLoad;
   const slowCache = {
     load: () => new Promise((resolve) => {
@@ -231,7 +232,7 @@ test('stop() during the cache load: the session does not start its timer', async
   slowHarness.session.stop();
   finishCacheLoad(null);
   await starting;
-  assert.equal(slowHarness.timer.setCount, 0);
+  assert.equal(slowHarness.timer.isCleared, true);
 });
 
 const noCaptionTracks = async () => {
@@ -379,11 +380,11 @@ test('fallback: retry re-schedules chunks that came back empty', async () => {
   assert.deepEqual(harness.transcriptSource.calls.map((call) => call.index), [0, 1, 2, 2]);
 });
 
-test('fallback without a known duration reports captionsNotFetched and starts no timer', async () => {
+test('fallback without a known duration reports captionsNotFetched and leaves no timer running', async () => {
   const harness = sessionHarness({ overrides: { loadCues: noCaptionTracks, getDurationMs: () => 0 } });
   await harness.session.start();
   assert.deepEqual(harness.statuses.at(-1), [STATUS_TEXTS.captionsNotFetched, { canRetry: false }]);
-  assert.equal(harness.timer.setCount, 0);
+  assert.equal(harness.timer.isCleared, true);
   assert.deepEqual(harness.viewCalls.at(-1), ['clear']);
 });
 
@@ -391,7 +392,7 @@ test('fallback on a live stream (infinite duration) behaves like an unknown dura
   const harness = sessionHarness({ overrides: { loadCues: noCaptionTracks, getDurationMs: () => Infinity } });
   await harness.session.start();
   assert.deepEqual(harness.statuses.at(-1), [STATUS_TEXTS.captionsNotFetched, { canRetry: false }]);
-  assert.equal(harness.timer.setCount, 0);
+  assert.equal(harness.timer.isCleared, true);
 });
 
 test('a rate-limited stop reports the minutes text with canRetry true', async () => {
@@ -703,10 +704,11 @@ test('an ad does not call play when the video is already playing again', async (
 test('a user pause is not resumed when the cue becomes ready', async () => {
   const harness = waitHarness({ cachedEntry: { translations: translationsOf([...Array(10).keys()]) } });
   await harness.session.start();
+  const callsAfterLoading = harness.videoCalls.length; // the loading pause and its release
   harness.playback.isPaused = true; // the user's own pause on a translated cue
   harness.playback.positionMs = 5500;
   for (let tick = 0; tick < 3; tick += 1) await harness.tick();
-  assert.deepEqual(harness.videoCalls, []);
+  assert.deepEqual(harness.videoCalls.slice(callsAfterLoading), []);
 });
 
 test('a user pause made while the cue is waiting is never undone by us', async () => {
@@ -772,7 +774,7 @@ test('a throwing pauseVideo does not crash the tick and leaves no pause flag', a
   await harness.session.start();
   await harness.tick();
   await harness.tick();
-  assert.equal(pauseCalls, 3); // start() ticks once, then two timer ticks: no stuck flag
+  assert.equal(pauseCalls, 4); // a loading tick, the tick after loading, two timer ticks: no stuck flag
   assert.deepEqual(harness.viewCalls.at(-1), ['showStatus', STATUS_TEXTS.translating]);
   assert.deepEqual(harness.videoCalls, []);
   const { cues, resolve } = harness.translator.calls[0];
@@ -780,7 +782,7 @@ test('a throwing pauseVideo does not crash the tick and leaves no pause flag', a
   await flush();
   await harness.tick();
   assert.deepEqual(harness.viewCalls.at(-1), ['showCueText', 't0']);
-  assert.equal(pauseCalls, 3);
+  assert.equal(pauseCalls, 4); // the cue is ready: no further pause attempt
 });
 
 test('a throwing playVideo does not crash the tick and the pause flag is released', async () => {
@@ -824,8 +826,10 @@ test('a gap between cues never pauses the video', async () => {
   const harness = waitHarness();
   harness.playback.positionMs = 950; // between cue 0 (ends 900) and cue 1 (starts 1000)
   await harness.session.start();
+  const callsAfterLoading = harness.videoCalls.length; // the loading pause and its release
   await harness.tick();
-  assert.deepEqual(harness.videoCalls, []);
+  assert.deepEqual(harness.videoCalls.slice(callsAfterLoading), []);
+  assert.equal(harness.playback.isPaused, false);
 });
 
 test('stop() releases our pause so the video is not left paused', async () => {
@@ -943,4 +947,81 @@ test('shows the translating status in the language of the texts option, Russian 
   byDefault.playback.positionMs = 500;
   await byDefault.tick();
   assert.deepEqual(byDefault.viewCalls.at(-1), ['showStatus', STATUS_TEXTS.translating]);
+});
+
+/** A loadCues the test settles: the session stays in its loading phase until then. */
+function pendingLoad() {
+  const load = { finish: null, fail: null };
+  load.loadCues = () => new Promise((resolve, reject) => {
+    load.finish = resolve;
+    load.fail = reject;
+  });
+  return load;
+}
+
+test('while the cues load, the box says "Перевожу…" and a playing video is paused', async () => {
+  const load = pendingLoad();
+  const harness = waitHarness({ overrides: { loadCues: load.loadCues } });
+  harness.session.start();
+  await flush();
+  assert.deepEqual(harness.viewCalls[0], ['showStatus', STATUS_TEXTS.translating]);
+  assert.deepEqual(harness.videoCalls, ['pause']);
+});
+
+test('the loading pause is released when the loaded cue under the playhead is already translated', async () => {
+  const load = pendingLoad();
+  const harness = waitHarness({
+    cachedEntry: { translations: translationsOf([0, 1, 2]) },
+    overrides: { loadCues: load.loadCues },
+  });
+  const starting = harness.session.start();
+  await flush();
+  load.finish({ cues: cuesOf(3), sourceKey: 'en.asr' });
+  await starting;
+  await harness.tick();
+  assert.deepEqual(harness.videoCalls, ['pause', 'play']);
+});
+
+test('with the wait setting off, loading does not pause the video', async () => {
+  const load = pendingLoad();
+  const harness = waitHarness({ overrides: { loadCues: load.loadCues, isWaitForSubtitlesEnabled: () => false } });
+  harness.session.start();
+  await flush();
+  await harness.tick();
+  assert.deepEqual(harness.videoCalls, []);
+});
+
+test('a live stream (no duration, no captions) releases the loading pause', async () => {
+  const load = pendingLoad();
+  const harness = waitHarness({ overrides: { loadCues: load.loadCues, getDurationMs: () => Infinity } });
+  const starting = harness.session.start();
+  await flush();
+  load.fail(new CaptionsUnavailableError('no request'));
+  await starting;
+  await harness.tick();
+  assert.deepEqual(harness.videoCalls, ['pause', 'play']);
+});
+
+test('a resume over our pause with no user action (the player starting up) is paused again, not a dismissal', async () => {
+  const load = pendingLoad();
+  const harness = waitHarness({ overrides: { loadCues: load.loadCues, hadRecentUserInput: () => false } });
+  harness.playback.positionMs = 18000;
+  harness.session.start();
+  await flush();
+  assert.deepEqual(harness.videoCalls, ['pause']);
+  harness.playback.isPaused = false; // the player plays by itself; nobody pressed anything
+  await harness.tick();
+  await harness.tick();
+  assert.deepEqual(harness.videoCalls, ['pause', 'pause']);
+});
+
+test('the same resume right after a user action is the user dismissing the wait', async () => {
+  const load = pendingLoad();
+  const harness = waitHarness({ overrides: { loadCues: load.loadCues, hadRecentUserInput: () => true } });
+  harness.session.start();
+  await flush();
+  harness.playback.isPaused = false; // the user pressed play
+  await harness.tick();
+  await harness.tick();
+  assert.deepEqual(harness.videoCalls, ['pause']);
 });
