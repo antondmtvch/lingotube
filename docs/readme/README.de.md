@@ -7,7 +7,7 @@
 
 [English](../../README.md) · [Русский](README.ru.md) · [简体中文](README.zh-Hans.md) · [繁體中文](README.zh-Hant.md) · [हिन्दी](README.hi.md) · [Español](README.es.md) · [Français](README.fr.md) · [العربية](README.ar.md) · [বাংলা](README.bn.md) · [Português](README.pt.md) · [ไทย](README.th.md) · [日本語](README.ja.md) · [Tiếng Việt](README.vi.md) · **Deutsch**
 
-Ein Kommandozeilenwerkzeug, das Untertitel, ein Transkript und eine Zusammenfassung eines YouTube-Videos liefert.
+lingotube liefert Untertitel, ein Transkript und eine Zusammenfassung eines YouTube-Videos. Das Projekt besteht aus drei Teilen: einem Kommandozeilenwerkzeug, einem Skill für KI-Agenten und einer Browser-Erweiterung (in Entwicklung), die übersetzte Untertitel über dem Player anzeigt.
 Der Text stammt aus dem integrierten YouTube-Chat („Fragen“, Gemini) auf der Videoseite.
 Alle Anfragen werden im Namen Ihres YouTube-Kontos gestellt.
 
@@ -22,7 +22,35 @@ Alle Anfragen werden im Namen Ihres YouTube-Kontos gestellt.
 > Fragen und Antworten bleiben im Chatverlauf Ihres Kontos. Der Chat ist in Russland und in den meisten
 > EU-Ländern nicht verfügbar, ebenso unter manchen Videos nicht.
 
-## Funktionen
+**Inhalt**
+
+- [Was enthalten ist](#was-enthalten-ist)
+- [Kommandozeilenwerkzeug (CLI)](#kommandozeilenwerkzeug-cli)
+  - [Funktionen](#funktionen)
+  - [Installation](#installation)
+  - [Schnellstart](#schnellstart)
+  - [Befehle](#befehle)
+  - [Cookies und Anmeldung](#cookies-und-anmeldung)
+  - [Übersetzungsmodi](#übersetzungsmodi)
+  - [Exit-Codes](#exit-codes)
+- [Skill für KI-Agenten](#skill-für-ki-agenten)
+- [Browser-Erweiterung](#browser-erweiterung)
+- [Einschränkungen](#einschränkungen)
+- [Entwicklung](#entwicklung)
+
+## Was enthalten ist
+
+| Komponente | Was sie tut |
+|---|---|
+| [Kommandozeilenwerkzeug (CLI)](#kommandozeilenwerkzeug-cli) | Der Befehl `lingotube`: liefert Untertitel, ein Transkript und eine Zusammenfassung eines Videos als Dateien oder JSON. |
+| [Skill für KI-Agenten](#skill-für-ki-agenten) | Lässt einen KI-Agenten (Claude Code, Codex, Cursor und andere) ein Video zusammenfassen, ein Transkript oder Untertitel erstellen und einen Moment anhand einer Beschreibung finden. Er ruft das Kommandozeilenwerkzeug auf. |
+| [Browser-Erweiterung](#browser-erweiterung) | Übersetzte Untertitel über dem YouTube-Player, in jeder Sprache. In Entwicklung. |
+
+## Kommandozeilenwerkzeug (CLI)
+
+Alles in diesem Abschnitt betrifft den Befehl `lingotube`. Der Skill und die Erweiterung haben weiter unten eigene Abschnitte.
+
+### Funktionen
 
 - **Untertitel** in jeder Sprache, in den Formaten `srt`, `vtt` und `json`.
 - **Transkript** in der Originalsprache mit Zeitmarken.
@@ -32,7 +60,7 @@ Alle Anfragen werden im Namen Ihres YouTube-Kontos gestellt.
 - **Cache und Fortsetzung**: Lange Videos werden in Teilen verarbeitet, und nach einem Fehler geht die Arbeit dort weiter, wo sie aufgehört hat.
 - **Maschinenlesbare Ausgabe** mit `--json` für Skripte und KI-Agenten.
 
-## Installation
+### Installation
 
 Sie benötigen [uv](https://docs.astral.sh/uv/). uv lädt die passende Python-Version selbst herunter.
 
@@ -53,7 +81,7 @@ uv tool upgrade lingotube
 uv tool uninstall lingotube
 ```
 
-## Schnellstart
+### Schnellstart
 
 1. Melden Sie sich bei YouTube an. In Chrome oder Edge geht das am einfachsten so:
 
@@ -79,7 +107,7 @@ uv tool uninstall lingotube
    lingotube subs https://www.youtube.com/watch?v=XXXXXXXXXXX --lang de
    ```
 
-## Befehle
+### Befehle
 
 | Befehl | Was er tut |
 |---|---|
@@ -109,7 +137,7 @@ Eine ID, die mit einem Bindestrich beginnt, übergeben Sie nach `--`:
 lingotube subs --lang de -- -n5MqamatXE
 ```
 
-## Cookies und Anmeldung
+### Cookies und Anmeldung
 
 Das Werkzeug nimmt die erste passende Quelle in dieser Reihenfolge:
 
@@ -128,13 +156,13 @@ Verwenden Sie dafür `lingotube login`. Der Export einer Datei bleibt ein Auswei
 
 Wenn die Cookies nicht mehr funktionieren (Exit-Code `4`), führen Sie `lingotube login` erneut aus oder exportieren Sie eine frische Datei.
 
-## Übersetzungsmodi
+### Übersetzungsmodi
 
 | Modus | Wann er aktiv ist | Wer übersetzt |
 |---|---|---|
 | **Chat** (Standard) | nichts ist konfiguriert | der YouTube-Chat liefert den Text sofort in der gewünschten Sprache |
 | **Eigenes Modell** | der Abschnitt `[translator]` ist in den Einstellungen gesetzt | Ihr Modell mit OpenAI-kompatibler API |
-| **Agent** | `transcript` → Übersetzung → `build` | ein KI-Agent oder Sie |
+| **Agent** | `transcript` → Übersetzung → `build` | ein KI-Agent oder Sie von Hand; lingotube prüft die Übersetzung nur und baut die Untertitel |
 
 Die Einstellungen liegen in `settings.toml`:
 
@@ -168,7 +196,7 @@ lingotube build <Link> --lang de --from de.json   # Prüfung und Aufbau der Unte
 > Für eine wörtliche Übersetzung nutzen Sie den Modus „eigenes Modell“ oder „Agent“: Sie holen zuerst
 > das Original, und die Übersetzung wird anhand der Zeilennummern geprüft. Der Chat kann Sätze umschreiben oder zusammenfassen.
 
-## Exit-Codes
+### Exit-Codes
 
 | Code | Bedeutung |
 |---|---|
@@ -182,19 +210,10 @@ lingotube build <Link> --lang de --from de.json   # Prüfung und Aufbau der Unte
 | `7` | Die Daten haben die Prüfung nicht bestanden. |
 | `130` | Vom Benutzer abgebrochen (Strg+C). |
 
-## Einschränkungen
-
-- Der Chat funktioniert nur für angemeldete Nutzer über 13 Jahren, ist nicht in jedem Land verfügbar
-  und nicht unter jedem Video vorhanden.
-- Markenkonten werden nicht unterstützt: Es wird das Hauptkonto des Browsers verwendet.
-- Eine Stunde Video braucht mehrere Minuten: Die Anfragen gehen nacheinander raus.
-- Die Zeiten der Zeilen legt der Chat fest. Bei langen Videos können einzelne Zeilen um einige
-  Sekunden abweichen; eine konstante Verschiebung korrigieren Sie mit der Option `--offset`.
-- Der Text langer Videos ist nicht garantiert wortwörtlich: Der Chat antwortet manchmal mit einem
-  sinngemäß ähnlichen Text, und das Werkzeug erkennt das nicht. Prüfen Sie das Ergebnis bei wichtigen Anwendungen anhand der Aufnahme.
-- Proxys werden nicht unterstützt.
-
 ## Skill für KI-Agenten
+
+Der Skill ruft das [Kommandozeilenwerkzeug](#kommandozeilenwerkzeug-cli) für den Agenten auf. Installieren Sie also zuerst das Werkzeug und dann den Skill.
+
 
 Das Repository enthält einen Skill im offenen Agent-Skills-Format. Damit fasst ein KI-Agent (Claude Code, Codex,
 Cursor, Gemini CLI und andere) Videos zusammen, erstellt Transkripte und Untertitel, findet
@@ -209,8 +228,28 @@ Ohne Node.js kopieren Sie den Ordner `skills/lingotube/` in den Skills-Ordner Ih
 
 ## Browser-Erweiterung
 
-Der Ordner `extension/` enthält eine Erweiterung mit übersetzten Untertiteln über dem YouTube-Player.
-Sie ist in Entwicklung und noch nicht im Hauptzweig.
+Eine Manifest-V3-Erweiterung für Chrome und Edge, die übersetzte Untertitel über dem YouTube-Player anzeigt. Sie ist in Entwicklung und noch nicht im Hauptzweig.
+
+- Eine Schaltfläche im Player schaltet die Untertitel ein; das Feld mit dem Text lässt sich verschieben.
+- Sie wählen eine von 30 Sprachen oder tippen eine eigene ein.
+- Zeiten und Originaltext stammen aus den eigenen Untertiteln von YouTube; der Chat übersetzt sie nur.
+- Sie funktioniert in dem Browser, in dem Sie bereits bei YouTube angemeldet sind, daher ist keine Cookie-Einrichtung nötig.
+- Sie ist in keinem Store: Öffnen Sie die Erweiterungsseite Ihres Browsers, aktivieren Sie den Entwicklermodus, klicken Sie auf „Entpackte Erweiterung laden“ und wählen Sie den Ordner `extension/`.
+
+## Einschränkungen
+
+Diese Einschränkungen gelten für alle drei Komponenten, weil alle auf dem YouTube-Chat beruhen.
+
+
+- Der Chat funktioniert nur für angemeldete Nutzer über 13 Jahren, ist nicht in jedem Land verfügbar
+  und nicht unter jedem Video vorhanden.
+- Markenkonten werden nicht unterstützt: Es wird das Hauptkonto des Browsers verwendet.
+- Eine Stunde Video braucht mehrere Minuten: Die Anfragen gehen nacheinander raus.
+- Die Zeiten der Zeilen legt der Chat fest. Bei langen Videos können einzelne Zeilen um einige
+  Sekunden abweichen; eine konstante Verschiebung korrigieren Sie mit der Option `--offset`.
+- Der Text langer Videos ist nicht garantiert wortwörtlich: Der Chat antwortet manchmal mit einem
+  sinngemäß ähnlichen Text, und das Werkzeug erkennt das nicht. Prüfen Sie das Ergebnis bei wichtigen Anwendungen anhand der Aufnahme.
+- Proxys werden nicht unterstützt.
 
 ## Entwicklung
 

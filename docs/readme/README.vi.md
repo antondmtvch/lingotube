@@ -7,7 +7,7 @@
 
 [English](../../README.md) · [Русский](README.ru.md) · [简体中文](README.zh-Hans.md) · [繁體中文](README.zh-Hant.md) · [हिन्दी](README.hi.md) · [Español](README.es.md) · [Français](README.fr.md) · [العربية](README.ar.md) · [বাংলা](README.bn.md) · [Português](README.pt.md) · [ไทย](README.th.md) · [日本語](README.ja.md) · **Tiếng Việt** · [Deutsch](README.de.md)
 
-Công cụ dòng lệnh để lấy phụ đề, bản chép lời và bản tóm tắt của video YouTube.
+lingotube lấy phụ đề, bản chép lời và bản tóm tắt của video YouTube. Dự án gồm ba phần: công cụ dòng lệnh, skill cho tác tử AI và tiện ích mở rộng trình duyệt (đang phát triển) hiển thị phụ đề đã dịch phía trên trình phát.
 Văn bản được lấy từ khung chat tích hợp sẵn của YouTube («Hỏi», Gemini) trên trang video.
 Mọi yêu cầu đều được gửi dưới danh nghĩa tài khoản YouTube của bạn.
 
@@ -22,7 +22,35 @@ Mọi yêu cầu đều được gửi dưới danh nghĩa tài khoản YouTube 
 > Câu hỏi và câu trả lời vẫn nằm trong lịch sử chat của tài khoản bạn. Chat không khả dụng ở Nga
 > và phần lớn các nước EU, cũng như dưới một số video.
 
-## Tính năng
+**Mục lục**
+
+- [Dự án gồm những gì](#dự-án-gồm-những-gì)
+- [Công cụ dòng lệnh (CLI)](#công-cụ-dòng-lệnh-cli)
+  - [Tính năng](#tính-năng)
+  - [Cài đặt](#cài-đặt)
+  - [Bắt đầu nhanh](#bắt-đầu-nhanh)
+  - [Lệnh](#lệnh)
+  - [Cookie và đăng nhập](#cookie-và-đăng-nhập)
+  - [Các chế độ dịch](#các-chế-độ-dịch)
+  - [Mã thoát](#mã-thoát)
+- [Skill cho tác tử AI](#skill-cho-tác-tử-ai)
+- [Tiện ích mở rộng trình duyệt](#tiện-ích-mở-rộng-trình-duyệt)
+- [Hạn chế](#hạn-chế)
+- [Phát triển](#phát-triển)
+
+## Dự án gồm những gì
+
+| Thành phần | Chức năng |
+|---|---|
+| [Công cụ dòng lệnh (CLI)](#công-cụ-dòng-lệnh-cli) | Lệnh `lingotube`: lấy phụ đề, bản chép lời và bản tóm tắt của video dưới dạng tệp hoặc JSON. |
+| [Skill cho tác tử AI](#skill-cho-tác-tử-ai) | Cho phép tác tử AI (Claude Code, Codex, Cursor và các tác tử khác) tóm tắt video, tạo bản chép lời hoặc phụ đề và tìm một thời điểm theo mô tả. Nó chạy công cụ dòng lệnh. |
+| [Tiện ích mở rộng trình duyệt](#tiện-ích-mở-rộng-trình-duyệt) | Phụ đề đã dịch phía trên trình phát YouTube, bằng mọi ngôn ngữ. Đang phát triển. |
+
+## Công cụ dòng lệnh (CLI)
+
+Mọi nội dung trong phần này đều nói về lệnh `lingotube`. Skill và tiện ích mở rộng có các phần riêng ở bên dưới.
+
+### Tính năng
 
 - **Phụ đề** bằng mọi ngôn ngữ, ở các định dạng `srt`, `vtt` và `json`.
 - **Bản chép lời** bằng ngôn ngữ gốc, kèm mốc thời gian.
@@ -32,7 +60,7 @@ Mọi yêu cầu đều được gửi dưới danh nghĩa tài khoản YouTube 
 - **Bộ nhớ đệm và tiếp tục**: video dài được xử lý theo từng phần, và sau khi lỗi, công việc tiếp tục từ chỗ đã dừng.
 - **Đầu ra máy đọc được** với `--json` cho script và tác tử AI.
 
-## Cài đặt
+### Cài đặt
 
 Bạn cần [uv](https://docs.astral.sh/uv/). uv tự tải đúng phiên bản Python.
 
@@ -53,7 +81,7 @@ uv tool upgrade lingotube
 uv tool uninstall lingotube
 ```
 
-## Bắt đầu nhanh
+### Bắt đầu nhanh
 
 1. Đăng nhập YouTube. Trên Chrome hoặc Edge, cách dễ nhất là:
 
@@ -79,7 +107,7 @@ uv tool uninstall lingotube
    lingotube subs https://www.youtube.com/watch?v=XXXXXXXXXXX --lang vi
    ```
 
-## Lệnh
+### Lệnh
 
 | Lệnh | Chức năng |
 |---|---|
@@ -109,7 +137,7 @@ ID bắt đầu bằng dấu gạch nối được truyền sau `--`:
 lingotube subs --lang vi -- -n5MqamatXE
 ```
 
-## Cookie và đăng nhập
+### Cookie và đăng nhập
 
 Công cụ lấy nguồn phù hợp đầu tiên theo thứ tự sau:
 
@@ -128,13 +156,13 @@ Với chúng, hãy dùng `lingotube login`. Xuất tệp vẫn là phương án 
 
 Nếu cookie ngừng hoạt động (mã thoát `4`), hãy chạy lại `lingotube login` hoặc xuất một tệp mới.
 
-## Các chế độ dịch
+### Các chế độ dịch
 
 | Chế độ | Khi nào bật | Ai dịch |
 |---|---|---|
 | **Chat** (mặc định) | chưa cấu hình gì | chat của YouTube trả văn bản ngay bằng ngôn ngữ cần thiết |
 | **Mô hình riêng** | mục `[translator]` được đặt trong cài đặt | mô hình của bạn với API tương thích OpenAI |
-| **Tác tử** | `transcript` → dịch → `build` | tác tử AI hoặc chính bạn |
+| **Tác tử** | `transcript` → dịch → `build` | tác tử AI hoặc chính bạn làm thủ công; lingotube chỉ kiểm tra bản dịch và dựng phụ đề |
 
 Cài đặt nằm trong `settings.toml`:
 
@@ -168,7 +196,7 @@ lingotube build <liên kết> --lang vi --from vi.json   # kiểm tra và dựng
 > Để giữ bản dịch sát từng chữ, hãy dùng chế độ «mô hình riêng» hoặc «tác tử»: chúng lấy bản gốc trước,
 > rồi kiểm tra bản dịch theo số dòng. Chat có thể diễn đạt lại hoặc gộp các câu.
 
-## Mã thoát
+### Mã thoát
 
 | Mã | Ý nghĩa |
 |---|---|
@@ -182,19 +210,10 @@ lingotube build <liên kết> --lang vi --from vi.json   # kiểm tra và dựng
 | `7` | Dữ liệu không qua được bước kiểm tra. |
 | `130` | Bị người dùng ngắt (Ctrl+C). |
 
-## Hạn chế
-
-- Chat chỉ hoạt động với người dùng đã đăng nhập trên 13 tuổi, không có ở mọi quốc gia
-  và không có dưới mọi video.
-- Không hỗ trợ tài khoản thương hiệu: dùng tài khoản chính của trình duyệt.
-- Một giờ video mất vài phút: các yêu cầu được gửi lần lượt.
-- Thời gian của các dòng do chat quyết định. Ở video dài, một số dòng có thể lệch vài
-  giây; độ lệch cố định được chỉnh bằng tùy chọn `--offset`.
-- Văn bản của video dài không đảm bảo sát từng chữ: đôi khi chat trả lời bằng văn bản
-  gần nghĩa, và công cụ không phát hiện được. Với mục đích quan trọng, hãy đối chiếu kết quả với bản ghi.
-- Không hỗ trợ proxy.
-
 ## Skill cho tác tử AI
+
+Skill chạy [công cụ dòng lệnh](#công-cụ-dòng-lệnh-cli) thay cho tác tử, vì vậy hãy cài công cụ trước, rồi cài skill.
+
 
 Kho mã có một skill theo định dạng mở Agent Skills. Với skill này, tác tử AI (Claude Code, Codex,
 Cursor, Gemini CLI và các tác tử khác) tóm tắt video, tạo bản chép lời và phụ đề,
@@ -209,8 +228,28 @@ Không có Node.js, hãy chép thư mục `skills/lingotube/` vào thư mục sk
 
 ## Tiện ích mở rộng trình duyệt
 
-Thư mục `extension/` chứa một tiện ích hiển thị phụ đề đã dịch phía trên trình phát YouTube.
-Nó đang được phát triển và chưa nằm trong nhánh chính.
+Tiện ích mở rộng Manifest V3 cho Chrome và Edge, hiển thị phụ đề đã dịch phía trên trình phát YouTube. Nó đang được phát triển và chưa nằm trong nhánh chính.
+
+- Một nút trong trình phát bật phụ đề; có thể kéo bảng chứa văn bản.
+- Bạn chọn một trong 30 ngôn ngữ hoặc tự nhập ngôn ngữ của mình.
+- Thời gian và văn bản gốc lấy từ chính phụ đề của YouTube; chat chỉ dịch chúng.
+- Nó chạy trong trình duyệt mà bạn đã đăng nhập YouTube, nên không cần cấu hình cookie.
+- Nó chưa có trên cửa hàng nào: mở trang tiện ích của trình duyệt, bật chế độ nhà phát triển, bấm «Load unpacked» và chọn thư mục `extension/`.
+
+## Hạn chế
+
+Các hạn chế này áp dụng cho cả ba thành phần, vì tất cả đều dựa vào chat của YouTube.
+
+
+- Chat chỉ hoạt động với người dùng đã đăng nhập trên 13 tuổi, không có ở mọi quốc gia
+  và không có dưới mọi video.
+- Không hỗ trợ tài khoản thương hiệu: dùng tài khoản chính của trình duyệt.
+- Một giờ video mất vài phút: các yêu cầu được gửi lần lượt.
+- Thời gian của các dòng do chat quyết định. Ở video dài, một số dòng có thể lệch vài
+  giây; độ lệch cố định được chỉnh bằng tùy chọn `--offset`.
+- Văn bản của video dài không đảm bảo sát từng chữ: đôi khi chat trả lời bằng văn bản
+  gần nghĩa, và công cụ không phát hiện được. Với mục đích quan trọng, hãy đối chiếu kết quả với bản ghi.
+- Không hỗ trợ proxy.
 
 ## Phát triển
 

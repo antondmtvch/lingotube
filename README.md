@@ -7,7 +7,7 @@
 
 **English** · [Русский](docs/readme/README.ru.md) · [简体中文](docs/readme/README.zh-Hans.md) · [繁體中文](docs/readme/README.zh-Hant.md) · [हिन्दी](docs/readme/README.hi.md) · [Español](docs/readme/README.es.md) · [Français](docs/readme/README.fr.md) · [العربية](docs/readme/README.ar.md) · [বাংলা](docs/readme/README.bn.md) · [Português](docs/readme/README.pt.md) · [ไทย](docs/readme/README.th.md) · [日本語](docs/readme/README.ja.md) · [Tiếng Việt](docs/readme/README.vi.md) · [Deutsch](docs/readme/README.de.md)
 
-A command-line tool that gets subtitles, a transcript and a summary of a YouTube video.
+lingotube gets subtitles, a transcript and a summary of a YouTube video. The project has three parts: a command-line tool, a skill for AI agents and a browser extension (in development) that shows translated subtitles over the player.
 The text comes from YouTube's built-in chat ("Ask", Gemini) on the video page.
 All requests are made on behalf of your YouTube account.
 
@@ -22,7 +22,35 @@ All requests are made on behalf of your YouTube account.
 > Questions and answers stay in your account's chat history. The chat is not available in
 > Russia and most of the EU, nor under some videos.
 
-## Features
+**Contents**
+
+- [What's inside](#whats-inside)
+- [Command-line tool (CLI)](#command-line-tool-cli)
+  - [Features](#features)
+  - [Installation](#installation)
+  - [Quick start](#quick-start)
+  - [Commands](#commands)
+  - [Cookies and sign-in](#cookies-and-sign-in)
+  - [Translation modes](#translation-modes)
+  - [Exit codes](#exit-codes)
+- [Skill for AI agents](#skill-for-ai-agents)
+- [Browser extension](#browser-extension)
+- [Limitations](#limitations)
+- [Development](#development)
+
+## What's inside
+
+| Component | What it does |
+|---|---|
+| [Command-line tool (CLI)](#command-line-tool-cli) | The `lingotube` command: gets subtitles, a transcript and a summary of a video, as files or JSON. |
+| [Skill for AI agents](#skill-for-ai-agents) | Lets an AI agent (Claude Code, Codex, Cursor and others) summarize a video, make a transcript or subtitles and find a moment by description. It runs the command-line tool. |
+| [Browser extension](#browser-extension) | Translated subtitles over the YouTube player, in any language. In development. |
+
+## Command-line tool (CLI)
+
+Everything in this section is about the `lingotube` command. The skill and the extension have their own sections below.
+
+### Features
 
 - **Subtitles** in any language, in `srt`, `vtt` and `json` formats.
 - **Transcript** in the original language with timecodes.
@@ -32,7 +60,7 @@ All requests are made on behalf of your YouTube account.
 - **Cache and resume**: long videos are processed in parts, and after a failure work continues where it stopped.
 - **Machine-readable output** with `--json` for scripts and AI agents.
 
-## Installation
+### Installation
 
 You need [uv](https://docs.astral.sh/uv/). uv downloads the right Python version itself.
 
@@ -53,7 +81,7 @@ uv tool upgrade lingotube
 uv tool uninstall lingotube
 ```
 
-## Quick start
+### Quick start
 
 1. Sign in to YouTube. In Chrome or Edge the easiest way is:
 
@@ -79,7 +107,7 @@ uv tool uninstall lingotube
    lingotube subs https://www.youtube.com/watch?v=XXXXXXXXXXX --lang ru
    ```
 
-## Commands
+### Commands
 
 | Command | What it does |
 |---|---|
@@ -109,7 +137,7 @@ Pass an ID that starts with a hyphen after `--`:
 lingotube subs --lang ru -- -n5MqamatXE
 ```
 
-## Cookies and sign-in
+### Cookies and sign-in
 
 The tool takes the first suitable source in this order:
 
@@ -128,13 +156,13 @@ For them, use `lingotube login`. Exporting a file remains a fallback.
 
 If the cookies stop working (exit code `4`), run `lingotube login` again or export a fresh file.
 
-## Translation modes
+### Translation modes
 
 | Mode | When it is on | Who translates |
 |---|---|---|
 | **Chat** (default) | nothing is configured | YouTube's chat returns the text in the needed language right away |
 | **Own model** | the `[translator]` section is set in the settings | your model with an OpenAI-compatible API |
-| **Agent** | `transcript` → translation → `build` | an AI agent or you |
+| **Agent** | `transcript` → translation → `build` | an AI agent or you by hand; lingotube only checks the translation and builds the subtitles |
 
 The settings are in `settings.toml`:
 
@@ -168,7 +196,7 @@ lingotube build <link> --lang ru --from ru.json   # check and build the subtitle
 > To keep the translation literal, use the "own model" or "agent" mode: they first get the original,
 > and the translation is checked by line numbers. The chat may paraphrase or merge phrases.
 
-## Exit codes
+### Exit codes
 
 | Code | Meaning |
 |---|---|
@@ -182,19 +210,10 @@ lingotube build <link> --lang ru --from ru.json   # check and build the subtitle
 | `7` | Data failed validation. |
 | `130` | Interrupted by the user (Ctrl+C). |
 
-## Limitations
-
-- The chat works only for signed-in users over 13, is not available in every country
-  and is not under every video.
-- Brand accounts are not supported: the browser's main account is used.
-- An hour of video takes several minutes: requests go one at a time.
-- Line timing is set by the chat. On long videos individual lines can drift by a few
-  seconds; a constant shift is fixed with the `--offset` option.
-- The text of long videos is not guaranteed to be verbatim: the chat sometimes answers with a
-  text close in meaning, and the tool cannot see this. For important uses, check the result against the recording.
-- There is no proxy support.
-
 ## Skill for AI agents
+
+The skill runs the [command-line tool](#command-line-tool-cli) for the agent, so install the tool first, then the skill.
+
 
 The repository has a skill in the open Agent Skills format. With it an AI agent (Claude Code, Codex,
 Cursor, Gemini CLI and others) summarizes videos, makes transcripts and subtitles, finds
@@ -209,8 +228,28 @@ Without Node.js, copy the `skills/lingotube/` folder into your agent's skills fo
 
 ## Browser extension
 
-The `extension/` folder holds an extension with translated subtitles over the YouTube player.
-It is under development and is not yet in the main branch.
+A Manifest V3 extension for Chrome and Edge that shows translated subtitles over the YouTube player. It is under development and is not yet in the main branch.
+
+- A button in the player turns the subtitles on; the panel with the text can be dragged.
+- You choose one of 30 languages or type your own.
+- Timing and source text come from YouTube's own subtitles; the chat only translates them.
+- It works in the browser where you are already signed in to YouTube, so no cookie setup is needed.
+- It is not in a web store: open the extensions page of your browser, turn on developer mode, click "Load unpacked" and choose the `extension/` folder.
+
+## Limitations
+
+These limits apply to all three components, because they all rely on YouTube's chat.
+
+
+- The chat works only for signed-in users over 13, is not available in every country
+  and is not under every video.
+- Brand accounts are not supported: the browser's main account is used.
+- An hour of video takes several minutes: requests go one at a time.
+- Line timing is set by the chat. On long videos individual lines can drift by a few
+  seconds; a constant shift is fixed with the `--offset` option.
+- The text of long videos is not guaranteed to be verbatim: the chat sometimes answers with a
+  text close in meaning, and the tool cannot see this. For important uses, check the result against the recording.
+- There is no proxy support.
 
 ## Development
 
