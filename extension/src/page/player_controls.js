@@ -5,10 +5,13 @@ import {
 } from '../shared/language_choices.js';
 import { uiTexts } from '../shared/ui_strings.js';
 import {
+  TEXT_COLOR_CSS,
   customNamesForMenu,
   languageFromTypedText,
   placeButtonNextToSubtitlesButton,
   selectValueAfterClose,
+  shouldShowHint,
+  steppedBackgroundOpacity,
   steppedTextScale,
 } from '../shared/player_panel_logic.js';
 
@@ -16,8 +19,8 @@ const MAX_TYPED_LANGUAGE_LENGTH = 60;
 const KEYBOARD_EVENT_TYPES = ['keydown', 'keyup', 'keypress'];
 
 /**
- * The lingotube button in the player control bar and its settings panel.
- * DOM only: every decision is taken by the shared pure functions or by the callbacks.
+ * The lingotube button in the player control bar, its settings panel, the appearance panel
+ * and the first-run hint. DOM only: every decision is taken by the shared pure functions or by the callbacks.
  */
 export class PlayerControls {
   #document;
@@ -28,15 +31,23 @@ export class PlayerControls {
   #callbacks;
   #buttonElement;
   #panelElement;
+  #appearancePanelElement;
+  #hintElement;
   #languageSelect;
   #otherLanguageRow;
   #otherLanguageInput;
   #toggleEnabledButton;
   #waitForSubtitlesButton;
+  #appearanceOpenButton;
   #textScaleValueElement;
   #statusLineElement;
   #retryButton;
+  #colorButtons = new Map();
+  #opacityValueElement;
+  #outlineButton;
+  #sampleElement;
   #controlsObserver = null;
+  #hintObserver = null;
   #isOpen = false;
 
   /**
@@ -47,19 +58,35 @@ export class PlayerControls {
    *   onTextScaleChanged: (scale: number) => void,
    *   onWaitForSubtitlesChanged: (isEnabled: boolean) => void,
    *   onRetryRequested: () => void,
+   *   onAppearanceChanged: (change: {textColor?: string, backgroundOpacity?: number, outline?: boolean}) => void,
+   *   onResetPosition: () => void,
+   *   onHintDismissed: () => void,
    *   texts?: Record<string, any>, isRightToLeft?: boolean}} options
    */
-  constructor({ document, playerElement, settings, onEnabledChanged, onLanguageChanged, onTextScaleChanged, onWaitForSubtitlesChanged, onRetryRequested, texts = uiTexts('ru'), isRightToLeft = false }) {
+  constructor({ document, playerElement, settings, onEnabledChanged, onLanguageChanged, onTextScaleChanged, onWaitForSubtitlesChanged, onRetryRequested, onAppearanceChanged, onResetPosition, onHintDismissed, texts = uiTexts('ru'), isRightToLeft = false }) {
     this.#document = document;
     this.#playerElement = playerElement;
     this.#settings = settings;
     this.#texts = texts;
     this.#isRightToLeft = isRightToLeft;
-    this.#callbacks = { onEnabledChanged, onLanguageChanged, onTextScaleChanged, onWaitForSubtitlesChanged, onRetryRequested };
+    this.#callbacks = {
+      onEnabledChanged,
+      onLanguageChanged,
+      onTextScaleChanged,
+      onWaitForSubtitlesChanged,
+      onRetryRequested,
+      onAppearanceChanged,
+      onResetPosition,
+      onHintDismissed,
+    };
 
     this.#buildButton();
     this.#buildPanel();
+    this.#buildAppearancePanel();
+    this.#buildHint();
     this.#playerElement.appendChild(this.#panelElement);
+    this.#playerElement.appendChild(this.#appearancePanelElement);
+    this.#playerElement.appendChild(this.#hintElement);
     this.#attachButtonWhenControlsExist();
     this.#document.addEventListener('pointerdown', this.#handleDocumentPointerDown, true);
     this.applySettings(settings);
@@ -87,14 +114,20 @@ export class PlayerControls {
     this.#waitForSubtitlesButton.textContent = isWaiting ? this.#texts.waitOn : this.#texts.waitOff;
     this.#waitForSubtitlesButton.setAttribute('aria-pressed', String(isWaiting));
     this.#textScaleValueElement.textContent = `${Math.round(settings.textScale * 100)}%`;
+    this.#renderAppearance(settings);
+    this.#hintElement.hidden = !shouldShowHint(settings);
   }
 
   destroy() {
     this.#controlsObserver?.disconnect();
     this.#controlsObserver = null;
+    this.#hintObserver?.disconnect();
+    this.#hintObserver = null;
     this.#document.removeEventListener('pointerdown', this.#handleDocumentPointerDown, true);
     this.#buttonElement.remove();
     this.#panelElement.remove();
+    this.#appearancePanelElement.remove();
+    this.#hintElement.remove();
   }
 
   #createElement(tagName, className, text) {
@@ -171,6 +204,9 @@ export class PlayerControls {
       largerButton,
     );
 
+    this.#appearanceOpenButton = this.#createElement('button', 'lingotube-panel-button lingotube-appearance-open', this.#texts.appearanceOpen);
+    this.#appearanceOpenButton.addEventListener('click', () => this.#showAppearance());
+
     this.#statusLineElement = this.#createElement('div', 'lingotube-status-line');
     this.#statusLineElement.hidden = true;
     this.#statusLineElement.setAttribute('role', 'status');
@@ -186,6 +222,7 @@ export class PlayerControls {
       this.#toggleEnabledButton,
       scaleRow,
       this.#waitForSubtitlesButton,
+      this.#appearanceOpenButton,
       this.#statusLineElement,
       this.#retryButton,
     );
@@ -198,6 +235,76 @@ export class PlayerControls {
       panel.addEventListener(type, (event) => event.stopPropagation());
     }
     this.#panelElement = panel;
+  }
+
+  #buildAppearancePanel() {
+    const panel = this.#createElement('div', 'lingotube-panel lingotube-appearance-panel');
+    panel.id = 'lingotube-appearance-panel';
+    panel.setAttribute('role', 'dialog');
+    panel.setAttribute('aria-label', this.#texts.appearanceTitle);
+    panel.hidden = true;
+    if (this.#isRightToLeft) panel.dir = 'rtl';
+
+    const header = this.#createElement('div', 'lingotube-panel-row');
+    const backButton = this.#createElement('button', 'lingotube-panel-button lingotube-appearance-back', this.#texts.back);
+    backButton.addEventListener('click', () => this.#showMain());
+    header.append(backButton, this.#createElement('span', 'lingotube-panel-title', this.#texts.appearanceTitle));
+
+    const colorRow = this.#createElement('div', 'lingotube-panel-row');
+    colorRow.append(this.#createElement('span', 'lingotube-panel-label', this.#texts.textColorLabel));
+    const colorNames = { white: this.#texts.colorWhite, yellow: this.#texts.colorYellow, cyan: this.#texts.colorCyan };
+    for (const color of Object.keys(TEXT_COLOR_CSS)) {
+      const button = this.#createElement('button', 'lingotube-panel-button lingotube-color-button', colorNames[color]);
+      button.dataset.color = color;
+      button.addEventListener('click', () => this.#callbacks.onAppearanceChanged({ textColor: color }));
+      this.#colorButtons.set(color, button);
+      colorRow.append(button);
+    }
+
+    const backgroundRow = this.#createElement('div', 'lingotube-panel-row');
+    const backgroundLabel = this.#createElement('span', 'lingotube-panel-label', this.#texts.backgroundLabel);
+    const fewerButton = this.#createElement('button', 'lingotube-panel-button lingotube-opacity-button', '−');
+    fewerButton.addEventListener('click', () => this.#changeBackgroundOpacity(-1));
+    const moreButton = this.#createElement('button', 'lingotube-panel-button lingotube-opacity-button', '+');
+    moreButton.addEventListener('click', () => this.#changeBackgroundOpacity(1));
+    this.#opacityValueElement = this.#createElement('span', 'lingotube-scale-value');
+    backgroundRow.append(backgroundLabel, fewerButton, this.#opacityValueElement, moreButton);
+
+    const outlineRow = this.#createElement('div', 'lingotube-panel-row');
+    this.#outlineButton = this.#createElement('button', 'lingotube-panel-button lingotube-outline-button', this.#texts.outlineLabel);
+    this.#outlineButton.addEventListener('click', () => this.#callbacks.onAppearanceChanged({ outline: this.#settings.outline !== true }));
+    outlineRow.append(this.#outlineButton);
+
+    this.#sampleElement = this.#createElement('div', 'lingotube-appearance-sample', this.#texts.appearanceSample);
+
+    const resetButton = this.#createElement('button', 'lingotube-panel-button lingotube-toggle-button', this.#texts.resetPosition);
+    resetButton.addEventListener('click', () => this.#callbacks.onResetPosition());
+
+    panel.append(header, colorRow, backgroundRow, outlineRow, this.#sampleElement, resetButton);
+    panel.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') this.#setOpen(false);
+    });
+    for (const type of KEYBOARD_EVENT_TYPES) {
+      panel.addEventListener(type, (event) => event.stopPropagation());
+    }
+    this.#appearancePanelElement = panel;
+  }
+
+  #buildHint() {
+    this.#hintElement = this.#createElement('div', 'lingotube-hint', this.#texts.hintFirstRun);
+    this.#hintElement.hidden = true;
+    this.#hintElement.addEventListener('click', () => {
+      this.#hintElement.hidden = true;
+      this.#callbacks.onHintDismissed();
+    });
+  }
+
+  #positionHint() {
+    if (!this.#buttonElement.isConnected) return;
+    const button = this.#buttonElement.getBoundingClientRect();
+    const player = this.#playerElement.getBoundingClientRect();
+    this.#hintElement.style.left = `${button.left - player.left + button.width / 2}px`;
+    this.#hintElement.style.top = `${button.top - player.top}px`;
   }
 
   #attachButtonWhenControlsExist() {
@@ -217,6 +324,10 @@ export class PlayerControls {
     if (!rightControls) return false;
     const subtitlesButton = rightControls.querySelector('.ytp-subtitles-button');
     placeButtonNextToSubtitlesButton({ rightControls, subtitlesButton, button: this.#buttonElement });
+    // The hint follows the button: re-place it when the player changes size (fullscreen too).
+    this.#hintObserver = new ResizeObserver(() => this.#positionHint());
+    this.#hintObserver.observe(this.#playerElement);
+    this.#positionHint();
     return true;
   }
 
@@ -232,6 +343,17 @@ export class PlayerControls {
     }
     this.#languageSelect.value = selectValueAfterClose(language);
     this.#otherLanguageRow.hidden = true;
+  }
+
+  #renderAppearance(settings) {
+    for (const [color, button] of this.#colorButtons) {
+      button.setAttribute('aria-pressed', String(settings.textColor === color));
+    }
+    this.#opacityValueElement.textContent = `${Math.round(settings.backgroundOpacity * 100)}%`;
+    this.#outlineButton.setAttribute('aria-pressed', String(settings.outline === true));
+    this.#sampleElement.style.color = TEXT_COLOR_CSS[settings.textColor];
+    this.#sampleElement.style.background = `rgba(8, 8, 8, ${settings.backgroundOpacity})`;
+    this.#sampleElement.classList.toggle('lingotube-overlay-outlined', settings.outline === true);
   }
 
   #handleLanguageSelected = () => {
@@ -269,18 +391,37 @@ export class PlayerControls {
     if (scale !== this.#settings.textScale) this.#callbacks.onTextScaleChanged(scale);
   }
 
+  #changeBackgroundOpacity(direction) {
+    const opacity = steppedBackgroundOpacity(this.#settings.backgroundOpacity, direction);
+    if (opacity !== this.#settings.backgroundOpacity) this.#callbacks.onAppearanceChanged({ backgroundOpacity: opacity });
+  }
+
+  #showAppearance() {
+    this.#panelElement.hidden = true;
+    this.#appearancePanelElement.hidden = false;
+    this.#appearancePanelElement.querySelector('.lingotube-appearance-back')?.focus();
+  }
+
+  #showMain() {
+    this.#appearancePanelElement.hidden = true;
+    this.#panelElement.hidden = false;
+    this.#appearanceOpenButton.focus();
+  }
+
   #setOpen(isOpen) {
     this.#isOpen = isOpen;
     // Closing abandons an open "other language" input: the select must show the language in use.
     if (!isOpen) this.#renderLanguageMenu();
     this.#panelElement.hidden = !isOpen;
+    this.#appearancePanelElement.hidden = true;
     this.#buttonElement.setAttribute('aria-expanded', String(isOpen));
   }
 
   #handleDocumentPointerDown = (event) => {
     if (!this.#isOpen) return;
     const path = event.composedPath();
-    if (path.includes(this.#panelElement) || path.includes(this.#buttonElement)) return;
+    const inside = [this.#panelElement, this.#appearancePanelElement, this.#buttonElement];
+    if (inside.some((element) => path.includes(element))) return;
     this.#setOpen(false);
   };
 }

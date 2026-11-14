@@ -61,11 +61,13 @@
 
 .lingotube-player-button {
   width: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-size: 13px;
   font-weight: bold;
-  color: #fff;
-  opacity: 0.9;
-  vertical-align: top;
+  color: #bbb;
+  opacity: 1;
 }
 
 .lingotube-player-button.lingotube-player-button-pressed {
@@ -153,4 +155,39 @@
 .lingotube-status-line {
   margin-bottom: 8px;
   opacity: 0.85;
+}
+
+.lingotube-appearance-sample {
+  margin: 8px 0;
+  padding: 6px 12px;
+  border-radius: 6px;
+  text-align: center;
+  font-size: 16px;
+}
+
+.lingotube-appearance-sample.lingotube-overlay-outlined {
+  text-shadow: 0 0 2px #000, 0 0 2px #000, 0 0 4px #000;
+}
+
+.lingotube-hint {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  margin-top: -10px;
+  z-index: 72;
+  max-width: 220px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: #3ea6ff;
+  color: #0f0f0f;
+  font-family: Roboto, Arial, sans-serif;
+  font-size: 12px;
+  font-weight: bold;
+  line-height: 1.3;
+  white-space: normal;
+  text-align: center;
+  cursor: pointer;
+}
+
+.lingotube-hint[hidden] {
+  display: none;
 }
