@@ -25,12 +25,20 @@ _LOGGED_IN = re.compile(pattern=r'"LOGGED_IN"\s*:\s*(true|false)')
     slots=True,
 )
 class SendCommand:
-    """Opaque chat command from `sendUserQueryCommand`. Values never appear in repr."""
+    """Opaque chat command taken from a ``sendUserQueryCommand`` entry.
+
+    Its values never appear in the representation.
+
+    Attributes:
+        continuation: Token that identifies the chat for the next question.
+        click_tracking_params: Tracking parameters sent with the question.
+    """
 
     continuation: str
     click_tracking_params: str
 
     def __repr__(self) -> str:
+        """Hide the command values in the representation."""
         return "SendCommand(***)"
 
 
@@ -111,7 +119,16 @@ def find_send_command(
     *,
     panel_only: bool = True,
 ) -> SendCommand | None:
-    """First complete `sendUserQueryCommand` inside a `PAyouchat` panel (or anywhere if not panel_only)."""
+    """Find the first complete send command in a response.
+
+    Args:
+        next_response: Parsed JSON response to search.
+        panel_only: If True, search only inside the chat panel. Otherwise search the
+            whole response.
+
+    Returns:
+        The command, or None if the response has no complete command.
+    """
     roots = list(_chat_panels(data=next_response)) if panel_only else [next_response]
     for root in roots:
         for d in _walk(obj=root):
@@ -122,7 +139,15 @@ def find_send_command(
 
 
 def find_chat_panel_token(next_response: dict[str, Any]) -> str | None:
-    """First continuation token of the `PAyouchat` panel (for the 'empty initial get_panel')."""
+    """Find the first continuation token inside the chat panel.
+
+    Args:
+        next_response: Parsed JSON response to search.
+
+    Returns:
+        The token, or None if the chat panel has none. The token is needed when the
+        first get_panel response is empty.
+    """
     for panel in _chat_panels(data=next_response):
         for d in _walk(obj=panel):
             cc = d.get("continuationCommand")
@@ -142,6 +167,14 @@ def find_chat_panel_token(next_response: dict[str, Any]) -> str | None:
 
 
 def is_signed_in(next_response: dict[str, Any]) -> bool:
+    """Check whether YouTube reports the user as signed in.
+
+    Args:
+        next_response: Parsed JSON response of the next request.
+
+    Returns:
+        True only if the response says explicitly that the user is not logged out.
+    """
     ctx = next_response.get("responseContext")
     main = (
         ctx.get("mainAppWebResponseContext")
@@ -167,6 +200,18 @@ def build_ask_body(
     now_ms: int,
     player_offset_ms: int = 0,
 ) -> dict[str, Any]:
+    """Build the request body that sends one question to the chat.
+
+    Args:
+        context: Innertube client context from the watch page. It is copied, not changed.
+        cmd: Send command that identifies the chat.
+        prompt: Question text.
+        now_ms: Current time in milliseconds, used in the client message id.
+        player_offset_ms: Playback position sent with the question. Defaults to 0.
+
+    Returns:
+        The JSON body of the get_panel request.
+    """
     ctx = copy.deepcopy(x=context)
     ctx["clickTracking"] = {"clickTrackingParams": cmd.click_tracking_params}
     return {
@@ -183,7 +228,20 @@ def build_ask_body(
 
 
 def extract_answer(get_panel_response: dict[str, Any]) -> str:
-    """Only `youChatItemViewModel.text.content`; snackbars, chips, disclaimers are ignored."""
+    """Join the text of the chat answer items.
+
+    Only ``youChatItemViewModel.text.content`` is used. Snackbars, chips and disclaimers
+    are ignored.
+
+    Args:
+        get_panel_response: Parsed JSON response of the get_panel request.
+
+    Returns:
+        The answer text, with the parts separated by newlines.
+
+    Raises:
+        ChatUnavailableError: If the response has no answer text.
+    """
     parts: list[str] = []
     for d in _walk(obj=get_panel_response):
         item = d.get("youChatItemViewModel")
@@ -212,7 +270,7 @@ def extract_answer(get_panel_response: dict[str, Any]) -> str:
         ):
             parts.append(content)
     if not parts:
-        raise ChatUnavailableError(message="Чат YouTube вернул пустой ответ.")
+        raise ChatUnavailableError(message="The YouTube chat returned an empty answer.")
     return "\n".join(parts)
 
 
@@ -234,13 +292,32 @@ def _decode_object_at(
 
 
 def page_logged_in(html: str) -> bool | None:
+    """Read the logged-in flag from the HTML of the watch page.
+
+    Args:
+        html: HTML of the watch page.
+
+    Returns:
+        True or False if the page states it, or None if the page has no such flag.
+    """
     m = _LOGGED_IN.search(string=html)
     return None if m is None else m.group(1) == "true"
 
 
 def extract_page(html: str) -> tuple[dict[str, Any], VideoInfo]:
-    """Innertube client context (ytcfg) and video info (ytInitialPlayerResponse)."""
-    unavailable = ChatUnavailableError(message="Не удалось разобрать страницу видео YouTube (видео недоступно?).")
+    """Read the client context and the video facts from the watch page.
+
+    Args:
+        html: HTML of the watch page.
+
+    Returns:
+        The Innertube client context and the video info.
+
+    Raises:
+        ChatUnavailableError: If the page cannot be parsed, for example because the
+            video is unavailable.
+    """
+    unavailable = ChatUnavailableError(message="Could not parse the YouTube video page (is the video unavailable?).")
     i = html.find(_CONTEXT_MARKER)
     m = _PLAYER_MARKER.search(string=html)
     if i < 0 or m is None:

@@ -17,6 +17,17 @@ from pathlib import Path
 
 @dataclass(frozen=True)
 class CacheKey:
+    """Identifies one cached result.
+
+    Attributes:
+        video_id: YouTube video id.
+        kind: Kind of result, for example a transcript or a summary.
+        language: Language code, or "orig" for the original language.
+        mode: How the result was produced.
+        prompt_version: Version of the prompts used.
+        part: Optional name of a part of a long result.
+    """
+
     video_id: str
     kind: str
     language: str  # "orig" for the original
@@ -26,6 +37,11 @@ class CacheKey:
 
     def digest(self) -> str:
         # JSON-encoded list is unambiguous: no field can collide into another.
+        """Return a stable SHA-256 digest of the key, used as the file name.
+
+        Returns:
+            A 64-character lowercase hex string.
+        """
         raw = json.dumps(
             obj=[
                 self.video_id,
@@ -44,11 +60,22 @@ STALE_TEMP_AGE = 86_400.0  # seconds: leftover temp files older than this are re
 
 
 class Cache:
+    """Stores results as JSON files in one folder.
+
+    Each key maps to one file. Writes are atomic, and a damaged file is read as a miss.
+    """
+
     def __init__(
         self,
         root: Path,
         clock: Callable[[], float] = time.time,
     ) -> None:
+        """Create a cache in a folder.
+
+        Args:
+            root: Folder that holds the cache files. It is created on the first write.
+            clock: Function that returns the current time in seconds.
+        """
         self._root = root
         self._clock = clock
         self._swept = False
@@ -78,6 +105,14 @@ class Cache:
         return self._root / f"{key.digest()}.json"
 
     async def get(self, key: CacheKey) -> dict | None:
+        """Return the cached value for a key.
+
+        Args:
+            key: Key to look up.
+
+        Returns:
+            The stored dict, or None if the key is missing or unreadable.
+        """
         await self._sweep_once()
         return await asyncio.to_thread(
             self._read,
@@ -89,6 +124,15 @@ class Cache:
         key: CacheKey,
         value: dict,
     ) -> None:
+        """Store a value under a key, replacing any previous value.
+
+        Args:
+            key: Key to store the value under.
+            value: JSON-serializable dict to store.
+
+        Raises:
+            OSError: If the file cannot be written.
+        """
         await self._sweep_once()
         await asyncio.to_thread(
             self._write,
@@ -97,6 +141,11 @@ class Cache:
         )
 
     async def delete(self, key: CacheKey) -> None:
+        """Remove the cached value for a key, if there is one.
+
+        Args:
+            key: Key to remove.
+        """
         await asyncio.to_thread(
             self._path(key=key).unlink,
             True,
@@ -156,13 +205,24 @@ async def put_best_effort(
     key: CacheKey,
     value: dict,
 ) -> str | None:
-    """Cache writes must not lose a result already obtained: returns a warning
-    (error type only, no paths) instead of raising."""
+    """Store a value in the cache, turning a failed write into a warning.
+
+    A cache write must not lose a result that was already obtained, so the OSError
+    is not raised.
+
+    Args:
+        cache: Cache to write to.
+        key: Key to store the value under.
+        value: JSON-serializable dict to store.
+
+    Returns:
+        None on success, or a warning that names only the error type.
+    """
     try:
         await cache.put(
             key=key,
             value=value,
         )
     except OSError as e:
-        return f"не удалось сохранить в кэш: {type(e).__name__}"
+        return f"could not save to the cache: {type(e).__name__}"
     return None

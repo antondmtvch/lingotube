@@ -34,11 +34,23 @@ def _parse(text: str) -> dict[str, str]:
 
 
 class FileCookieSource:
+    """Load cookies from a Netscape cookies.txt file.
+
+    The file is parsed by hand, because MozillaCookieJar drops the ``#HttpOnly_`` lines,
+    and those cookies are needed.
+    """
+
     def __init__(
         self,
         path: Path,
         warn: Callable[[str], None] = lambda msg: None,
     ) -> None:
+        """Create the source.
+
+        Args:
+            path: Path to the cookies.txt file.
+            warn: Function that receives warnings, for example about file permissions.
+        """
         self._path = Path(path)
         self._warn = warn
 
@@ -51,15 +63,23 @@ class FileCookieSource:
         return text, mode
 
     async def load(self) -> Credentials:
+        """Read the file and return the credentials.
+
+        Returns:
+            The credentials found in the file.
+
+        Raises:
+            AuthError: If the file cannot be read or has no SAPISID cookie.
+        """
         try:
             text, mode = await asyncio.to_thread(self._read)
         except OSError:
             raise AuthError(
-                message=f"Не удалось прочитать файл cookies: {self._path}",
+                message=f"Could not read the cookies file: {self._path}",
                 hint=EXPORT_HINT,
             ) from None
         if mode is not None and mode & 0o044:
-            self._warn(f"Файл cookies доступен другим пользователям: {self._path} (chmod 600).")
+            self._warn(f"The cookies file is readable by other users: {self._path} (chmod 600).")
         creds = Credentials(cookies=_parse(text=text))
         creds.require_sapisid()
         return creds

@@ -30,6 +30,11 @@ PROG = "lingotube"
 
 
 def build_registry() -> FeatureRegistry:
+    """Build the registry with every command of the CLI.
+
+    Returns:
+        The registry with all commands added.
+    """
     registry = FeatureRegistry()
     registry.add(register=transcript.register)
     registry.add(register=subtitles.register)
@@ -44,7 +49,15 @@ def default_context(
     out: TextIO,
     err: TextIO,
 ) -> AppContext:
-    """Real wiring: settings file + environment, platform cache dir, current directory."""
+    """Build the real context from the settings file, the environment and the current folder.
+
+    Args:
+        out: Stream for the result.
+        err: Stream for messages.
+
+    Returns:
+        The context of one command run.
+    """
     from lingotube.container import build_container  # composition root, used only here
 
     settings_path, cache_dir = default_paths()
@@ -72,17 +85,26 @@ def build_app(
     registry: FeatureRegistry,
     get_context: Callable[[], AppContext],
 ) -> typer.Typer:
+    """Build the Typer application with all commands.
+
+    Args:
+        registry: Commands to add.
+        get_context: Function that returns the shared context of the run.
+
+    Returns:
+        The Typer application.
+    """
     app = typer.Typer(
         name=PROG,
         add_completion=False,
         no_args_is_help=True,
         pretty_exceptions_enable=False,
-        help="Субтитры, транскрипция и краткое содержание видео YouTube через чат YouTube.",
+        help="Subtitles, transcripts and summaries of YouTube videos, through the YouTube chat.",
     )
 
     @app.callback()
     def _root() -> None:
-        """Субтитры, транскрипция и краткое содержание видео YouTube через чат YouTube."""
+        """Subtitles, transcripts and summaries of YouTube videos, through the YouTube chat."""
 
     registry.apply(
         app=app,
@@ -151,8 +173,10 @@ def _move_dash_ids(
     argv: list[str],
     command: Any,
 ) -> list[str]:
-    """`subs -n5MqamatXE --lang ru`: a bare token shaped like a video id that starts
-    with '-' would be parsed as options; move it after `--` so it stays the URL argument.
+    """Move a bare video id that starts with a dash after ``--``.
+
+    In ``subs -n5MqamatXE --lang ru`` the id would be read as options. Moving it after ``--``
+    keeps it as the URL argument.
     """
     if "--" in argv:
         return argv
@@ -208,7 +232,18 @@ def run(
     context_factory: ContextFactory = default_context,
     registry: FeatureRegistry | None = None,
 ) -> int:
-    """Runs one invocation and returns its exit code (parser usage errors → 2)."""
+    """Run one invocation of the command line and return its exit code.
+
+    Args:
+        argv: Arguments without the program name.
+        out: Stream for the result.
+        err: Stream for messages.
+        context_factory: Function that builds the context of the run.
+        registry: Commands to use. Defaults to ``build_registry()``.
+
+    Returns:
+        The exit code. Usage errors of the parser give 2.
+    """
     out, err = _utf8(stream=out), _utf8(stream=err)
     json_mode = _json_requested(argv=argv)
     built: list[AppContext] = []
@@ -246,7 +281,7 @@ def run(
             out=out,
             err=err,
             json_mode=json_mode,
-            error=LingotubeError(message="Прервано."),
+            error=LingotubeError(message="Interrupted."),
             code=1,
         )
     except typer.TyperException as e:
@@ -256,8 +291,8 @@ def run(
         if not message and not json_mode:
             return e.exit_code
         error = UsageError(
-            message=message or "Не указана команда.",
-            hint=f"Справка: {PROG} --help",
+            message=message or "No command given.",
+            hint=f"Help: {PROG} --help",
         )
         return _report_safely(
             out=out,
@@ -280,8 +315,8 @@ def run(
     except Exception as e:
         # never a traceback, never the exception text (may hold secrets)
         error = LingotubeError(
-            message=f"Внутренняя ошибка ({type(e).__name__}).",
-            hint="Повторите команду; если ошибка повторяется — сообщите о ней.",
+            message=f"Internal error ({type(e).__name__}).",
+            hint="Run the command again; if the error repeats, report it.",
         )
         return _report_safely(
             out=out,
@@ -307,7 +342,18 @@ def _report_safely(
     error: LingotubeError,
     code: int,
 ) -> int:
-    """Reports an error; if the streams themselves fail, only the exit code remains."""
+    """Report an error. If the streams themselves fail, only the exit code is kept.
+
+    Args:
+        out: Stream for the result.
+        err: Stream for messages.
+        json_mode: True if the result is printed as one JSON document.
+        error: Error to report.
+        code: Exit code to return.
+
+    Returns:
+        The exit code ``code``.
+    """
     with contextlib.suppress(Exception):
         report(
             out=out,
@@ -319,6 +365,7 @@ def _report_safely(
 
 
 def main() -> None:
+    """Run the ``lingotube`` command and exit the process with its exit code."""
     sys.exit(
         run(
             argv=sys.argv[1:],

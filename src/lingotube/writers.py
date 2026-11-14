@@ -1,4 +1,4 @@
-"""Render a Transcript as SRT, WebVTT or JSON text (no I/O)."""
+"""Render a transcript as SRT, WebVTT or JSON text. No input or output here."""
 
 import json
 import math
@@ -105,6 +105,19 @@ def render(
     fmt: Literal["srt", "vtt", "json"],
     offset: float = 0.0,
 ) -> str:
+    """Render a transcript as text in the chosen format.
+
+    Args:
+        transcript: Transcript to render.
+        fmt: Output format: ``srt``, ``vtt`` or ``json``.
+        offset: Seconds to shift all times by. A negative value moves them earlier.
+
+    Returns:
+        The rendered text.
+
+    Raises:
+        ValidationError: If the format is unknown or the offset is not a finite number.
+    """
     if fmt not in ("srt", "vtt", "json"):
         raise ValidationError(message=f"Unknown output format: {fmt!r}")
     if not math.isfinite(offset):

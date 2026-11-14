@@ -18,33 +18,53 @@ from lingotube.errors import (
 )
 
 DEFAULT_TEST_VIDEO = "-n5MqamatXE"  # public video with the chat confirmed by the probe
-FILE_SOURCE = "файл cookies"
-LOGIN_PROFILE_SOURCE = "профиль входа"
-LOGIN = "вход в аккаунт"
-CHAT = "чат на тестовом видео"
-NETWORK = "соединение с YouTube"
+FILE_SOURCE = "cookies file"
+LOGIN_PROFILE_SOURCE = "login profile"
+LOGIN = "account sign-in"
+CHAT = "chat on the test video"
+NETWORK = "connection to YouTube"
 
 CHAT_HINT = (
-    "Чат доступен не во всех странах (например, нет в России и большей части ЕС), только "
-    "аккаунтам 13+ и, по имеющимся данным, не брендовым аккаунтам. Если дело в видео — "
-    "проверьте на другом: lingotube doctor --video <ссылка>."
+    "The chat is not available in every country (for example, not in Russia or most of the EU), only "
+    "accounts aged 13+ and, as far as is known, not brand accounts. If the problem is the video, "
+    "try another one: lingotube doctor --video <link>."
 )
-NETWORK_HINT = "Проверьте подключение к интернету и повторите позже."
+NETWORK_HINT = "Check the internet connection and try again later."
 
 
 def browser_source_name(browser: str) -> str:
-    return f"браузер {browser}"
+    """Return the name of the cookie source for a browser.
+
+    Args:
+        browser: Browser name.
+
+    Returns:
+        The name shown in the doctor table.
+    """
+    return f"browser {browser}"
 
 
 @dataclass(frozen=True)
 class Check:
+    """One row of the doctor table.
+
+    Attributes:
+        name: Name of the check.
+        ok: True if the check passed.
+        detail: Short result text. It never contains secrets.
+        hint: Advice on how to fix a failure, or None.
+        critical: False if the check failed but another source works, so it is not an error.
+        unexpected: True if the check itself crashed. That is a bug, not a user problem.
+        soft_verdict: Word shown for a failure that is not critical.
+    """
+
     name: str
     ok: bool
     detail: str
     hint: str | None
     critical: bool = True  # False: failed, but another source works, so not an error
     unexpected: bool = False  # the check itself crashed (a bug, not a user problem)
-    soft_verdict: str = "не прочитан"  # the word shown when a failure is not critical
+    soft_verdict: str = "not read"  # the word shown when a failure is not critical
 
 
 def _crashed(
@@ -54,7 +74,7 @@ def _crashed(
     return Check(
         name=name,
         ok=False,
-        detail=f"проверка завершилась неожиданной ошибкой ({type(error).__name__})",
+        detail=f"the check failed with an unexpected error ({type(error).__name__})",
         hint=None,
         unexpected=True,
     )
@@ -64,8 +84,13 @@ class UnsetCookieFile:
     """The file source when no cookies file is configured."""
 
     async def load(self) -> Credentials:
+        """Fail, because no cookies file is configured.
+
+        Raises:
+            AuthError: Always.
+        """
         raise AuthError(
-            message="Файл cookies не задан.",
+            message="The cookies file is not set.",
             hint=EXPORT_HINT,
         )
 
@@ -74,8 +99,13 @@ class UnsetLoginProfile:
     """The login-profile source when `lingotube login` was never run."""
 
     async def load(self) -> Credentials:
+        """Fail, because ``lingotube login`` was never run.
+
+        Raises:
+            AuthError: Always.
+        """
         raise AuthError(
-            message="Вход через lingotube login не выполнялся.",
+            message="lingotube login was not run.",
             hint=LOGIN_HINT,
         )
 
@@ -84,9 +114,19 @@ class _Loaded:
     """Credentials already read: the chat check does not read the source again."""
 
     def __init__(self, creds: Credentials) -> None:
+        """Wrap credentials that were already read.
+
+        Args:
+            creds: Credentials to return.
+        """
         self._creds = creds
 
     async def load(self) -> Credentials:
+        """Return the stored credentials without reading the source again.
+
+        Returns:
+            The stored credentials.
+        """
         return self._creds
 
 
@@ -95,6 +135,20 @@ async def run_doctor(
     make_ask: Callable[[CookieSource], AskClient],
     test_video_id: str,
 ) -> list[Check]:
+    """Run every check and return the rows of the table.
+
+    Each source is loaded first. Then the chat is tried with the sources in turn, and the
+    first source that works is used. The chat check only opens the chat and never sends a
+    question.
+
+    Args:
+        sources: Cookie sources by check name.
+        make_ask: Function that builds a chat client for a cookie source.
+        test_video_id: Video used for the chat check.
+
+    Returns:
+        The check rows, in order.
+    """
     checks: list[Check] = []
     loaded: list[tuple[int, str, Credentials]] = []
     for name, source in sources.items():
@@ -122,7 +176,7 @@ async def run_doctor(
             Check(
                 name=name,
                 ok=True,
-                detail="cookies прочитаны",
+                detail="cookies read",
                 hint=None,
             )
         )
@@ -138,16 +192,16 @@ async def run_doctor(
             checks[index] = Check(
                 name=name,
                 ok=False,
-                detail=f"cookies прочитаны, но YouTube их не принял: {e.message}",
+                detail=f"cookies read, but YouTube did not accept them: {e.message}",
                 hint=e.hint,
-                soft_verdict="не принят",
+                soft_verdict="not accepted",
             )
             continue
         except ChatUnavailableError as e:
             login = Check(
                 name=LOGIN,
                 ok=True,
-                detail=f"вход выполнен ({name})",
+                detail=f"signed in ({name})",
                 hint=None,
             )
             chat = Check(
@@ -169,7 +223,7 @@ async def run_doctor(
             login = Check(
                 name=LOGIN,
                 ok=False,
-                detail="не проверен: нет соединения с YouTube",
+                detail="not checked: no connection to YouTube",
                 hint=None,
             )
         except Exception as e:  # unexpected: record it and try the next source
@@ -182,28 +236,28 @@ async def run_doctor(
             checks[index] = Check(
                 name=name,
                 ok=True,
-                detail="cookies прочитаны, вход выполнен",
+                detail="cookies read, sign-in successful",
                 hint=None,
             )
             login = Check(
                 name=LOGIN,
                 ok=True,
-                detail=f"вход выполнен ({name})",
+                detail=f"signed in ({name})",
                 hint=None,
             )
             chat = Check(
                 name=CHAT,
                 ok=True,
-                detail=f"чат доступен на видео {test_video_id}",
+                detail=f"chat available on the video {test_video_id}",
                 hint=None,
             )
         break
 
     if login is None:
         detail = (
-            "cookies прочитаны, но YouTube не видит вход: они устарели или выгружены без входа"
+            "cookies read, but YouTube does not see a sign-in: they are stale or were exported without signing in"
             if loaded
-            else "нет ни одного рабочего источника cookies"
+            else "no working cookies source"
         )
         login = Check(
             name=LOGIN,
@@ -217,7 +271,7 @@ async def run_doctor(
         or Check(
             name=CHAT,
             ok=False,
-            detail=("не проверен: нет соединения с YouTube" if network_down else "не проверен: нет входа в аккаунт"),
+            detail=("not checked: no connection to YouTube" if network_down else "not checked: not signed in"),
             hint=None,
         )
     )
@@ -251,7 +305,14 @@ def _passed(
 
 
 def doctor_error(checks: list[Check]) -> LingotubeError | None:
-    """None when ready; otherwise the error whose exit code `doctor` ends with."""
+    """Return the error that decides the exit code of ``doctor``.
+
+    Args:
+        checks: Check rows of the run.
+
+    Returns:
+        None if the chat works. Otherwise the error that the command ends with.
+    """
     if _passed(
         checks=checks,
         name=CHAT,
@@ -259,15 +320,15 @@ def doctor_error(checks: list[Check]) -> LingotubeError | None:
         return None  # a source works and the chat is reachable: a crashed row is not fatal
     if any(c.unexpected for c in checks):
         return LingotubeError(
-            message="Одна из проверок завершилась неожиданной ошибкой.",
-            hint="Повторите команду; если ошибка повторяется — сообщите о ней.",
+            message="One of the checks failed with an unexpected error.",
+            hint="Run the command again; if the error repeats, report it.",
         )
     if _failed(
         checks=checks,
         name=NETWORK,
     ):
         return NetworkError(
-            message="Не удалось связаться с YouTube.",
+            message="Could not reach YouTube.",
             hint=NETWORK_HINT,
         )
     if _passed(
@@ -275,33 +336,50 @@ def doctor_error(checks: list[Check]) -> LingotubeError | None:
         name=LOGIN,
     ):
         return ChatUnavailableError(
-            message="Вход выполнен, но чат YouTube на тестовом видео недоступен.",
+            message="Signed in, but the YouTube chat is unavailable on the test video.",
             hint=CHAT_HINT,
         )
     return AuthError(
-        message="Ни один источник cookies не дал входа в YouTube.",
+        message="No cookies source gave a sign-in to YouTube.",
         hint=EXPORT_HINT,
     )
 
 
 def doctor_exit_code(checks: list[Check]) -> int:
+    """Return the process exit code for the check rows.
+
+    Args:
+        checks: Check rows of the run.
+
+    Returns:
+        0 if everything is ready, otherwise the exit code of the error.
+    """
     error = doctor_error(checks=checks)
     return 0 if error is None else error.exit_code
 
 
 def _verdict(check: Check) -> str:
     if check.ok:
-        return "ок"
-    return "ошибка" if check.critical else check.soft_verdict
+        return "ok"
+    return "error" if check.critical else check.soft_verdict
 
 
 def render_table(
     checks: list[Check],
     error: LingotubeError | None = None,
 ) -> str:
-    """The checks as a table, then the distinct hints of failed checks (the final
-    error's own hint is printed with the error)."""
-    rows = [("ПРОВЕРКА", "ИТОГ", "ПОДРОБНОСТИ")] + [(c.name, _verdict(check=c), c.detail) for c in checks]
+    """Render the checks as a text table, followed by the hints of the failed checks.
+
+    The hint of the final error is left out, because the error prints it itself.
+
+    Args:
+        checks: Check rows of the run.
+        error: The final error, or None.
+
+    Returns:
+        The text of the report.
+    """
+    rows = [("CHECK", "RESULT", "DETAILS")] + [(c.name, _verdict(check=c), c.detail) for c in checks]
     w0 = max(len(r[0]) for r in rows)
     w1 = max(len(r[1]) for r in rows)
     lines = [f"{a.ljust(w0)}  {b.ljust(w1)}  {c}".rstrip() for a, b, c in rows]
@@ -316,7 +394,7 @@ def render_table(
         ):
             hints.append(check.hint)
     if hints:
-        lines += ["", "Подсказки:", *(f"- {hint}" for hint in hints)]
+        lines += ["", "Hints:", *(f"- {hint}" for hint in hints)]
     return "\n".join(lines) + "\n"
 
 
@@ -324,7 +402,15 @@ def register(
     app,
     get_context,
 ) -> None:
-    """Adds the `doctor` command: a table of checks; exit 0 / 3 (chat) / 4 (cookies) / 6 (network)."""
+    """Add the ``doctor`` command to the CLI application.
+
+    The command prints a table of checks. Exit codes: 0 when ready, 3 for the chat,
+    4 for the cookies, 6 for the network.
+
+    Args:
+        app: Typer application.
+        get_context: Function that returns the shared context of the command.
+    """
     from typing import Annotated
 
     import typer
@@ -335,13 +421,13 @@ def register(
         str,
         typer.Option(
             default="--video",
-            help="Видео для проверки чата (ссылка или идентификатор).",
+            help="Video to check the chat with (link or id).",
         ),
     ]
 
     @app.command(
         name="doctor",
-        help="Проверка готовности: cookies, вход в аккаунт, чат на тестовом видео.",
+        help="Readiness check: cookies, account sign-in, chat on the test video.",
     )
     def doctor(
         video: VideoOpt = DEFAULT_TEST_VIDEO,

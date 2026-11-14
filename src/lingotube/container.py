@@ -51,8 +51,15 @@ TRANSLATOR_TIMEOUT = 120.0  # a model translating a batch can be slow
 
 @asynccontextmanager
 async def youtube_http() -> AsyncIterator[httpx.AsyncClient]:
-    """No redirects, no proxy env, and a jar that rejects every Set-Cookie: cookies
-    travel only in the explicit header built by the chat client."""
+    """Create the HTTP client for YouTube requests.
+
+    Redirects are not followed, proxy environment variables are ignored, and the cookie
+    jar rejects every Set-Cookie header. Cookies are sent only in the explicit header that
+    the chat client builds.
+
+    Yields:
+        The HTTP client, which is closed when the block ends.
+    """
     jar = CookieJar(policy=DefaultCookiePolicy(allowed_domains=[]))
     async with httpx.AsyncClient(
         follow_redirects=False,
@@ -64,7 +71,13 @@ async def youtube_http() -> AsyncIterator[httpx.AsyncClient]:
 
 @asynccontextmanager
 async def translator_http() -> AsyncIterator[httpx.AsyncClient]:
-    """The translator's own client: never carries YouTube cookies."""
+    """Create the HTTP client of the own-model translator.
+
+    This client never carries YouTube cookies.
+
+    Yields:
+        The HTTP client, which is closed when the block ends.
+    """
     async with httpx.AsyncClient(
         follow_redirects=False,
         timeout=TRANSLATOR_TIMEOUT,
@@ -73,6 +86,15 @@ async def translator_http() -> AsyncIterator[httpx.AsyncClient]:
 
 
 def stream_writer(stream: TextIO) -> Callable[[str], None]:
+    """Create a function that writes one message per line to a text stream.
+
+    Args:
+        stream: Text stream to write to.
+
+    Returns:
+        A function that takes a message, writes it with a newline and flushes the stream.
+    """
+
     def write(message: str) -> None:
         stream.write(message + "\n")
         stream.flush()
@@ -81,8 +103,16 @@ def stream_writer(stream: TextIO) -> Callable[[str], None]:
 
 
 def progress_writer(stream: TextIO) -> Callable[[int, int], None]:
+    """Create a function that reports the progress of a long transcript.
+
+    Args:
+        stream: Text stream to write to.
+
+    Returns:
+        A function that takes the number of parts done and the total number of parts.
+    """
     write = stream_writer(stream=stream)
-    return lambda done, total: write(f"часть {done} из {total}")
+    return lambda done, total: write(f"part {done} of {total}")
 
 
 BrowserLoader = Callable[[str], Mapping[str, str]]
@@ -95,6 +125,21 @@ def make_cookie_source(
     login_paths: LoginPaths,
     loader: BrowserLoader = default_loader,
 ) -> CookieSource:
+    """Choose the cookie source for the normal commands.
+
+    The order is: the cookies file, then the browser from the settings, then the saved
+    login profile, and finally any installed browser.
+
+    Args:
+        settings: Effective settings.
+        warn: Function that receives warnings.
+        login_store: Store of the cookies saved by ``lingotube login``.
+        login_paths: Locations of the login profile.
+        loader: Function that reads the cookies of a browser.
+
+    Returns:
+        The cookie source to use.
+    """
     if settings.cookies_file is not None:
         return FileCookieSource(
             path=settings.cookies_file,
@@ -127,8 +172,22 @@ def make_doctor_sources(
     login_paths: LoginPaths,
     loader: BrowserLoader = default_loader,
 ) -> dict[str, CookieSource]:
-    """Every cookie source `doctor` checks separately: the file, the login profile,
-    then each browser (only the chosen one when a browser is set). Never refreshes."""
+    """Create every cookie source that ``doctor`` checks, one by one.
+
+    The sources are the cookies file, the login profile, and each browser. If the
+    settings name a browser, only that browser is checked. The sources are never
+    refreshed.
+
+    Args:
+        settings: Effective settings.
+        warn: Function that receives warnings.
+        login_store: Store of the cookies saved by ``lingotube login``.
+        login_paths: Locations of the login profile.
+        loader: Function that reads the cookies of a browser.
+
+    Returns:
+        The cookie sources by the name shown in the doctor table.
+    """
     sources: dict[str, CookieSource] = {
         FILE_SOURCE: (
             FileCookieSource(
@@ -160,7 +219,18 @@ def make_ask_factory(
     pacer: Pacer,
     max_retries: int,
 ) -> Callable[[CookieSource], AskClient]:
-    """A chat client per cookie source (doctor tries sources one by one); one shared pacer."""
+    """Create a function that builds a chat client for a cookie source.
+
+    ``doctor`` tries the sources one by one. All the clients share one pacer.
+
+    Args:
+        http: Shared HTTP client for YouTube.
+        pacer: Shared pacer for all requests.
+        max_retries: Number of retries after rate-limit and server errors.
+
+    Returns:
+        A function that takes a cookie source and returns a chat client.
+    """
     return lambda source: YouTubeAskClient(
         http=http,
         cookies=source,
@@ -170,6 +240,14 @@ def make_ask_factory(
 
 
 def translator_mode(settings: Settings) -> str:
+    """Return the translator mode for the settings.
+
+    Args:
+        settings: Effective settings.
+
+    Returns:
+        ``own_model`` if a translator is configured, otherwise ``none``.
+    """
     return "own_model" if settings.translator is not None else "none"
 
 
@@ -177,6 +255,18 @@ def translator_api_key(
     settings: Settings,
     env: Mapping[str, str],
 ) -> str:
+    """Read the API key of the own-model translator from the environment.
+
+    Args:
+        settings: Effective settings with a translator section.
+        env: Environment variables.
+
+    Returns:
+        The API key.
+
+    Raises:
+        AuthError: If the environment variable is missing or empty.
+    """
     assert settings.translator is not None
     name = settings.translator.api_key_env
     key = env.get(
@@ -185,13 +275,18 @@ def translator_api_key(
     ).strip()
     if not key:
         raise AuthError(
-            message="Не задан ключ модели перевода.",
-            hint=f"Задайте ключ в переменной окружения {name} (ключ не передаётся параметром команды).",
+            message="The translator API key is not set.",
+            hint=f"Set the key in the environment variable {name} (the key is not passed as a command option).",
         )
     return key
 
 
 class Container(containers.DeclarativeContainer):
+    """Dependency container of one command run.
+
+    Singletons live as long as the container, so one run shares one pacer and one cache.
+    """
+
     settings = providers.Dependency(instance_of=Settings)
     env = providers.Dependency(instance_of=Mapping)
     cache_dir = providers.Dependency(instance_of=Path)
@@ -320,6 +415,18 @@ def build_container(
     login_paths: LoginPaths,
     err: TextIO,
 ) -> Container:
+    """Build the dependency container for one command run.
+
+    Args:
+        settings: Effective settings.
+        env: Environment variables.
+        cache_dir: Folder of the result cache.
+        login_paths: Locations of the login profile.
+        err: Stream for messages and progress, usually standard error.
+
+    Returns:
+        The ready container.
+    """
     return Container(
         settings=providers.Object(settings),
         env=providers.Object(env),

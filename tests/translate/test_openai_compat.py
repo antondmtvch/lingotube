@@ -1,3 +1,5 @@
+"""Tests of the translator over an OpenAI-compatible API: batches, numbering, retries and secrets."""
+
 import asyncio
 import json
 
@@ -16,6 +18,14 @@ KEY = "sk-secret-key-123"
 
 
 def cues(n: int) -> list[Cue]:
+    """Build ``n`` cues with the text ``line <id>``.
+
+    Args:
+        n: Number of cues.
+
+    Returns:
+        The cues.
+    """
     return [
         Cue(
             id=i,
@@ -31,6 +41,14 @@ def cues(n: int) -> list[Cue]:
 
 
 def completion(content: str) -> httpx.Response:
+    """Build a chat completion response with the given content.
+
+    Args:
+        content: Content of the answer.
+
+    Returns:
+        The HTTP response.
+    """
     return httpx.Response(
         status_code=200,
         json={"choices": [{"message": {"content": content}}]},
@@ -38,6 +56,14 @@ def completion(content: str) -> httpx.Response:
 
 
 def user_lines(request: httpx.Request) -> list[list[str]]:
+    """Read the numbered lines that a request sends to the model.
+
+    Args:
+        request: The HTTP request.
+
+    Returns:
+        The number and the text of each line.
+    """
     body = json.loads(s=request.content)
     return [
         line.split(
@@ -49,6 +75,14 @@ def user_lines(request: httpx.Request) -> list[list[str]]:
 
 
 def echo_upper(request: httpx.Request) -> httpx.Response:
+    """Answer a request with the same numbered lines, in upper case.
+
+    Args:
+        request: The HTTP request.
+
+    Returns:
+        The HTTP response.
+    """
     return completion(content="\n".join(f"{n}\t{t.upper()}" for n, t in user_lines(request=request)))
 
 
@@ -57,6 +91,16 @@ def make(
     batch_size: int = 40,
     base: str = BASE,
 ) -> OpenAICompatTranslator:
+    """Build a translator for the test endpoint.
+
+    Args:
+        client: HTTP client.
+        batch_size: Number of lines per request.
+        base: Base URL of the endpoint.
+
+    Returns:
+        The translator.
+    """
     return OpenAICompatTranslator(
         http=client,
         settings=TranslatorSettings(
@@ -71,6 +115,7 @@ def make(
 
 @respx.mock
 async def test_translates_in_batches_keeping_ids_and_times():
+    """Check that cues are translated in batches with their ids and times kept."""
     route = respx.post(url=URL).mock(side_effect=echo_upper)
     source = cues(n=90)
     async with httpx.AsyncClient() as client:
@@ -90,6 +135,7 @@ async def test_translates_in_batches_keeping_ids_and_times():
 
 @respx.mock
 async def test_timecodes_not_sent_to_model():
+    """Check that the timecodes are not sent to the model."""
     route = respx.post(url=URL).mock(side_effect=echo_upper)
     async with httpx.AsyncClient() as client:
         await make(client=client).translate(
@@ -103,6 +149,7 @@ async def test_timecodes_not_sent_to_model():
 
 @respx.mock
 async def test_count_mismatch_retries_batch_once_then_fails():
+    """Check that a batch with a wrong count is retried once and then fails."""
     route = respx.post(url=URL).mock(
         return_value=completion(
             content="\n".join(
@@ -127,6 +174,7 @@ async def test_count_mismatch_retries_batch_once_then_fails():
 
 @respx.mock
 async def test_mismatch_then_ok_succeeds():
+    """Check that a batch that is correct on the second try succeeds."""
     route = respx.post(url=URL).mock(side_effect=[completion(content="1\tonly"), echo_upper])
     async with httpx.AsyncClient() as client:
         out = await make(client=client).translate(
@@ -139,6 +187,7 @@ async def test_mismatch_then_ok_succeeds():
 
 @respx.mock
 async def test_duplicate_or_empty_is_mismatch():
+    """Check that duplicate or empty lines count as a mismatch."""
     route = respx.post(url=URL).mock(
         side_effect=[
             completion(content="1\ta\n1\tb"),
@@ -163,6 +212,7 @@ async def test_api_key_in_header_not_in_error(
     status,
     exc,
 ):
+    """Check that the API key is in the header only and never in an error."""
     respx.post(url=URL).mock(
         return_value=httpx.Response(
             status_code=status,
@@ -183,6 +233,7 @@ async def test_api_key_in_header_not_in_error(
 
 @respx.mock
 async def test_transport_error_is_network_error_without_key():
+    """Check that a transport error becomes a network error without the key."""
     respx.post(url=URL).mock(side_effect=httpx.ConnectError(message=f"boom {KEY}"))
     async with httpx.AsyncClient() as client:
         with pytest.raises(expected_exception=NetworkError) as e:
@@ -196,6 +247,7 @@ async def test_transport_error_is_network_error_without_key():
 
 @respx.mock
 async def test_request_goes_only_to_base_url_and_carries_no_cookies():
+    """Check that requests go only to the base URL and carry no cookies."""
     route = respx.post(url=URL).mock(side_effect=echo_upper)
     async with httpx.AsyncClient() as client:
         await make(
@@ -213,6 +265,7 @@ async def test_request_goes_only_to_base_url_and_carries_no_cookies():
 
 @respx.mock
 async def test_at_most_three_batches_in_flight():
+    """Check that at most three batches are sent at the same time."""
     state = {"now": 0, "peak": 0}
 
     async def handler(request: httpx.Request) -> httpx.Response:
@@ -255,6 +308,7 @@ async def test_at_most_three_batches_in_flight():
     ],
 )
 async def test_lenient_response_formats(answer):
+    """Check that the model answer is accepted in several lenient formats."""
     respx.post(url=URL).mock(return_value=completion(content=answer))
     async with httpx.AsyncClient() as client:
         out = await make(client=client).translate(
@@ -266,6 +320,7 @@ async def test_lenient_response_formats(answer):
 
 @respx.mock
 async def test_tab_and_line_separator_inside_text_preserved():
+    """Check that tabs and line separators inside the text are preserved."""
     respx.post(url=URL).mock(return_value=completion(content="1\ta\tb c\n2\tz"))
     async with httpx.AsyncClient() as client:
         out = await make(client=client).translate(
@@ -277,6 +332,7 @@ async def test_tab_and_line_separator_inside_text_preserved():
 
 @respx.mock
 async def test_extra_number_is_still_mismatch():
+    """Check that an extra number in the answer is still a mismatch."""
     route = respx.post(url=URL).mock(return_value=completion(content="1\ta\n2\tb\n3\tc"))
     async with httpx.AsyncClient() as client:
         with pytest.raises(expected_exception=ValidationError):
@@ -289,6 +345,7 @@ async def test_extra_number_is_still_mismatch():
 
 @respx.mock
 async def test_redirect_is_refused():
+    """Check that a redirect from the model endpoint is refused."""
     target = respx.get(url="https://evil.example.test/x").mock(return_value=httpx.Response(status_code=200))
     respx.post(url=URL).mock(
         return_value=httpx.Response(
@@ -307,6 +364,7 @@ async def test_redirect_is_refused():
 
 
 async def test_invalid_base_url_is_validation_error():
+    """Check that an invalid base URL is a validation error."""
     async with httpx.AsyncClient() as client:
         with pytest.raises(expected_exception=ValidationError) as e:
             await make(
@@ -323,6 +381,7 @@ async def test_invalid_base_url_is_validation_error():
 
 @respx.mock
 async def test_line_without_number_is_appended_to_previous_item():
+    """Check that a line without a number is added to the previous item."""
     respx.post(url=URL).mock(return_value=completion(content="1\tA\nB\n2\tC"))
     async with httpx.AsyncClient() as client:
         out = await make(client=client).translate(
@@ -335,6 +394,7 @@ async def test_line_without_number_is_appended_to_previous_item():
 
 @respx.mock
 async def test_trailing_prose_after_last_item_is_dropped():
+    """Check that prose after the last item is dropped."""
     respx.post(url=URL).mock(return_value=completion(content="1\tA\n2\tC\nHope this helps!"))
     async with httpx.AsyncClient() as client:
         out = await make(client=client).translate(

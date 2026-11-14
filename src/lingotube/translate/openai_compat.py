@@ -26,12 +26,24 @@ _LINE = re.compile(pattern=r"^\s*(\d+)(?:[\t ]+|[.):]\s*)(.*?)\s*$")
 
 
 class OpenAICompatTranslator:
+    """Translator over an OpenAI-compatible ``/chat/completions`` endpoint.
+
+    The API key is read before the object is created, so the object is ready at once.
+    """
+
     def __init__(
         self,
         http: httpx.AsyncClient,
         settings: TranslatorSettings,
         api_key: str,
     ) -> None:
+        """Create the translator.
+
+        Args:
+            http: HTTP client used only for the translation requests.
+            settings: Translator settings from the settings file.
+            api_key: API key. It is sent only in the Authorization header.
+        """
         self._http = http
         self._settings = settings
         self._api_key = api_key
@@ -44,6 +56,20 @@ class OpenAICompatTranslator:
         cues: Sequence[Cue],
         target_language: str,
     ) -> list[Cue]:
+        """Translate cues in batches, a few batches at a time.
+
+        Args:
+            cues: Cues to translate.
+            target_language: Language code of the result.
+
+        Returns:
+            The translated cues, in the original order.
+
+        Raises:
+            ValidationError: If the model returns a wrong set of numbered lines twice.
+            AuthError: If the model rejects the key.
+            NetworkError: If the model cannot be reached or answers with an error.
+        """
         size = self._settings.batch_size
         batches = [
             list(cues[i : i + size])
@@ -112,9 +138,9 @@ class OpenAICompatTranslator:
                     )
                 ]
         raise ValidationError(
-            message=f"Модель вернула перевод реплик {batch[0].id}–{batch[-1].id}, не совпадающий по "
-            f"числу или номерам строк (дважды).",
-            hint="Уменьшите translator.batch_size или проверьте модель.",
+            message=f"The model returned a translation of cues {batch[0].id}–{batch[-1].id} that does not match in "
+            f"the number or the numbers of the lines (twice).",
+            hint="Reduce translator.batch_size or check the model.",
         )
 
     async def _complete(
@@ -140,30 +166,30 @@ class OpenAICompatTranslator:
             )
         except httpx.InvalidURL:
             raise ValidationError(
-                message="Некорректный адрес модели перевода.",
-                hint="Проверьте настройку translator.base_url.",
+                message="The translator model address is invalid.",
+                hint="Check the translator.base_url setting.",
             ) from None
         except httpx.HTTPError as e:
             raise NetworkError(
                 message=redact(
-                    text=f"Не удалось обратиться к модели перевода: {type(e).__name__}: {e}",
+                    text=f"Could not reach the translator model: {type(e).__name__}: {e}",
                     secrets=[self._api_key],
                 )
             ) from None
         status = response.status_code
         if status in (401, 403):
             raise AuthError(
-                message=f"Модель перевода отклонила ключ (HTTP {status}).",
-                hint=f"Проверьте ключ в переменной окружения {self._settings.api_key_env}.",
+                message=f"The translator model rejected the key (HTTP {status}).",
+                hint=f"Check the key in the environment variable {self._settings.api_key_env}.",
             ) from None
         if 300 <= status < 400:
             raise NetworkError(
-                message="Модель перевода ответила перенаправлением; перенаправления не выполняются."
+                message="The translator model answered with a redirect; redirects are not followed."
             ) from None
         if status >= 400:
             raise NetworkError(
                 message=redact(
-                    text=f"Модель перевода вернула ошибку HTTP {status}.",
+                    text=f"The translator model returned the HTTP error {status}.",
                     secrets=[self._api_key],
                 )
             ) from None

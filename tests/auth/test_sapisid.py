@@ -1,3 +1,5 @@
+"""Tests of the SAPISIDHASH authorization headers."""
+
 import hashlib
 
 import pytest
@@ -7,6 +9,7 @@ from lingotube.errors import AuthError
 
 
 def test_sapisidhash_format():
+    """Check the format of the SAPISIDHASH value."""
     digest = hashlib.sha1(data=b"1700000000 SID123 https://www.youtube.com").hexdigest()
     assert (
         sapisidhash(
@@ -19,6 +22,7 @@ def test_sapisidhash_format():
 
 
 def test_auth_headers():
+    """Check the authorization headers of a request."""
     h = auth_headers(
         creds=Credentials(cookies={"SAPISID": "SID123"}),
         now=1700000000,
@@ -29,6 +33,7 @@ def test_auth_headers():
 
 
 def test_fallback_to_3papisid():
+    """Check that the __Secure-3PAPISID cookie is used when SAPISID is missing."""
     a = auth_headers(
         creds=Credentials(cookies={"__Secure-3PAPISID": "P"}),
         now=5,
@@ -37,6 +42,7 @@ def test_fallback_to_3papisid():
 
 
 def test_missing_both_is_auth_error():
+    """Check that AuthError is raised when both SAPISID cookies are missing."""
     with pytest.raises(expected_exception=AuthError) as e:
         auth_headers(
             creds=Credentials(cookies={"SID": "x"}),

@@ -1,3 +1,5 @@
+"""Tests of the assembly of parsed lines: ranges, joining, end times and completeness."""
+
 from lingotube.assemble import (
     check_completeness,
     fix_ends,
@@ -10,6 +12,7 @@ from lingotube.parsing import ParsedLine
 
 
 def test_plan_ranges():
+    """Check that the video is split into ranges of the given length."""
     assert plan_ranges(
         duration=1500,
         chunk_seconds=600,
@@ -21,6 +24,7 @@ def test_plan_ranges():
 
 
 def test_is_truncated():
+    """Check that an answer that ends early counts as truncated."""
     lines = [
         ParsedLine(
             start=10,
@@ -57,6 +61,7 @@ def test_is_truncated():
 
 
 def test_is_truncated_start_only_lines():
+    """Check that the truncation check works on lines that have only a start time."""
     lines = [
         ParsedLine(
             start=10,
@@ -86,6 +91,7 @@ def test_is_truncated_start_only_lines():
 
 
 def test_merge_dedupes_boundary_and_numbers():
+    """Check that duplicates at a range boundary are removed and the cues are numbered."""
     a = [
         ParsedLine(
             start=590,
@@ -116,6 +122,7 @@ def test_merge_dedupes_boundary_and_numbers():
 
 
 def test_merge_carries_missing_end_and_dedupes_within_2s():
+    """Check that a missing end is carried over and duplicates within two seconds are removed."""
     a = [
         ParsedLine(
             start=10,
@@ -143,6 +150,7 @@ def test_merge_carries_missing_end_and_dedupes_within_2s():
 
 
 def test_fix_ends_keeps_valid_chat_end():
+    """Check that a valid end time from the chat is kept."""
     assert (
         fix_ends(
             cues=[
@@ -166,6 +174,7 @@ def test_fix_ends_keeps_valid_chat_end():
 
 
 def test_fix_ends_repairs_invalid():
+    """Check that an invalid end time is repaired."""
     out = fix_ends(
         cues=[
             Cue(
@@ -195,6 +204,7 @@ def test_fix_ends_repairs_invalid():
 
 
 def test_fix_ends_missing_end_uses_reading_time():
+    """Check that a missing end time is estimated from the reading time."""
     out = fix_ends(
         cues=[
             Cue(
@@ -231,6 +241,7 @@ def test_fix_ends_missing_end_uses_reading_time():
 
 
 def test_completeness():
+    """Check the completeness check on a transcript that reaches the end."""
     full = [
         Cue(
             id=1,
@@ -274,6 +285,7 @@ def test_completeness():
 
 
 def test_merge_joins_same_start_lines():
+    """Check that lines with the same start time are joined."""
     cues = merge(
         chunks=[
             [
@@ -302,6 +314,7 @@ def test_merge_joins_same_start_lines():
 
 
 def test_merge_same_start_keeps_max_end():
+    """Check that joined lines with the same start keep the latest end."""
     cues = merge(
         chunks=[
             [
@@ -327,6 +340,7 @@ def test_merge_same_start_keeps_max_end():
 
 
 def test_fix_ends_drops_cues_past_duration_and_renumbers():
+    """Check that cues past the end of the video are dropped and the rest renumbered."""
     out = fix_ends(
         cues=[
             Cue(
@@ -355,6 +369,7 @@ def test_fix_ends_drops_cues_past_duration_and_renumbers():
 
 
 def test_fix_ends_every_end_after_start():
+    """Check that every fixed end time is after its start time."""
     cues = merge(
         chunks=[
             [
@@ -384,6 +399,7 @@ def test_fix_ends_every_end_after_start():
 
 
 def test_completeness_leading_gap():
+    """Check that a long gap at the start counts as a gap."""
     r = check_completeness(
         cues=[
             Cue(
@@ -399,6 +415,7 @@ def test_completeness_leading_gap():
 
 
 def test_merge_seam_dedupe_applies_before_join():
+    """Check that duplicates at the seams are removed before lines are joined."""
     a = [
         ParsedLine(
             start=10,
@@ -422,6 +439,7 @@ def test_merge_seam_dedupe_applies_before_join():
 
 
 def test_fix_ends_same_start_unmerged_never_degenerate():
+    """Check that cues with the same start and no merge never get an empty duration."""
     out = fix_ends(
         cues=[
             Cue(
@@ -450,6 +468,7 @@ def test_fix_ends_same_start_unmerged_never_degenerate():
 
 
 def test_plan_ranges_merges_sub_second_tail_into_previous():
+    """Check that a tail shorter than a second is merged into the previous range."""
     assert plan_ranges(
         duration=600.5,
         chunk_seconds=300,
@@ -461,6 +480,7 @@ def test_plan_ranges_merges_sub_second_tail_into_previous():
 
 
 def test_is_truncated_does_not_assume_sorted_lines():
+    """Check that the truncation check does not need sorted lines."""
     lines = [
         ParsedLine(
             start=400,
@@ -483,6 +503,7 @@ def test_is_truncated_does_not_assume_sorted_lines():
 
 
 def test_completeness_does_not_assume_sorted_cues():
+    """Check that the completeness check does not need sorted cues."""
     cues = [
         Cue(
             id=2,

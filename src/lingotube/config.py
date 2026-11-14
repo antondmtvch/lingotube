@@ -25,6 +25,16 @@ ENV_COOKIES_FILE = "LINGOTUBE_COOKIES_FILE"
 
 @dataclass(frozen=True)
 class TranslatorSettings:
+    """Settings of the own-model translator, an OpenAI-compatible API.
+
+    Attributes:
+        base_url: Base URL of the API, for example https://api.openai.com/v1.
+        model: Model name sent to the API.
+        api_key_env: Name of the environment variable that holds the key.
+            The key itself is never stored in the settings.
+        batch_size: Number of lines translated in one request.
+    """
+
     base_url: str
     model: str
     api_key_env: str = "LINGOTUBE_API_KEY"
@@ -33,6 +43,19 @@ class TranslatorSettings:
 
 @dataclass(frozen=True)
 class Settings:
+    """Effective settings: the settings file, then the environment overrides.
+
+    Attributes:
+        lang: Subtitle language code, or None.
+        format: Default output format: srt, vtt or json.
+        cookies_file: Path to a cookies file, or None.
+        browser: Browser to read cookies from, or None.
+        chunk_seconds: Length of one chunk of a long video, in seconds.
+        min_interval: Minimum pause between chat requests, in seconds.
+        max_retries: Number of retries after a failed request.
+        translator: Own-model translator settings, or None for the chat mode.
+    """
+
     lang: str | None = None
     format: str = "srt"
     cookies_file: Path | None = None
@@ -44,7 +67,13 @@ class Settings:
 
 
 def default_paths() -> tuple[Path, Path]:
-    """(settings file, cache dir). Creates nothing."""
+    """Return the default settings file and cache folder.
+
+    Creates nothing.
+
+    Returns:
+        A tuple of the settings file path and the cache folder path.
+    """
     config = user_config_path(
         appname=APP_NAME,
         appauthor=False,
@@ -58,12 +87,25 @@ def default_paths() -> tuple[Path, Path]:
 
 @dataclass(frozen=True)
 class LoginPaths:
+    """Locations used by the sign-in profile of ``lingotube login``.
+
+    Attributes:
+        profile_dir: Browser profile folder used for sign-in.
+        cookies_file: File where the saved YouTube cookies are kept.
+    """
+
     profile_dir: Path
     cookies_file: Path
 
 
 def default_login_paths() -> LoginPaths:
-    """Browser profile dir and saved-cookies file of `lingotube login`. Creates nothing."""
+    """Return the sign-in profile folder and the saved-cookies file.
+
+    Creates nothing.
+
+    Returns:
+        The login paths in the user data folder.
+    """
     data = user_data_path(
         appname=APP_NAME,
         appauthor=False,
@@ -189,7 +231,21 @@ def load_settings(
     path: Path | None,
     env: Mapping[str, str],
 ) -> Settings:
-    """Synchronous on purpose: called once at startup on a tiny file."""
+    """Load settings from the TOML file and the environment.
+
+    The environment overrides the file. The function is synchronous on purpose: it runs
+    once at startup and reads a small file.
+
+    Args:
+        path: Settings file, or None to use only the environment.
+        env: Environment variables, usually os.environ.
+
+    Returns:
+        The effective settings.
+
+    Raises:
+        ValidationError: If the file cannot be read or a setting is invalid.
+    """
     values: dict[str, object] = {}
     if path is not None:
         try:
@@ -360,6 +416,18 @@ async def remember_cookies_file(
     path: Path,
     settings_path: Path,
 ) -> None:
+    """Save the path of a cookies file in the settings file.
+
+    Does nothing if the same path is already saved.
+
+    Args:
+        path: Cookies file to remember.
+        settings_path: Settings file to update.
+
+    Raises:
+        ValidationError: If the settings file cannot be read.
+        OSError: If the settings file cannot be written.
+    """
     await asyncio.to_thread(
         _remember,
         path,
@@ -390,7 +458,14 @@ def _forget_remembered_cookie_sources_blocking(settings_path: Path) -> list[str]
 
 
 async def forget_remembered_cookie_sources(settings_path: Path) -> list[str]:
-    """Remove remembered ``cookies_file`` and ``browser``; return removed key names."""
+    """Remove the remembered ``cookies_file`` and ``browser`` settings.
+
+    Args:
+        settings_path: Settings file to update.
+
+    Returns:
+        The names of the keys that were removed.
+    """
     return await asyncio.to_thread(
         _forget_remembered_cookie_sources_blocking,
         settings_path,

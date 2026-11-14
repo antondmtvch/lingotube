@@ -1,9 +1,12 @@
+"""Tests of the parsing of the chat answer into timed lines."""
+
 import pytest
 
 from lingotube.parsing import ParsedLine, parse_answer
 
 
 def test_interval_format():
+    """Check that a timecode interval is parsed."""
     text = (
         "Ниже представлена транскрипция всех реплик:\n\n"
         "(0:02-0:04) Помогите!\n(0:04-0:07) Загоняем живого к грибам и бобрам.\n"
@@ -29,6 +32,7 @@ def test_interval_format():
 
 
 def test_start_only_format():
+    """Check that a timecode with only a start is parsed."""
     assert parse_answer(text="(0:14) Всем привет, дорогие друзья.") == [
         ParsedLine(
             start=14.0,
@@ -55,6 +59,7 @@ def test_variations(
     start,
     end,
 ):
+    """Check that the common variations of the answer format are parsed."""
     assert parse_answer(text=line) == [
         ParsedLine(
             start=start,
@@ -65,6 +70,7 @@ def test_variations(
 
 
 def test_start_only_after_one_hour():
+    """Check that a start-only timecode after one hour is parsed."""
     assert parse_answer(text="(1:00:00) x") == [
         ParsedLine(
             start=3600.0,
@@ -75,6 +81,7 @@ def test_start_only_after_one_hour():
 
 
 def test_bracketed_sound_text_kept_verbatim():
+    """Check that bracketed sound descriptions are kept as written."""
     assert parse_answer(text="(0:05) [music]") == [
         ParsedLine(
             start=5.0,
@@ -92,6 +99,7 @@ def test_bracketed_sound_text_kept_verbatim():
 
 
 def test_degenerate_interval_kept():
+    """Check that an interval whose end equals its start is kept."""
     assert parse_answer(text="(5:25-5:25) parasite.") == [
         ParsedLine(
             start=325.0,
@@ -102,10 +110,12 @@ def test_degenerate_interval_kept():
 
 
 def test_continuation_line_joins_previous():
+    """Check that a continuation line is joined to the previous line."""
     assert parse_answer(text="(0:02-0:04) Первая\nпродолжение\n(0:05-0:06) Вторая")[0].text == "Первая продолжение"
 
 
 def test_preamble_and_outro_dropped():
+    """Check that the introduction and the closing text are dropped."""
     text = "Вот расшифровка:\n\n(0:02) Раз\n(0:05) Два\n\nНадеюсь, это помогло!"
     assert parse_answer(text=text) == [
         ParsedLine(
@@ -122,6 +132,7 @@ def test_preamble_and_outro_dropped():
 
 
 def test_outro_without_blank_line_joins_previous():
+    """Check that a closing text without a blank line before it joins the previous line."""
     assert parse_answer(text="(0:02) Раз\nНадеюсь") == [
         ParsedLine(
             start=2.0,
@@ -132,18 +143,22 @@ def test_outro_without_blank_line_joins_previous():
 
 
 def test_no_timecodes_returns_empty():
+    """Check that an answer without timecodes gives an empty list."""
     assert parse_answer(text="Извините, я не могу помочь.") == []
 
 
 def test_empty_text_line_skipped():
+    """Check that a timed line with empty text is skipped."""
     assert parse_answer(text="(0:02-0:04)   ") == []
 
 
 def test_empty_input():
+    """Check that empty input gives an empty list."""
     assert parse_answer(text="") == []
 
 
 def test_long_whitespace_line_is_fast():
+    """Check that a very long line of whitespace is parsed quickly."""
     import time
 
     t = time.perf_counter()
@@ -158,10 +173,12 @@ def test_long_whitespace_line_is_fast():
     argvalues=["(0:75) x", "(1:99:99-0:01) x", "(1:60:00) x", "(0:02-0:99) x"],
 )
 def test_out_of_range_is_not_a_timecode(line):
+    """Check that a timecode with out-of-range parts is not a timecode."""
     assert parse_answer(text=line) == []
 
 
 def test_out_of_range_line_follows_text_rules():
+    """Check that a line with an out-of-range timecode follows the text rules."""
     assert parse_answer(text="(0:02) a\n(0:75) b") == [
         ParsedLine(
             start=2.0,
@@ -172,6 +189,7 @@ def test_out_of_range_line_follows_text_rules():
 
 
 def test_end_before_start_gives_none_end():
+    """Check that an end before the start gives no end."""
     assert parse_answer(text="(0:10-0:05) x") == [
         ParsedLine(
             start=10.0,
@@ -182,6 +200,7 @@ def test_end_before_start_gives_none_end():
 
 
 def test_minutes_over_99_in_ms_form():
+    """Check that minutes above 99 are accepted in the m:ss form."""
     assert parse_answer(text="(105:30) x") == [
         ParsedLine(
             start=6330.0,
@@ -192,6 +211,7 @@ def test_minutes_over_99_in_ms_form():
 
 
 def test_bullet_with_several_spaces_and_bold():
+    """Check that a bullet with several spaces and bold text is parsed."""
     assert parse_answer(text="-  **(0:02-0:04)** x") == [
         ParsedLine(
             start=2.0,
@@ -221,6 +241,7 @@ def test_bullet_with_several_spaces_and_bold():
     ],
 )
 def test_bold_and_list_prefixes(line):
+    """Check that bold and list prefixes are removed."""
     assert parse_answer(text=line) == [
         ParsedLine(
             start=2.0,
@@ -231,11 +252,13 @@ def test_bold_and_list_prefixes(line):
 
 
 def test_crlf_input():
+    """Check that input with CRLF line endings is parsed."""
     text = "(0:02-0:04) a\r\n(0:04-0:06) b\r\n"
     assert [p.text for p in parse_answer(text=text)] == ["a", "b"]
 
 
 def test_mid_line_timecode_does_not_start_cue():
+    """Check that a timecode in the middle of a line does not start a timed line."""
     text = "(0:02) see you at (0:30) ok\ncontinues (0:40) here"
     assert parse_answer(text=text) == [
         ParsedLine(

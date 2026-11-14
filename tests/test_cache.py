@@ -1,3 +1,5 @@
+"""Tests of the on-disk result cache."""
+
 import asyncio
 import contextlib
 import dataclasses
@@ -15,6 +17,7 @@ KEY = CacheKey(
 
 
 async def test_put_get_roundtrip(tmp_path):
+    """Check that a stored value reads back unchanged."""
     cache = Cache(root=tmp_path / "c")
     await cache.put(
         key=KEY,
@@ -27,10 +30,12 @@ async def test_put_get_roundtrip(tmp_path):
 
 
 async def test_get_missing_returns_none(tmp_path):
+    """Check that a missing key gives None."""
     assert await Cache(root=tmp_path).get(key=KEY) is None
 
 
 async def test_keys_differ_by_every_field(tmp_path):
+    """Check that the cache key changes with each of its fields."""
     cache = Cache(root=tmp_path)
     await cache.put(
         key=KEY,
@@ -56,6 +61,7 @@ async def test_keys_differ_by_every_field(tmp_path):
 
 
 async def test_key_fields_cannot_collide_or_escape(tmp_path):
+    """Check that key fields cannot collide or escape the cache folder."""
     cache = Cache(root=tmp_path / "c")
     a = CacheKey(
         video_id="a/../b",
@@ -84,6 +90,7 @@ async def test_key_fields_cannot_collide_or_escape(tmp_path):
 
 
 async def test_corrupt_file_is_treated_as_missing(tmp_path):
+    """Check that a damaged file is treated as a missing value."""
     cache = Cache(root=tmp_path)
     await cache.put(
         key=KEY,
@@ -103,6 +110,7 @@ async def test_corrupt_file_is_treated_as_missing(tmp_path):
 
 
 async def test_non_dict_json_is_missing(tmp_path):
+    """Check that a JSON file that is not an object is treated as missing."""
     cache = Cache(root=tmp_path)
     await cache.put(
         key=KEY,
@@ -117,6 +125,7 @@ async def test_non_dict_json_is_missing(tmp_path):
 
 
 async def test_no_temp_files_left_after_put(tmp_path):
+    """Check that no temporary files are left after a write."""
     cache = Cache(root=tmp_path)
     await asyncio.gather(
         *(
@@ -135,6 +144,7 @@ async def test_no_temp_files_left_after_put(tmp_path):
 
 
 async def test_failed_put_leaves_no_temp_files(tmp_path):
+    """Check that a failed write leaves no temporary files."""
     cache = Cache(root=tmp_path)
     with contextlib.suppress(TypeError):
         await cache.put(
@@ -145,6 +155,7 @@ async def test_failed_put_leaves_no_temp_files(tmp_path):
 
 
 async def test_cache_never_contains_secrets(tmp_path):
+    """Check that the cache files never contain secrets."""
     cache = Cache(root=tmp_path)
     await cache.put(
         key=KEY,
@@ -174,6 +185,7 @@ def _touch(
 
 
 async def test_stale_temp_files_are_removed_on_first_use(tmp_path):
+    """Check that old temporary files are removed on first use."""
     stale = tmp_path / ".tmp-old.part"
     fresh = tmp_path / ".tmp-new.part"
     old_result = tmp_path / ("a" * 64 + ".json")
@@ -199,6 +211,7 @@ async def test_stale_temp_files_are_removed_on_first_use(tmp_path):
 
 
 async def test_stale_temp_cleanup_is_best_effort(tmp_path):
+    """Check that the cleanup of old temporary files does not fail the command."""
     cache = Cache(
         root=tmp_path / "missing",
         clock=lambda: NOW,

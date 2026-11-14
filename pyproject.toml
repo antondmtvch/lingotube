@@ -48,8 +48,12 @@ select = [
     "C4",   # flake8-comprehensions
     "UP",   # pyupgrade
     "SIM",  # flake8-simplify
+    "D",    # pydocstyle: every public module, class, function and method has a docstring
 ]
 ignore = ["E501"]  # line length is handled by the formatter
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
 
 [tool.ruff.format]
 quote-style = "double"

@@ -20,12 +20,10 @@ from lingotube.errors import (
 )
 
 SETTINGS_CLEANUP_FAILED_WARNING = (
-    "Вход выполнен, но не удалось обновить файл настроек: "
-    "проверьте settings.toml и уберите cookies_file и browser вручную."
+    "The sign-in succeeded, but the settings file could not be updated: "
+    "check settings.toml and remove cookies_file and browser by hand."
 )
-ENV_OVERRIDES_LOGIN_WARNING = (
-    f"Переменная {ENV_COOKIES_FILE} задана и важнее входа lingotube; уберите её, чтобы использовать вход."
-)
+ENV_OVERRIDES_LOGIN_WARNING = f"The variable {ENV_COOKIES_FILE} is set and takes priority over the lingotube sign-in; remove it to use the sign-in."
 
 
 def _remove_profile_directory(profile_dir: Path) -> bool:
@@ -44,8 +42,8 @@ def _remove_profile_directory(profile_dir: Path) -> bool:
 def _removal_failed_error() -> LingotubeError:
     # No exception text: it may contain paths.
     return LingotubeError(
-        message="Не удалось удалить данные входа lingotube.",
-        hint="Закройте программы, использующие эти файлы, и повторите lingotube logout.",
+        message="Could not delete the lingotube sign-in data.",
+        hint="Close the programs that use these files and run lingotube logout again.",
     )
 
 
@@ -73,13 +71,13 @@ def register(
         str | None,
         typer.Option(
             default="--browser",
-            help=f"Браузер для входа: {', '.join(LOGIN_BROWSERS)}; по умолчанию первый установленный.",
+            help=f"Browser for the sign-in: {', '.join(LOGIN_BROWSERS)}; by default the first one installed.",
         ),
     ]
 
     @app.command(
         name="login",
-        help="Войти в YouTube в отдельном профиле Chrome или Edge; cookies сохраняются для lingotube.",
+        help="Sign in to YouTube in a separate Chrome or Edge profile; the cookies are saved for lingotube.",
     )
     def login(
         browser: LoginBrowserOpt = None,
@@ -91,8 +89,8 @@ def register(
         ) -> c.Outcome:
             if browser is not None and browser not in LOGIN_BROWSERS:
                 raise UsageError(
-                    message=f"Неизвестный браузер: {browser}.",
-                    hint=f"Доступны: {', '.join(LOGIN_BROWSERS)}.",
+                    message=f"Unknown browser: {browser}.",
+                    hint=f"Available: {', '.join(LOGIN_BROWSERS)}.",
                 )
             container = ctx.container
             if browser is None:
@@ -103,10 +101,10 @@ def register(
                 executable = container.single_browser_finder()(browser)
             if executable is None:
                 raise AuthError(
-                    message="Не найден Chrome или Edge.",
+                    message="Chrome or Edge was not found.",
                     hint=(
-                        "Установите Chrome или Edge либо войдите в YouTube в Firefox; "
-                        "запасной путь — файл cookies.txt (см. README)."
+                        "Install Chrome or Edge, or sign in to YouTube in Firefox; "
+                        "the fallback is a cookies.txt file (see the README)."
                     ),
                 )
             paths = container.login_paths()
@@ -130,9 +128,9 @@ def register(
                     warnings += (SETTINGS_CLEANUP_FAILED_WARNING,)
             if container.env().get(ENV_COOKIES_FILE):
                 warnings += (ENV_OVERRIDES_LOGIN_WARNING,)
-            text = f"Вход выполнен ({browser_name}). Cookies сохранены: {paths.cookies_file}."
+            text = f"Signed in ({browser_name}). Cookies saved: {paths.cookies_file}."
             if forgotten:
-                text += f"\nИз настроек убраны: {', '.join(forgotten)}."
+                text += f"\nRemoved from the settings: {', '.join(forgotten)}."
             return c.Outcome(
                 result={
                     "browser": browser_name,
@@ -153,7 +151,7 @@ def register(
 
     @app.command(
         name="logout",
-        help="Удалить профиль входа и сохранённые cookies lingotube.",
+        help="Delete the lingotube sign-in profile and the saved cookies.",
     )
     def logout(
         json_: c.JsonOpt = False,
@@ -175,9 +173,9 @@ def register(
             return c.Outcome(
                 result={"removed": removed},
                 text=(
-                    "Профиль входа и cookies lingotube удалены."
+                    "The lingotube sign-in profile and cookies were deleted."
                     if removed
-                    else "Нечего удалять: вход через lingotube login не выполнялся."
+                    else "Nothing to delete: lingotube login was not run."
                 ),
             )
 

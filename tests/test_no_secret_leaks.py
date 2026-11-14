@@ -1,11 +1,11 @@
-"""No secret ever reaches stdout, stderr, the cache or result files.
+"""Check that no secret ever reaches stdout, stderr, the cache or the result files.
 
-Real implementations run end to end (container, file/browser cookie sources, the
-YouTube chat client, the OpenAI-compatible translator); only the network is
-replaced by respx and the browser cookie store by a loader. Every secret carries
-the marker LEAKME exactly where the real code would see it: cookie values in the
-cookies file and the browser store, chat tokens and visitor data inside YouTube's
-responses (and inside transport-error texts), the model key in the environment.
+Real implementations run end to end: the container, the file and browser cookie
+sources, the YouTube chat client and the OpenAI-compatible translator. Only the network
+is replaced by respx, and the browser cookie store by a loader. Every secret carries the
+marker LEAKME exactly where the real code would see it: cookie values in the cookies file
+and the browser store, chat tokens and visitor data inside YouTube's responses (and inside
+transport-error texts), and the model key in the environment.
 """
 
 import asyncio
@@ -79,6 +79,14 @@ def _answer(
 
 
 def watch_page(duration: int) -> str:
+    """Build the fake watch page for the given duration.
+
+    Args:
+        duration: Length of the fake video in seconds.
+
+    Returns:
+        The page HTML.
+    """
     cfg = {
         "LOGGED_IN": True,
         "INNERTUBE_CONTEXT": {
@@ -115,6 +123,14 @@ def watch_page(duration: int) -> str:
 
 
 def next_response(name: str = "next_eligible.json") -> dict:
+    """Build the fake next response from a fixture file.
+
+    Args:
+        name: Name of the fixture file.
+
+    Returns:
+        The response as a dict.
+    """
     text = (FIX / name).read_text(encoding="utf-8")
     return json.loads(
         s=text.replace(
@@ -128,6 +144,14 @@ def next_response(name: str = "next_eligible.json") -> dict:
 
 
 def panel_response(answer: str) -> dict:
+    """Build a fake get_panel response that holds an answer.
+
+    Args:
+        answer: Answer text.
+
+    Returns:
+        The response as a dict.
+    """
     return {
         "responseContext": {"mainAppWebResponseContext": {"loggedOut": False}},
         "items": [
@@ -146,6 +170,14 @@ def panel_response(answer: str) -> dict:
 
 
 def prompt_of(request: httpx.Request) -> str:
+    """Return the prompt sent in a request body.
+
+    Args:
+        request: The HTTP request with a JSON body.
+
+    Returns:
+        The prompt text.
+    """
     return json.loads(s=request.content)["formData"]["inputComposerFormData"]["userInputText"]
 
 
@@ -183,7 +215,8 @@ def failure(
 ) -> httpx.Response | None:
     """The response (or raised error) of a failing endpoint; None when it should work.
 
-    `known`: a chat token the client already holds when this endpoint is called."""
+    `known`: a chat token the client already holds when this endpoint is called.
+    """
     if scenario == "http_500":
         return httpx.Response(
             status_code=500,
@@ -209,7 +242,13 @@ def route_youtube(
     scenario: str,
     fail_at: str = "get_panel",
 ) -> None:
-    """`fail_at`: which endpoint the transport/HTTP/internal failures hit."""
+    """Route the fake YouTube endpoints, with the scenario's failure at one endpoint.
+
+    Args:
+        router: Router of the fake HTTP calls.
+        scenario: Name of the failure scenario.
+        fail_at: Endpoint that the transport, HTTP and internal failures hit.
+    """
     duration = 600 if scenario == "incomplete" else 30
     if scenario == "forbidden":
         router.get(url=f"{YT}/watch").mock(
@@ -292,6 +331,13 @@ def route_translator(
     router: respx.MockRouter,
     scenario: str,
 ) -> None:
+    """Route the translator endpoint to a fake reply.
+
+    Args:
+        router: Router of the fake HTTP calls.
+        scenario: Name of the scenario that decides the reply.
+    """
+
     def model(request: httpx.Request) -> httpx.Response:
         if scenario == "tr_401":
             return httpx.Response(
@@ -342,6 +388,12 @@ def write_cookies(
     path: Path,
     with_sapisid: bool = True,
 ) -> None:
+    """Write a cookies file with secret values.
+
+    Args:
+        path: File to write.
+        with_sapisid: Whether the file includes the SAPISID cookie.
+    """
     lines = ["# Netscape HTTP Cookie File"]
     if with_sapisid:
         lines.append(f".youtube.com\tTRUE\t/\tTRUE\t2000000000\tSAPISID\t{SAPISID}")
@@ -353,11 +405,19 @@ def write_cookies(
 
 
 class Leak:
+    """Test harness that runs commands and collects everything they write."""
+
     def __init__(
         self,
         tmp_path: Path,
         scenario: str,
     ) -> None:
+        """Create the harness in a temporary folder.
+
+        Args:
+            tmp_path: Temporary folder of the test.
+            scenario: Name of the scenario, which decides the cookies and the replies.
+        """
         self.tmp = tmp_path
         self.scenario = scenario
         self.cookies = tmp_path / "secret.cookies.txt"
@@ -384,6 +444,17 @@ class Leak:
         self.loaded_browsers: list[str] = []
 
     def browser_loader(self, browser: str) -> dict[str, str]:
+        """Return fake browser cookies with the secret values, or fail as the scenario says.
+
+        Args:
+            browser: Browser name.
+
+        Returns:
+            The cookies by name.
+
+        Raises:
+            OSError: In scenarios where the browser cannot be read.
+        """
         self.loaded_browsers.append(browser)
         if self.scenario == "browser_ok" or (self.scenario == "ok" and browser == "firefox"):
             return {"SAPISID": SAPISID, "SID": SID}
@@ -394,6 +465,15 @@ class Leak:
         out,
         err,
     ) -> AppContext:
+        """Build the application context for one run with the fakes.
+
+        Args:
+            out: Stream for the result.
+            err: Stream for messages.
+
+        Returns:
+            The application context.
+        """
         container = build_container(
             settings=self.settings,
             env=self.env,
@@ -415,6 +495,14 @@ class Leak:
         )
 
     def run(self, *argv: str) -> tuple[int, str, str]:
+        """Run a command with the harness wiring and collect its output.
+
+        Args:
+            *argv: Command-line arguments.
+
+        Returns:
+            The exit code, the result text and the message text.
+        """
         out, err = io.StringIO(), io.StringIO()
         code = cli.run(
             argv=list(argv),
@@ -431,6 +519,17 @@ class Leak:
         err: str,
         json_mode: bool,
     ) -> None:
+        """Check that no secret value appears in the output, the files or the logs.
+
+        Args:
+            code: Exit code of the command.
+            out: Result text.
+            err: Message text.
+            json_mode: True if the result was printed as JSON.
+
+        Raises:
+            AssertionError: If a secret value is found.
+        """
         assert MARK not in out, out
         assert MARK not in err, err
         for path in self.tmp.rglob(pattern="*"):
@@ -446,10 +545,26 @@ class Leak:
 
 
 def browser_args(scenario: str) -> list[str]:
+    """Return the arguments that send the command to the fake browser.
+
+    Args:
+        scenario: Name of the scenario.
+
+    Returns:
+        The arguments, or an empty list.
+    """
     return ["--browser", "firefox"] if scenario.startswith("browser_") else []
 
 
 def youtube_saw_cookies(router: respx.MockRouter) -> bool:
+    """Check whether the fake YouTube received a request with the SAPISID cookie.
+
+    Args:
+        router: Router of the fake HTTP calls.
+
+    Returns:
+        True if a request carried the SAPISID cookie.
+    """
     return any(
         SAPISID
         in c.request.headers.get(
@@ -474,6 +589,7 @@ MODES = [
 
 @pytest.fixture
 def router():
+    """Provide a respx router that fails on any request it does not know."""
     with respx.mock(
         assert_all_mocked=True,
         assert_all_called=False,
@@ -495,6 +611,7 @@ def test_subs_never_leaks(
     scenario,
     json_mode,
 ):
+    """Check that the subs command leaks no secret."""
     route_youtube(
         router=router,
         scenario="ok" if scenario.startswith("tr_") else scenario,
@@ -548,6 +665,7 @@ def test_transcript_never_leaks(
     scenario,
     json_mode,
 ):
+    """Check that the transcript command leaks no secret."""
     route_youtube(
         router=router,
         scenario=scenario,
@@ -586,6 +704,7 @@ def test_transcript_never_leaks_when_watch_page_fails(
     scenario,
     json_mode,
 ):
+    """Check that the transcript command leaks no secret when the watch page fails."""
     route_youtube(
         router=router,
         scenario=scenario,
@@ -625,6 +744,7 @@ def test_summary_never_leaks(
     scenario,
     json_mode,
 ):
+    """Check that the summary command leaks no secret."""
     route_youtube(
         router=router,
         scenario=scenario,
@@ -675,6 +795,7 @@ def test_build_never_leaks(
     case,
     json_mode,
 ):
+    """Check that the build command leaks no secret."""
     route_youtube(
         router=router,
         scenario="ok",
@@ -770,6 +891,7 @@ def test_doctor_never_leaks(
     scenario,
     json_mode,
 ):
+    """Check that the doctor command leaks no secret."""
     route_youtube(
         router=router,
         scenario=scenario,
@@ -823,6 +945,7 @@ def test_summary_via_login_profile_leaks_nothing(
     router,
     json_mode,
 ):
+    """Check that a summary taken with the login profile leaks nothing."""
     route_youtube(
         router=router,
         scenario="ok",

@@ -1,3 +1,5 @@
+"""Tests of the feature registry."""
+
 import io
 
 import typer
@@ -49,6 +51,7 @@ def _no_container(
 
 
 def test_registry_adding_feature_needs_no_cli_change():
+    """Check that a new feature can be added without changing the CLI."""
     registry = cli.build_registry()
     registry.add(register=_hello_feature)
     code, out, _ = _run(
@@ -60,6 +63,7 @@ def test_registry_adding_feature_needs_no_cli_change():
 
 
 def test_two_registries_are_independent():
+    """Check that two registries do not share their commands."""
     first, second = FeatureRegistry(), FeatureRegistry()
     first.add(register=_hello_feature)
     assert (
@@ -86,6 +90,7 @@ def test_two_registries_are_independent():
 
 
 def test_build_registry_lists_all_features():
+    """Check that the default registry contains every command."""
     app = typer.Typer()
     cli.build_registry().apply(
         app=app,

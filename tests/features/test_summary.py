@@ -1,3 +1,5 @@
+"""Tests of the summary feature."""
+
 import pytest
 from fakes import FakeAskClient
 
@@ -20,6 +22,15 @@ def make(
     tmp_path,
     answer,
 ):
+    """Build a fake chat client and a summary feature with a temporary cache.
+
+    Args:
+        tmp_path: Temporary folder of the test.
+        answer: Function that returns the answer to a prompt.
+
+    Returns:
+        The fake client and the summary feature.
+    """
     client = FakeAskClient(
         info=INFO,
         answer=answer,
@@ -31,6 +42,7 @@ def make(
 
 
 async def test_summary_single_request_in_language(tmp_path):
+    """Check that a summary takes one chat request in the requested language."""
     client, feature = make(
         tmp_path=tmp_path,
         answer=lambda p: "# Итог\n- мысль",
@@ -47,6 +59,7 @@ async def test_summary_single_request_in_language(tmp_path):
 
 
 async def test_summary_cached_per_language(tmp_path):
+    """Check that summaries are cached separately for each language."""
     client, feature = make(
         tmp_path=tmp_path,
         answer=lambda p: "текст " + ("ru" if "русский" in p else "de"),
@@ -103,6 +116,7 @@ async def test_summary_empty_answer_is_error(
     tmp_path,
     answer,
 ):
+    """Check that an empty answer raises ChatUnavailableError."""
     _, feature = make(
         tmp_path=tmp_path,
         answer=lambda p: answer,
@@ -123,6 +137,8 @@ async def test_summary_empty_answer_is_error(
 
 
 async def test_cache_write_failure_keeps_text_and_warns(tmp_path):
+    """Check that a failed cache write keeps the summary and adds a warning."""
+
     class FailingWriteCache(Cache):
         async def put(
             self,
@@ -147,4 +163,4 @@ async def test_cache_write_failure_keeps_text_and_warns(tmp_path):
         )
         == "итог"
     )
-    assert warnings == ["не удалось сохранить в кэш: OSError"]
+    assert warnings == ["could not save to the cache: OSError"]

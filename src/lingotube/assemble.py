@@ -1,4 +1,4 @@
-"""Планирование отрезков, склейка, исправление концов реплик, проверка полноты."""
+"""Plan the time ranges, join them, fix the line ends and check completeness."""
 
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
@@ -14,7 +14,17 @@ def plan_ranges(
     duration: float,
     chunk_seconds: int,
 ) -> list[tuple[float, float]]:
-    """Отрезки [начало, конец) подряд длиной chunk_seconds; последний обрезан по длительности."""
+    """Split the video into consecutive ranges of ``chunk_seconds``.
+
+    The last range is cut at the end of the video.
+
+    Args:
+        duration: Length of the video in seconds.
+        chunk_seconds: Length of one range in seconds.
+
+    Returns:
+        Half-open ranges ``[start, end)`` in seconds.
+    """
     ranges: list[tuple[float, float]] = []
     start = 0.0
     while start < duration:
@@ -42,7 +52,17 @@ def is_truncated(
     range_end: float,
     tolerance: float = 60.0,
 ) -> bool:
-    """Ответ оборван: последняя реплика заканчивается заметно раньше конца запрошенного отрезка."""
+    """Check whether a chat answer stops well before the end of its range.
+
+    Args:
+        lines: Lines parsed from the answer.
+        range_end: End of the requested range in seconds.
+        tolerance: How much shorter than the range the answer may be, in seconds.
+
+    Returns:
+        True if the answer is empty or ends more than ``tolerance`` seconds before
+        ``range_end``.
+    """
     if not lines:
         return True
     reached = max(line.end if line.end is not None else line.start for line in lines)
@@ -50,7 +70,17 @@ def is_truncated(
 
 
 def merge(chunks: Sequence[Sequence[ParsedLine]]) -> list[Cue]:
-    """Склейка отрезков: сортировка по началу, удаление дублей на стыках, номера с 1."""
+    """Join the parsed ranges into one list of cues.
+
+    Lines are sorted by start time, duplicates at the seams are removed, and the cues
+    are numbered from 1.
+
+    Args:
+        chunks: Parsed lines of each range.
+
+    Returns:
+        The joined cues.
+    """
     lines = sorted(
         (line for chunk in chunks for line in chunk),
         key=lambda line: line.start,
@@ -117,9 +147,21 @@ def fix_ends(
     max_s: float = 7.0,
     cps: float = 15.0,
 ) -> list[Cue]:
-    """Оставляет конец чата, если он верен; иначе обрезает по границам или считает по времени чтения.
+    """Keep the end time from the chat when it is valid, otherwise fix it.
 
-    Реплики, начинающиеся не раньше конца видео, отбрасываются; номера перенумеровываются с 1.
+    The end is cut at the next cue or at the end of the video. If there is no valid end,
+    it is estimated from the reading time. Cues that start at or after the end of the
+    video are dropped, and the rest are renumbered from 1.
+
+    Args:
+        cues: Cues to fix.
+        duration: Length of the video in seconds.
+        min_s: Shortest estimated duration of a cue, in seconds.
+        max_s: Longest estimated duration of a cue, in seconds.
+        cps: Reading speed in characters per second.
+
+    Returns:
+        The cues with fixed end times.
     """
     cues = [c for c in cues if c.start < duration]
     out: list[Cue] = []
@@ -163,6 +205,14 @@ def fix_ends(
 
 @dataclass(frozen=True)
 class Completeness:
+    """Result of the completeness check.
+
+    Attributes:
+        complete: True if the last cue reaches the end of the video.
+        last_end: End time of the last cue, in seconds.
+        gaps: Silent stretches longer than the warning threshold, as (start, end) pairs.
+    """
+
     complete: bool
     last_end: float
     gaps: tuple[tuple[float, float], ...]
@@ -175,7 +225,21 @@ def check_completeness(
     tail_tolerance: float | None = None,
     gap_warn: float = 60.0,
 ) -> Completeness:
-    """Доходит ли последняя реплика до конца видео; пустоты длиннее gap_warn — только предупреждение."""
+    """Check whether the transcript reaches the end of the video.
+
+    Silent stretches longer than ``gap_warn`` are reported as gaps. They do not make the
+    transcript incomplete.
+
+    Args:
+        cues: Cues of the transcript.
+        duration: Length of the video in seconds.
+        tail_tolerance: How far before the end the last cue may stop, in seconds. Defaults
+            to the larger of 60 seconds and 5% of the duration.
+        gap_warn: Length in seconds from which a silent stretch is reported.
+
+    Returns:
+        The completeness result.
+    """
     if not cues:
         return Completeness(
             complete=False,
