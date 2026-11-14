@@ -228,7 +228,7 @@ Sem Node.js, copie a pasta `skills/lingotube/` para a pasta de skills do seu age
 
 ## Extensão de navegador
 
-Uma extensão Manifest V3 para Chrome e Edge que mostra legendas traduzidas sobre o player do YouTube. Ela está em desenvolvimento e ainda não faz parte do branch principal.
+Uma extensão Manifest V3 para Chrome, Edge e Firefox que mostra legendas traduzidas sobre o player do YouTube. Ela está em desenvolvimento.
 
 - Um botão no player ativa as legendas; o painel com o texto pode ser arrastado.
 - Você escolhe um entre 30 idiomas ou digita o seu.

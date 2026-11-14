@@ -225,7 +225,7 @@ npx skills add antondmtvch/lingotube
 
 ## 浏览器扩展
 
-一个适用于 Chrome 和 Edge 的 Manifest V3 扩展，在 YouTube 播放器上显示翻译字幕。它仍在开发中，尚未合入主分支。
+一个适用于 Chrome、Edge 和 Firefox 的 Manifest V3 扩展，在 YouTube 播放器上显示翻译字幕。它仍在开发中。
 
 - 播放器中的按钮用于开启字幕；带文字的面板可以拖动。
 - 可从 30 种语言中选择，也可以自己输入。

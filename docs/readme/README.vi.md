@@ -228,7 +228,7 @@ Không có Node.js, hãy chép thư mục `skills/lingotube/` vào thư mục sk
 
 ## Tiện ích mở rộng trình duyệt
 
-Tiện ích mở rộng Manifest V3 cho Chrome và Edge, hiển thị phụ đề đã dịch phía trên trình phát YouTube. Nó đang được phát triển và chưa nằm trong nhánh chính.
+Tiện ích mở rộng Manifest V3 cho Chrome, Edge và Firefox, hiển thị phụ đề đã dịch phía trên trình phát YouTube. Nó đang được phát triển.
 
 - Một nút trong trình phát bật phụ đề; có thể kéo bảng chứa văn bản.
 - Bạn chọn một trong 30 ngôn ngữ hoặc tự nhập ngôn ngữ của mình.

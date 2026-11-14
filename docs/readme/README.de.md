@@ -228,7 +228,7 @@ Ohne Node.js kopieren Sie den Ordner `skills/lingotube/` in den Skills-Ordner Ih
 
 ## Browser-Erweiterung
 
-Eine Manifest-V3-Erweiterung für Chrome und Edge, die übersetzte Untertitel über dem YouTube-Player anzeigt. Sie ist in Entwicklung und noch nicht im Hauptzweig.
+Eine Manifest-V3-Erweiterung für Chrome, Edge und Firefox, die übersetzte Untertitel über dem YouTube-Player anzeigt. Sie ist in Entwicklung.
 
 - Eine Schaltfläche im Player schaltet die Untertitel ein; das Feld mit dem Text lässt sich verschieben.
 - Sie wählen eine von 30 Sprachen oder tippen eine eigene ein.
