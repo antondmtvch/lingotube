@@ -236,9 +236,9 @@ Chrome, Edge और Firefox के लिए Manifest V3 एक्सटें�
 
 यह अभी किसी स्टोर में नहीं है। अपने ब्राउज़र की फ़ाइलें [रिलीज़ पेज](https://github.com/antondmtvch/lingotube/releases) से डाउनलोड करें:
 
-- Chrome: `lingotube-<संस्करण>-chromium.zip` डाउनलोड करें और उसे ऐसे फ़ोल्डर में अनज़िप करें जिसे आप रखेंगे। `chrome://extensions` खोलें, «Developer mode» चालू करें, «Load unpacked» दबाएँ और वह फ़ोल्डर चुनें। Chrome शुरू होने पर डेवलपर मोड वाले एक्सटेंशन के बारे में याद दिलाता है। अपडेट करने के लिए फ़ोल्डर की फ़ाइलें बदलें और एक्सटेंशन के कार्ड पर रीलोड बटन दबाएँ।
+- Chrome: `lingotube-<version>-chromium.zip` डाउनलोड करें और उसे ऐसे फ़ोल्डर में अनज़िप करें जिसे आप रखेंगे। `chrome://extensions` खोलें, «Developer mode» चालू करें, «Load unpacked» दबाएँ और वह फ़ोल्डर चुनें। Chrome शुरू होने पर डेवलपर मोड वाले एक्सटेंशन के बारे में याद दिलाता है। अपडेट करने के लिए फ़ोल्डर की फ़ाइलें बदलें और एक्सटेंशन के कार्ड पर रीलोड बटन दबाएँ।
 - Edge: वही आर्काइव इस्तेमाल करें। `edge://extensions` खोलें, «Developer mode» चालू करें, «Load unpacked» दबाएँ और फ़ोल्डर चुनें।
-- Firefox 128 या नया: `lingotube-<संस्करण>-firefox.xpi` डाउनलोड करें, फ़ाइल को Firefox की विंडो में खींचकर छोड़ें (या `about:addons` खोलें, गियर आइकन दबाएँ और «Install Add-on From File...» चुनें) और इंस्टॉलेशन की पुष्टि करें।
+- Firefox 128 या नया: `lingotube-<version>-firefox.xpi` डाउनलोड करें, फ़ाइल को Firefox की विंडो में खींचकर छोड़ें (या `about:addons` खोलें, गियर आइकन दबाएँ और «Install Add-on From File...» चुनें) और इंस्टॉलेशन की पुष्टि करें।
 
 Brave, Opera और Vivaldi में इसकी जाँच नहीं की गई है।
 

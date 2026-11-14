@@ -13,6 +13,13 @@
   export WEB_EXT_API_SECRET=<секрет>
   ```
 
+  Первый вариант подходит для bash и Git Bash, второй для PowerShell:
+
+  ```powershell
+  $env:WEB_EXT_API_KEY = "user:12345:67"
+  $env:WEB_EXT_API_SECRET = "<секрет>"
+  ```
+
 ## Шаги
 
 1. Поднимите `version` в `extension/manifest.json`. AMO не принимает повторно уже загруженный номер версии.
