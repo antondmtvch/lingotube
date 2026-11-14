@@ -228,6 +228,14 @@ npx skills add antondmtvch/lingotube
 Không có Node.js, hãy chép thư mục `skills/lingotube/` vào thư mục skills của tác tử
 (`~/.claude/skills/` cho Claude Code hoặc `~/.agents/skills/` cho hầu hết các tác tử khác).
 
+Sau đó đưa cho tác tử một liên kết và nói bạn cần gì:
+
+```text
+Tóm tắt video này: https://youtu.be/VIDEO_ID
+Video này nói về dựng phim ở đoạn nào? https://youtu.be/VIDEO_ID
+Tạo phụ đề tiếng Việt cho video này: https://youtu.be/VIDEO_ID
+```
+
 ## Tiện ích mở rộng trình duyệt
 
 Tiện ích mở rộng Manifest V3 cho Chrome, Edge và Firefox, hiển thị phụ đề đã dịch phía trên trình phát YouTube. Nó đang được phát triển.

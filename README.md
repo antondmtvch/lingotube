@@ -216,7 +216,6 @@ lingotube build <link> --lang ru --from ru.json   # check and build the subtitle
 
 The skill runs the [command-line tool](#command-line-tool-cli) for the agent, so install the tool first, then the skill.
 
-
 The repository has a skill in the open Agent Skills format. With it an AI agent (Claude Code, Codex,
 Cursor, Gemini CLI and others) summarizes videos, makes transcripts and subtitles, finds
 a moment by description and helps with installation and sign-in.
@@ -227,6 +226,14 @@ npx skills add antondmtvch/lingotube
 
 Without Node.js, copy the `skills/lingotube/` folder into your agent's skills folder
 (`~/.claude/skills/` for Claude Code or `~/.agents/skills/` for most others).
+
+Then give the agent a link and say what you need:
+
+```text
+Summarize this video: https://youtu.be/VIDEO_ID
+Where in this video is editing discussed? https://youtu.be/VIDEO_ID
+Make Spanish subtitles for https://youtu.be/VIDEO_ID
+```
 
 ## Browser extension
 

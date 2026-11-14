@@ -230,6 +230,14 @@ npx skills add antondmtvch/lingotube
 Без Node.js скопируйте папку `skills/lingotube/` в папку skills вашего агента
 (`~/.claude/skills/` для Claude Code или `~/.agents/skills/` для большинства остальных).
 
+Затем отправьте агенту ссылку и скажите, что нужно:
+
+```text
+Перескажи это видео: https://youtu.be/VIDEO_ID
+В каком месте видео говорят про монтаж? https://youtu.be/VIDEO_ID
+Сделай русские субтитры для https://youtu.be/VIDEO_ID
+```
+
 ## Расширение для браузера
 
 Расширение формата Manifest V3 для Chrome, Edge и Firefox, которое показывает переведённые субтитры поверх плеера YouTube. Оно находится в разработке.

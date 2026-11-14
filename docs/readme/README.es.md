@@ -228,6 +228,14 @@ npx skills add antondmtvch/lingotube
 Sin Node.js, copia la carpeta `skills/lingotube/` en la carpeta de skills de tu agente
 (`~/.claude/skills/` para Claude Code o `~/.agents/skills/` para la mayoría de los demás).
 
+Después, dale al agente un enlace y dile qué necesitas:
+
+```text
+Resume este vídeo: https://youtu.be/VIDEO_ID
+¿En qué momento del vídeo se habla del montaje? https://youtu.be/VIDEO_ID
+Genera subtítulos en español para https://youtu.be/VIDEO_ID
+```
+
 ## Extensión del navegador
 
 Una extensión Manifest V3 para Chrome, Edge y Firefox que muestra subtítulos traducidos sobre el reproductor de YouTube. Está en desarrollo.
