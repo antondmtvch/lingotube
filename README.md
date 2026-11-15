@@ -9,7 +9,7 @@
 
 **English** · [Русский](/docs/readme/README.ru.md) · [简体中文](/docs/readme/README.zh-Hans.md) · [繁體中文](/docs/readme/README.zh-Hant.md) · [हिन्दी](/docs/readme/README.hi.md) · [Español](/docs/readme/README.es.md) · [Français](/docs/readme/README.fr.md) · [العربية](/docs/readme/README.ar.md) · [বাংলা](/docs/readme/README.bn.md) · [Português](/docs/readme/README.pt.md) · [ไทย](/docs/readme/README.th.md) · [日本語](/docs/readme/README.ja.md) · [Tiếng Việt](/docs/readme/README.vi.md) · [Deutsch](/docs/readme/README.de.md)
 
-lingotube gets subtitles, a transcript and a summary of a YouTube video. The project has three parts: a command-line tool, a skill for AI agents and a browser extension (in development) that shows translated subtitles over the player.
+lingotube gets subtitles, a transcript and a summary of a YouTube video. The project has three parts: a command-line tool, a skill for AI agents and a browser extension that shows translated subtitles over the player.
 The text comes from YouTube's built-in chat ("Ask", Gemini) on the video page.
 All requests are made on behalf of your YouTube account.
 
@@ -47,7 +47,7 @@ All requests are made on behalf of your YouTube account.
 |---|---|
 | [Command-line tool (CLI)](#command-line-tool-cli) | The `lingotube` command: gets subtitles, a transcript and a summary of a video, as files or JSON. |
 | [Skill for AI agents](#skill-for-ai-agents) | Lets an AI agent (Claude Code, Codex, Cursor and others) summarize a video, make a transcript or subtitles and find a moment by description. It runs the command-line tool. |
-| [Browser extension](#browser-extension) | Translated subtitles over the YouTube player, in any language. In development. |
+| [Browser extension](#browser-extension) | Translated subtitles over the YouTube player, in any language. |
 
 ## Command-line tool (CLI)
 
@@ -241,7 +241,7 @@ Make Spanish subtitles for https://youtu.be/VIDEO_ID
 
 ## Browser extension
 
-A Manifest V3 extension for Chrome, Edge and Firefox that shows translated subtitles over the YouTube player. It is under development.
+A Manifest V3 extension for Chrome, Edge and Firefox that shows translated subtitles over the YouTube player.
 
 - A button in the player turns the subtitles on; the panel with the text can be dragged.
 - You choose one of 30 languages or type your own.
